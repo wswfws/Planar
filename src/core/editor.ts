@@ -1,0 +1,814 @@
+import {
+  cloneSubtree,
+  createDocument,
+  createNode,
+  getAncestors,
+  getNode,
+  getParent,
+  insertNode,
+  insertSubtree,
+  moveNode,
+  parseDocument,
+  removeNode,
+  uniquePageName,
+} from './document';
+import { downloadBlob, exportPng, exportSvg, safeFilename } from './export';
+import {
+  fitGroups,
+  parentWorldMatrix,
+  placeNode,
+  reparentKeepWorld,
+  selectionBounds,
+  topLevelSelection,
+  worldBounds,
+  worldCenter,
+  worldRotation,
+} from './geometry';
+import { applyLinear, invert, rectCenter, rectsIntersect, type Rect, type Vec } from './math';
+import { measureTextNode } from './text';
+import type { PlanarDocument, SceneNode } from './types';
+import { createWelcomeDocument } from './welcome';
+
+export type Tool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'text';
+
+export interface Viewport {
+  /** Screen position of the world origin. */
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface Guide {
+  axis: 'x' | 'y';
+  value: number;
+}
+
+export interface Overlay {
+  marquee: Rect | null;
+  guides: Guide[];
+  pen: { points: Vec[]; cursor: Vec | null } | null;
+}
+
+interface Snapshot {
+  doc: string;
+  selection: string[];
+  pageId: string;
+}
+
+interface ClipboardData {
+  planarClipboard: 1;
+  nodes: Record<string, SceneNode>;
+  roots: { id: string; center: Vec; rotation: number }[];
+}
+
+export type ReorderKind = 'forward' | 'backward' | 'front' | 'back';
+export type AlignKind = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
+
+const STORAGE_KEY = 'planar:document';
+const MIN_ZOOM = 0.02;
+const MAX_ZOOM = 256;
+
+function loadAutosave(): PlanarDocument | null {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    return raw ? parseDocument(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+export class Editor {
+  doc: PlanarDocument;
+  pageId: string;
+  selection: string[] = [];
+  tool: Tool = 'select';
+  viewport: Viewport = { x: 0, y: 0, zoom: 1 };
+  canvasSize = { width: 800, height: 600 };
+  editingTextId: string | null = null;
+  hoverId: string | null = null;
+  overlay: Overlay = { marquee: null, guides: [], pen: null };
+  spaceDown = false;
+  message: string | null = null;
+  version = 0;
+
+  private listeners = new Set<() => void>();
+  private undoStack: Snapshot[] = [];
+  private redoStack: Snapshot[] = [];
+  private txBase: Snapshot | null = null;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private messageTimer: ReturnType<typeof setTimeout> | null = null;
+  private pageViewports = new Map<string, Viewport>();
+  private clipboard: string | null = null;
+  private needsInitialFit: boolean;
+  private autosave: boolean;
+
+  constructor(doc?: PlanarDocument, options: { autosave?: boolean } = {}) {
+    this.autosave = options.autosave ?? true;
+    const restored = doc ?? (this.autosave ? loadAutosave() : null);
+    this.doc = restored ?? (this.autosave ? createWelcomeDocument() : createDocument());
+    this.pageId = this.doc.pageIds[0];
+    this.needsInitialFit = true;
+  }
+
+  // ---------------------------------------------------------------- store
+
+  subscribe = (fn: () => void): (() => void) => {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  };
+
+  getVersion = (): number => this.version;
+
+  emit(): void {
+    this.version++;
+    for (const fn of this.listeners) fn();
+  }
+
+  get page(): SceneNode {
+    return this.doc.nodes[this.pageId];
+  }
+
+  node(id: string): SceneNode | undefined {
+    return this.doc.nodes[id];
+  }
+
+  get selectedNodes(): SceneNode[] {
+    return this.selection.map((id) => this.doc.nodes[id]).filter(Boolean);
+  }
+
+  notify(message: string): void {
+    this.message = message;
+    if (this.messageTimer) clearTimeout(this.messageTimer);
+    this.messageTimer = setTimeout(() => {
+      this.message = null;
+      this.emit();
+    }, 2600);
+    this.emit();
+  }
+
+  // ---------------------------------------------------------- transactions
+
+  private snapshot(): Snapshot {
+    return { doc: JSON.stringify(this.doc), selection: [...this.selection], pageId: this.pageId };
+  }
+
+  private restore(s: Snapshot): void {
+    this.doc = JSON.parse(s.doc);
+    this.pageId = this.doc.nodes[s.pageId] ? s.pageId : this.doc.pageIds[0];
+    this.selection = s.selection.filter((id) => this.doc.nodes[id]);
+    this.editingTextId = null;
+  }
+
+  get inTransaction(): boolean {
+    return this.txBase !== null;
+  }
+
+  begin(): void {
+    if (!this.txBase) this.txBase = this.snapshot();
+  }
+
+  commit(): void {
+    const base = this.txBase;
+    this.txBase = null;
+    if (!base) return;
+    this.normalize();
+    if (base.doc !== JSON.stringify(this.doc)) {
+      this.undoStack.push(base);
+      if (this.undoStack.length > 200) this.undoStack.shift();
+      this.redoStack = [];
+      this.scheduleSave();
+    }
+    this.emit();
+  }
+
+  cancel(): void {
+    if (this.txBase) this.restore(this.txBase);
+    this.txBase = null;
+    this.emit();
+  }
+
+  /** Runs a document mutation. Outside a transaction it is one undo step. */
+  change(fn: (doc: PlanarDocument) => void): void {
+    const own = !this.txBase;
+    if (own) this.begin();
+    fn(this.doc);
+    this.normalize();
+    if (own) this.commit();
+    else this.emit();
+  }
+
+  private normalize(): void {
+    fitGroups(this.doc, this.pageId);
+    this.selection = this.selection.filter((id) => this.doc.nodes[id]);
+    if (this.editingTextId && !this.doc.nodes[this.editingTextId]) this.editingTextId = null;
+  }
+
+  get canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  get canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  undo(): void {
+    this.finishTextEditing();
+    const s = this.undoStack.pop();
+    if (!s) return;
+    this.redoStack.push(this.snapshot());
+    this.restore(s);
+    this.scheduleSave();
+    this.emit();
+  }
+
+  redo(): void {
+    this.finishTextEditing();
+    const s = this.redoStack.pop();
+    if (!s) return;
+    this.undoStack.push(this.snapshot());
+    this.restore(s);
+    this.scheduleSave();
+    this.emit();
+  }
+
+  private scheduleSave(): void {
+    if (!this.autosave) return;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.doc));
+      } catch {
+        this.notify('Autosave failed: browser storage is full');
+      }
+    }, 400);
+  }
+
+  // ------------------------------------------------------------- selection
+
+  select(ids: string[]): void {
+    this.selection = ids.filter((id) => this.doc.nodes[id]);
+    this.emit();
+  }
+
+  toggleSelect(id: string): void {
+    this.select(this.selection.includes(id) ? this.selection.filter((s) => s !== id) : [...this.selection, id]);
+  }
+
+  /** The container whose children are the current selection level. */
+  get selectionContext(): string {
+    const first = this.selection[0];
+    return (first && this.doc.nodes[first]?.parentId) || this.pageId;
+  }
+
+  selectAll(): void {
+    const parent = this.doc.nodes[this.selectionContext];
+    this.select(parent.children.filter((id) => this.doc.nodes[id].visible && !this.doc.nodes[id].locked));
+  }
+
+  selectChildren(): void {
+    const ids = this.selectedNodes.flatMap((n) => n.children);
+    if (ids.length) this.select(ids);
+  }
+
+  selectParent(): void {
+    const parents = new Set(this.selectedNodes.map((n) => n.parentId).filter((p): p is string => !!p && p !== this.pageId));
+    this.select(parents.size ? [...parents] : []);
+  }
+
+  /** Document order (bottom to top) index of every node in the page. */
+  private zOrder(): Map<string, number> {
+    const order = new Map<string, number>();
+    const walk = (id: string) => {
+      order.set(id, order.size);
+      for (const c of this.doc.nodes[id]?.children ?? []) walk(c);
+    };
+    walk(this.pageId);
+    return order;
+  }
+
+  private sortedTopSelection(): string[] {
+    const order = this.zOrder();
+    return topLevelSelection(this.doc, this.selection).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+  }
+
+  // ------------------------------------------------------------ operations
+
+  deleteSelection(): void {
+    const ids = topLevelSelection(this.doc, this.selection);
+    if (!ids.length) return;
+    this.change((doc) => ids.forEach((id) => removeNode(doc, id)));
+    this.select([]);
+  }
+
+  duplicateSelection(offset = 10): string[] {
+    const ids = this.sortedTopSelection();
+    const created: string[] = [];
+    this.change((doc) => {
+      for (const id of ids) {
+        const parent = getParent(doc, id);
+        if (!parent) continue;
+        const nodes = cloneSubtree(doc.nodes, id);
+        nodes[0].x += offset;
+        nodes[0].y += offset;
+        const root = insertSubtree(doc, nodes, parent.id, parent.children.indexOf(id) + 1);
+        created.push(root.id);
+      }
+    });
+    this.select(created);
+    return created;
+  }
+
+  copySelection(): string | null {
+    const ids = this.sortedTopSelection();
+    if (!ids.length) return null;
+    const nodes: Record<string, SceneNode> = {};
+    const collect = (id: string) => {
+      nodes[id] = structuredClone(this.doc.nodes[id]);
+      this.doc.nodes[id].children.forEach(collect);
+    };
+    ids.forEach(collect);
+    const data: ClipboardData = {
+      planarClipboard: 1,
+      nodes,
+      roots: ids.map((id) => ({ id, center: worldCenter(this.doc, id), rotation: worldRotation(this.doc, id) })),
+    };
+    this.clipboard = JSON.stringify(data);
+    return this.clipboard;
+  }
+
+  cutSelection(): string | null {
+    const text = this.copySelection();
+    this.deleteSelection();
+    return text;
+  }
+
+  /** Pastes clipboard text; returns false when it is not Planar data. */
+  paste(text: string | null = this.clipboard): boolean {
+    let data: ClipboardData;
+    try {
+      data = JSON.parse(text ?? '');
+      if (data?.planarClipboard !== 1 || !data.nodes || !Array.isArray(data.roots)) return false;
+    } catch {
+      return false;
+    }
+    const sel = this.selectedNodes;
+    const target =
+      sel.length === 1 && sel[0].type === 'frame' ? sel[0].id : sel.length ? sel[0].parentId ?? this.pageId : this.pageId;
+    const created: string[] = [];
+    this.change((doc) => {
+      for (const root of data.roots) {
+        if (!data.nodes[root.id]) continue;
+        const nodes = cloneSubtree(data.nodes, root.id);
+        const node = insertSubtree(doc, nodes, target);
+        placeNode(doc, node.id, root.center, root.rotation);
+        created.push(node.id);
+      }
+      // Bring pasted content into view if it landed off-screen.
+      const b = selectionBounds(doc, created);
+      const view = this.visibleWorldRect();
+      if (b && !rectsIntersect(b, view)) {
+        const d = { x: rectCenter(view).x - rectCenter(b).x, y: rectCenter(view).y - rectCenter(b).y };
+        for (const id of created) this.translateWorld(id, d);
+      }
+    });
+    this.select(created);
+    return true;
+  }
+
+  /** Moves a node by a world-space delta. */
+  translateWorld(id: string, delta: Vec): void {
+    const node = getNode(this.doc, id);
+    const d = applyLinear(invert(parentWorldMatrix(this.doc, id)), delta);
+    node.x += d.x;
+    node.y += d.y;
+  }
+
+  nudge(dx: number, dy: number): void {
+    const ids = topLevelSelection(this.doc, this.selection);
+    if (!ids.length) return;
+    this.change(() => ids.forEach((id) => this.translateWorld(id, { x: dx, y: dy })));
+  }
+
+  group(): void {
+    const ids = this.sortedTopSelection();
+    if (!ids.length) return;
+    const top = ids[ids.length - 1];
+    const parent = getParent(this.doc, top);
+    if (!parent) return;
+    let groupId = '';
+    this.change((doc) => {
+      const g = insertNode(doc, createNode('group', { width: 0, height: 0 }), parent.id, parent.children.indexOf(top) + 1);
+      groupId = g.id;
+      for (const id of ids) reparentKeepWorld(doc, id, g.id);
+    });
+    this.select([groupId]);
+  }
+
+  frameSelection(): void {
+    const ids = this.sortedTopSelection();
+    const b = selectionBounds(this.doc, ids);
+    if (!ids.length || !b) return;
+    const top = ids[ids.length - 1];
+    const parent = getParent(this.doc, top);
+    if (!parent) return;
+    let frameId = '';
+    this.change((doc) => {
+      const f = insertNode(
+        doc,
+        createNode('frame', { width: b.width, height: b.height }),
+        parent.id,
+        parent.children.indexOf(top) + 1,
+      );
+      frameId = f.id;
+      placeNode(doc, f.id, rectCenter(b), 0);
+      for (const id of ids) reparentKeepWorld(doc, id, f.id);
+    });
+    this.select([frameId]);
+  }
+
+  ungroup(): void {
+    const containers = this.selectedNodes.filter((n) => n.type === 'group' || n.type === 'frame');
+    if (!containers.length) return;
+    const released: string[] = [];
+    this.change((doc) => {
+      for (const c of containers) {
+        const parent = getParent(doc, c.id);
+        if (!parent) continue;
+        let index = parent.children.indexOf(c.id);
+        for (const child of [...c.children]) {
+          reparentKeepWorld(doc, child, parent.id, ++index);
+          released.push(child);
+        }
+        removeNode(doc, c.id);
+      }
+    });
+    this.select(released);
+  }
+
+  reorder(kind: ReorderKind): void {
+    const ids = this.sortedTopSelection();
+    if (!ids.length) return;
+    this.change((doc) => {
+      const list = kind === 'forward' || kind === 'front' ? [...ids].reverse() : ids;
+      for (const id of list) {
+        const parent = getParent(doc, id);
+        if (!parent) continue;
+        const i = parent.children.indexOf(id);
+        const n = parent.children.length;
+        const to = kind === 'front' ? n - 1 : kind === 'back' ? 0 : kind === 'forward' ? Math.min(n - 1, i + 1) : Math.max(0, i - 1);
+        if (to === i) continue;
+        parent.children.splice(i, 1);
+        parent.children.splice(to, 0, id);
+      }
+    });
+  }
+
+  align(kind: AlignKind): void {
+    const ids = topLevelSelection(this.doc, this.selection);
+    if (!ids.length) return;
+    let target: Rect | null;
+    if (ids.length === 1) {
+      const parent = getParent(this.doc, ids[0]);
+      if (!parent || parent.type === 'page') return;
+      target = worldBounds(this.doc, parent.id);
+    } else {
+      target = selectionBounds(this.doc, ids);
+    }
+    if (!target) return;
+    const t = target;
+    this.change(() => {
+      for (const id of ids) {
+        const b = worldBounds(this.doc, id);
+        const d = { x: 0, y: 0 };
+        if (kind === 'left') d.x = t.x - b.x;
+        if (kind === 'hcenter') d.x = t.x + t.width / 2 - (b.x + b.width / 2);
+        if (kind === 'right') d.x = t.x + t.width - (b.x + b.width);
+        if (kind === 'top') d.y = t.y - b.y;
+        if (kind === 'vcenter') d.y = t.y + t.height / 2 - (b.y + b.height / 2);
+        if (kind === 'bottom') d.y = t.y + t.height - (b.y + b.height);
+        this.translateWorld(id, d);
+      }
+    });
+  }
+
+  /** Applies a patch (or mutator) to nodes and re-measures text. */
+  updateNodes(ids: string[], patch: Partial<SceneNode> | ((node: SceneNode) => void)): void {
+    this.change((doc) => {
+      for (const id of ids) {
+        const node = doc.nodes[id];
+        if (!node) continue;
+        if (typeof patch === 'function') patch(node);
+        else Object.assign(node, patch);
+        if (node.type === 'text') this.syncTextSize(node);
+      }
+    });
+  }
+
+  syncTextSize(node: SceneNode): void {
+    const size = measureTextNode(node);
+    node.width = size.width;
+    node.height = size.height;
+  }
+
+  rename(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (trimmed) this.updateNodes([id], { name: trimmed });
+  }
+
+  toggleVisible(ids = this.selection): void {
+    const nodes = ids.map((id) => this.doc.nodes[id]).filter(Boolean);
+    if (!nodes.length) return;
+    const visible = !nodes.every((n) => n.visible);
+    this.updateNodes(ids, { visible });
+  }
+
+  toggleLocked(ids = this.selection): void {
+    const nodes = ids.map((id) => this.doc.nodes[id]).filter(Boolean);
+    if (!nodes.length) return;
+    const locked = !nodes.every((n) => n.locked);
+    this.updateNodes(ids, { locked });
+    if (locked) this.select(this.selection.filter((id) => !ids.includes(id)));
+  }
+
+  /** Layer-panel drag and drop: moves nodes into parentId at index. */
+  moveLayers(ids: string[], parentId: string, index: number): void {
+    const valid = topLevelSelection(this.doc, ids).filter((id) => id !== parentId && !getAncestors(this.doc, parentId).some((a) => a.id === id));
+    if (!valid.length) return;
+    this.change((doc) => {
+      let i = index;
+      for (const id of valid) {
+        const node = doc.nodes[id];
+        if (node.parentId === parentId) {
+          moveNode(doc, id, parentId, i);
+          i = doc.nodes[parentId].children.indexOf(id) + 1;
+        } else {
+          reparentKeepWorld(doc, id, parentId, i);
+          i++;
+        }
+      }
+    });
+  }
+
+  // ------------------------------------------------------------- text
+
+  startTextEditing(id: string): void {
+    const node = this.doc.nodes[id];
+    if (!node || node.type !== 'text' || node.locked) return;
+    this.begin();
+    this.editingTextId = id;
+    this.selection = [id];
+    this.tool = 'select';
+    this.emit();
+  }
+
+  setText(id: string, characters: string): void {
+    const node = this.doc.nodes[id];
+    if (!node) return;
+    const derivedName = (text: string) => text.split('\n')[0].slice(0, 40) || 'Text';
+    if (node.name === derivedName(node.characters)) node.name = derivedName(characters);
+    node.characters = characters;
+    this.syncTextSize(node);
+    this.emit();
+  }
+
+  finishTextEditing(): void {
+    const id = this.editingTextId;
+    if (!id) return;
+    this.editingTextId = null;
+    const node = this.doc.nodes[id];
+    if (node && !node.characters.trim()) {
+      removeNode(this.doc, id);
+      this.selection = this.selection.filter((s) => s !== id);
+    }
+    this.commit();
+  }
+
+  // ------------------------------------------------------------- tools
+
+  setTool(tool: Tool): void {
+    if (this.tool === 'pen' && tool !== 'pen') this.finishPen(false);
+    this.finishTextEditing();
+    this.tool = tool;
+    this.overlay.pen = tool === 'pen' ? { points: [], cursor: null } : null;
+    this.emit();
+  }
+
+  /** Creates a vector from the pen's points. */
+  finishPen(close: boolean): void {
+    const pen = this.overlay.pen;
+    if (!pen) return;
+    const pts = pen.points;
+    this.overlay.pen = { points: [], cursor: null };
+    if (pts.length >= 2) {
+      const xs = pts.map((p) => p.x);
+      const ys = pts.map((p) => p.y);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      const w = Math.max(...xs) - x;
+      const h = Math.max(...ys) - y;
+      const node = createNode('vector', {
+        name: close ? 'Polygon' : pts.length === 2 ? 'Line' : 'Vector',
+        x,
+        y,
+        width: w,
+        height: h,
+        closed: close && pts.length >= 3,
+        fills: close && pts.length >= 3 ? [{ type: 'solid', color: '#d9d9d9', opacity: 1, visible: true }] : [],
+        points: pts.map((p) => ({ x: w ? (p.x - x) / w : 0, y: h ? (p.y - y) / h : 0 })),
+      });
+      this.change((doc) => insertNode(doc, node, this.pageId));
+      this.selection = [node.id];
+      this.tool = 'select';
+      this.overlay.pen = null;
+    }
+    this.emit();
+  }
+
+  /** Inserts an image as a rectangle with an image fill. */
+  placeImage(src: string, width: number, height: number, center: Vec): void {
+    const maxSide = 2000;
+    const s = Math.min(1, maxSide / Math.max(width, height));
+    const node = createNode('rectangle', {
+      name: 'Image',
+      width: Math.round(width * s),
+      height: Math.round(height * s),
+      fills: [{ type: 'image', src, scaleMode: 'fill', opacity: 1, visible: true }],
+    });
+    node.x = Math.round(center.x - node.width / 2);
+    node.y = Math.round(center.y - node.height / 2);
+    this.change((doc) => insertNode(doc, node, this.pageId));
+    this.select([node.id]);
+  }
+
+  // ------------------------------------------------------------- pages
+
+  setPage(id: string): void {
+    if (!this.doc.nodes[id] || id === this.pageId) return;
+    this.finishTextEditing();
+    this.pageViewports.set(this.pageId, { ...this.viewport });
+    this.pageId = id;
+    this.selection = [];
+    const vp = this.pageViewports.get(id);
+    if (vp) this.viewport = vp;
+    else this.zoomToFit();
+    this.emit();
+  }
+
+  addPage(): void {
+    const page = createNode('page', { name: uniquePageName(this.doc), width: 0, height: 0 });
+    this.change((doc) => {
+      doc.nodes[page.id] = page;
+      doc.pageIds.push(page.id);
+    });
+    this.setPage(page.id);
+  }
+
+  renamePage(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.change((doc) => {
+      doc.nodes[id].name = trimmed;
+    });
+  }
+
+  deletePage(id: string): void {
+    if (this.doc.pageIds.length <= 1) return;
+    const i = this.doc.pageIds.indexOf(id);
+    const next = this.doc.pageIds[i === 0 ? 1 : i - 1];
+    if (id === this.pageId) this.setPage(next);
+    this.change((doc) => removeNode(doc, id));
+  }
+
+  renameDocument(name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === this.doc.name) return;
+    this.change((doc) => {
+      doc.name = trimmed;
+    });
+  }
+
+  // ------------------------------------------------------------- viewport
+
+  screenToWorld(p: Vec): Vec {
+    return { x: (p.x - this.viewport.x) / this.viewport.zoom, y: (p.y - this.viewport.y) / this.viewport.zoom };
+  }
+
+  worldToScreen(p: Vec): Vec {
+    return { x: p.x * this.viewport.zoom + this.viewport.x, y: p.y * this.viewport.zoom + this.viewport.y };
+  }
+
+  visibleWorldRect(): Rect {
+    const tl = this.screenToWorld({ x: 0, y: 0 });
+    return { x: tl.x, y: tl.y, width: this.canvasSize.width / this.viewport.zoom, height: this.canvasSize.height / this.viewport.zoom };
+  }
+
+  setCanvasSize(width: number, height: number): void {
+    this.canvasSize = { width, height };
+    if (this.needsInitialFit && width > 0 && height > 0) {
+      this.needsInitialFit = false;
+      this.zoomToFit();
+    }
+    this.emit();
+  }
+
+  panBy(dx: number, dy: number): void {
+    this.viewport = { ...this.viewport, x: this.viewport.x + dx, y: this.viewport.y + dy };
+    this.emit();
+  }
+
+  zoomAt(screen: Vec, zoom: number): void {
+    const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+    const world = this.screenToWorld(screen);
+    this.viewport = { zoom: z, x: screen.x - world.x * z, y: screen.y - world.y * z };
+    this.emit();
+  }
+
+  zoomBy(factor: number): void {
+    this.zoomAt({ x: this.canvasSize.width / 2, y: this.canvasSize.height / 2 }, this.viewport.zoom * factor);
+  }
+
+  zoomTo(zoom: number): void {
+    this.zoomAt({ x: this.canvasSize.width / 2, y: this.canvasSize.height / 2 }, zoom);
+  }
+
+  zoomToRect(r: Rect | null, maxZoom = 1): void {
+    const { width: cw, height: ch } = this.canvasSize;
+    if (!r) {
+      this.viewport = { x: cw / 2, y: ch / 2, zoom: 1 };
+      this.emit();
+      return;
+    }
+    const pad = 64;
+    const zoom = Math.min(
+      maxZoom,
+      MAX_ZOOM,
+      Math.max(MIN_ZOOM, Math.min((cw - pad * 2) / Math.max(r.width, 1), (ch - pad * 2) / Math.max(r.height, 1))),
+    );
+    const c = rectCenter(r);
+    this.viewport = { zoom, x: cw / 2 - c.x * zoom, y: ch / 2 - c.y * zoom };
+    this.emit();
+  }
+
+  zoomToFit(): void {
+    this.zoomToRect(selectionBounds(this.doc, this.page.children), 1);
+  }
+
+  zoomToSelection(): void {
+    if (this.selection.length) this.zoomToRect(selectionBounds(this.doc, this.selection), MAX_ZOOM);
+  }
+
+  // ------------------------------------------------------------- files
+
+  newDocument(): void {
+    this.loadDocument(createDocument());
+  }
+
+  loadDocument(doc: PlanarDocument): void {
+    this.finishTextEditing();
+    this.doc = doc;
+    this.pageId = doc.pageIds[0];
+    this.selection = [];
+    this.undoStack = [];
+    this.redoStack = [];
+    this.pageViewports.clear();
+    this.zoomToFit();
+    this.scheduleSave();
+    this.emit();
+  }
+
+  openFile(text: string): void {
+    try {
+      this.loadDocument(parseDocument(JSON.parse(text)));
+    } catch (e) {
+      this.notify(`Could not open file: ${(e as Error).message}`);
+    }
+  }
+
+  saveFile(): void {
+    const blob = new Blob([JSON.stringify(this.doc, null, 1)], { type: 'application/json' });
+    downloadBlob(blob, `${safeFilename(this.doc.name)}.planar.json`);
+  }
+
+  /** Ids that an export covers: the selection, or the whole page. */
+  exportTargets(): string[] {
+    const ids = topLevelSelection(this.doc, this.selection);
+    return ids.length ? ids : this.page.children.filter((id) => this.doc.nodes[id].visible);
+  }
+
+  async exportAs(format: 'png' | 'svg', scale = 1): Promise<void> {
+    const ids = this.exportTargets();
+    if (!ids.length) {
+      this.notify('Nothing to export');
+      return;
+    }
+    const base = safeFilename(ids.length === 1 ? this.doc.nodes[ids[0]].name : this.page.name);
+    if (format === 'svg') {
+      const svg = exportSvg(this.doc, ids);
+      if (svg) downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${base}.svg`);
+    } else {
+      const blob = await exportPng(this.doc, ids, scale);
+      if (blob) downloadBlob(blob, `${base}${scale !== 1 ? `@${scale}x` : ''}.png`);
+    }
+  }
+}
+
