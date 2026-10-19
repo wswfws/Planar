@@ -2,9 +2,11 @@ import type { Editor } from './editor';
 import { vectorPoints, worldMatrix } from './geometry';
 import { frameLabelRect, HANDLES, selectionFrame } from './interaction';
 import { apply, clean } from './math';
-import type { SceneNode } from './types';
+import { isFrameLike, type SceneNode } from './types';
 
 export const ACCENT = '#7b7bf0';
+/** Components and instances are outlined in their own colour. */
+export const COMPONENT = '#d07cf5';
 const GUIDE = '#ff4f8b';
 
 /** Traces a node's outline in world space under the current transform. */
@@ -39,15 +41,16 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
   ctx.textBaseline = 'middle';
   for (const id of editor.page.children) {
     const n = doc.nodes[id];
-    if (n.type !== 'frame' || !n.visible) continue;
+    if (!isFrameLike(n) || !n.visible) continue;
     const r = frameLabelRect(editor, n);
     const selected = editor.selection.includes(id);
-    ctx.fillStyle = selected ? ACCENT : editor.hoverId === id ? '#c9c9d6' : '#8d8d9c';
+    const linked = n.type === 'component' || n.type === 'instance';
+    ctx.fillStyle = linked ? COMPONENT : selected ? ACCENT : editor.hoverId === id ? '#c9c9d6' : '#8d8d9c';
     ctx.save();
     ctx.beginPath();
     ctx.rect(r.x, r.y, r.width, r.height);
     ctx.clip();
-    ctx.fillText(n.name, r.x, r.y + r.height / 2);
+    ctx.fillText((n.type === 'component' ? '❖ ' : n.type === 'instance' ? '◇ ' : '') + n.name, r.x, r.y + r.height / 2);
     ctx.restore();
   }
 
@@ -57,7 +60,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
     toScreenMatrix(hover.id);
     traceOutline(ctx, hover);
     resetTransform();
-    ctx.strokeStyle = ACCENT;
+    ctx.strokeStyle = hover.type === 'component' || hover.type === 'instance' ? COMPONENT : ACCENT;
     ctx.lineWidth = 2;
     ctx.stroke();
   }
@@ -69,7 +72,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
     toScreenMatrix(id);
     traceOutline(ctx, n);
     resetTransform();
-    ctx.strokeStyle = ACCENT;
+    ctx.strokeStyle = n.type === 'component' || n.type === 'instance' ? COMPONENT : ACCENT;
     ctx.lineWidth = 1;
     ctx.stroke();
   }

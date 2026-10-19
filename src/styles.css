@@ -732,3 +732,261 @@ select:focus {
   flex: 1;
   min-width: 0;
 }
+
+/* ------------------------------------------------- components & variables */
+
+:root {
+  --component: #d07cf5;
+}
+
+.toolbar-label {
+  margin-left: 6px;
+}
+
+.sidebar-header.tabs {
+  justify-content: flex-start;
+  gap: 4px;
+  padding-left: 6px;
+}
+
+.sidebar-header.tabs button {
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.sidebar-header.tabs button.active {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.layer-row.linked .row-name,
+.layer-row.linked .layer-icon,
+.component-name {
+  color: var(--component);
+}
+
+.asset-list {
+  padding: 4px 6px 8px !important;
+}
+
+.asset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+  cursor: grab;
+}
+
+.asset:hover {
+  background: var(--panel-2);
+}
+
+.thumb {
+  flex: none;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.asset-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.asset-text .component-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.asset-page {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.small-button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.small-button:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.bind-select {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: center;
+  appearance: none;
+  cursor: pointer;
+}
+
+.bind-select:hover {
+  color: var(--text);
+  background: var(--panel);
+}
+
+.bind-select.bound {
+  color: var(--accent);
+}
+
+.number-field.bound input,
+.color-field.bound .hex {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.color-field .bind-select {
+  margin-right: -4px;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(860px, 100%);
+  max-height: min(640px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dialog-header,
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.dialog-header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-header h2 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.dialog-footer {
+  border-top: 1px solid var(--border);
+}
+
+.dialog-body {
+  overflow: auto;
+  padding: 6px 8px;
+}
+
+.variables-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.variables-table th,
+.variables-table td {
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: middle;
+  min-width: 140px;
+}
+
+.variables-table th {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.variables-table .narrow {
+  min-width: 0;
+  width: 32px;
+}
+
+.variables-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.mode-head,
+.var-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cell-input,
+.mode-name {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  outline: none;
+}
+
+.mode-name {
+  background: transparent;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cell-input:focus,
+.mode-name:focus {
+  border-color: var(--accent);
+}
+
+.type-badge-small {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.type-badge-small.color {
+  color: var(--accent);
+}
+
+@media (max-width: 1100px) {
+  .toolbar-label {
+    display: none;
+  }
+}

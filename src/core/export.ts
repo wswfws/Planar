@@ -2,7 +2,7 @@ import { localMatrix, parentWorldMatrix, selectionBounds, vectorPoints } from '.
 import { clean, type Mat, type Rect } from './math';
 import { drawNode } from './render';
 import { layoutLines, lineHeightPx } from './text';
-import type { PlanarDocument, SceneNode } from './types';
+import { isFrameLike, type PlanarDocument, type SceneNode } from './types';
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -74,7 +74,7 @@ function nodeToSvg(doc: PlanarDocument, id: string): string {
 
   if (node.children.length) {
     let open = '<g>';
-    if (node.type === 'frame' && node.clipContent) {
+    if (isFrameLike(node) && node.clipContent) {
       const cid = `planar-clip-${++clipCounter}`;
       parts.push(`<clipPath id="${cid}">${shapeElement(node, '')}</clipPath>`);
       open = `<g clip-path="url(#${cid})">`;

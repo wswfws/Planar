@@ -89,6 +89,8 @@ under the starting point.
 | Ctrl/Cmd+Shift+] / [ | Bring to front / send to back |
 | Ctrl/Cmd+Shift+H | Show / hide |
 | Ctrl/Cmd+Shift+L | Lock / unlock |
+| Ctrl/Cmd+Alt+K | Create component |
+| Ctrl/Cmd+Alt+B | Detach instance |
 | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y | Undo / redo |
 
 Pasting or dropping an image file creates a rectangle with an image fill at
@@ -124,12 +126,63 @@ A frame can arrange its children automatically in a row or a column.
   Arrow keys along the main axis move a child one place earlier or later.
 - Child X/Y are controlled by the layout and are read-only in the panel.
 
-## 7. Panels
+## 7. Components and instances
+
+- **Component.** A reusable frame-like layer (the *main component*).
+  Ctrl/Cmd+Alt+K turns a selected frame into a component, or wraps any other
+  selection in a new component. Components can be edited like frames.
+- **Instance.** A linked copy of a component. Instances are created from the
+  *Assets* tab (click to place at the centre of the view, or drag onto the
+  canvas) or with *Create instance* in the properties of a component.
+  Copying/duplicating an instance makes another instance of the same
+  component. An instance cannot be placed inside its own component.
+- **Propagation.** Every change to the main component (layers added, removed,
+  re-ordered, restyled, resized) is reflected in all its instances
+  immediately, on every page.
+- **Overrides.** Inside an instance, layers can be selected (double-click to
+  enter, as with groups) and their *appearance* changed: fills, strokes,
+  opacity, visibility, corner radius, text content and text style, names and
+  variable bindings. Each changed property becomes an override and no longer
+  follows the component; everything else keeps following it. Layers inside
+  an instance cannot be moved, resized, deleted, re-ordered or re-parented,
+  and nothing can be dropped into an instance.
+- The instance's own position, rotation, name, visibility, opacity and
+  layout placement are its own. Resizing an instance overrides its size.
+- **Reset overrides** restores an instance to match its component.
+- **Detach instance** (Ctrl/Cmd+Alt+B) turns an instance into a plain frame.
+  Instances nested inside it stay linked to their own components.
+- **Go to main component** selects the component, switching page if needed.
+- If a main component is deleted, its instances keep their last appearance.
+- Components and instances are marked with their own icons and a distinct
+  colour in the layer tree and on the canvas.
+
+## 8. Variables
+
+- A document has a list of **variables**, each with a name, a type
+  (*color*, *number*, *string* or *boolean*) and one value per **mode**
+  (for example *Light* and *Dark*). There is always at least one mode.
+- Variables are managed in the *Variables* dialog (toolbar button): add,
+  rename, delete variables; add, rename, delete modes; edit values.
+- **Binding.** Properties can be bound to a variable of a matching type:
+  - colour → solid fills and strokes;
+  - number → width, height, corner radius, stroke width, auto-layout spacing
+    and padding, font size, line height;
+  - string → text content;
+  - boolean → visibility.
+  A bound property shows the variable's name and always takes the variable's
+  value. Editing the property by hand (or resizing on canvas) removes the
+  binding. Deleting a variable removes its bindings and leaves the last
+  values in place.
+- **Modes.** Pages, frames, components and instances can choose a mode;
+  layers inside use the nearest chosen mode, falling back to the first mode.
+  Switching a frame from *Light* to *Dark* re-resolves every binding inside.
+
+## 9. Panels
 
 - **Toolbar** (top): main menu (new, open, save, export, undo, redo),
   tools, editable document name, zoom menu.
 - **Left sidebar**: page list (add, rename by double-click, delete when more
-  than one) and a layer tree for the current page. The layer tree shows the
+  than one), an *Assets* tab listing components with thumbnails, and a layer tree for the current page. The layer tree shows the
   top-most layer first, supports expand/collapse, multi-select, rename by
   double-click, visibility and lock toggles, and drag and drop to reorder or
   re-parent.
@@ -146,7 +199,7 @@ A frame can arrange its children automatically in a row or a column.
 - Numeric fields accept arithmetic (`100+20`, `50*2`) and can be scrubbed by
   dragging their label.
 
-## 8. Files
+## 10. Files
 
 - The document autosaves to browser storage and is restored on reload.
 - *Save* downloads a `.planar.json` file; *Open* loads one.
@@ -154,8 +207,9 @@ A frame can arrange its children automatically in a row or a column.
 - Unknown or invalid files are rejected with a message; the current document
   is not changed.
 
-## 9. Out of scope for v0.1 (roadmap)
+## 11. Out of scope for v0.1 (roadmap)
 
-Real-time collaboration, comments, components and instances, wrapping auto layout,
+Real-time collaboration, comments, component variants and properties,
+variable collections and aliases, wrapping auto layout,
 constraints, boolean operations, Bézier curve editing, gradients, effects
-(shadows, blur), styles and variables, prototyping, plugins, version history.
+(shadows, blur), styles, prototyping, plugins, version history.

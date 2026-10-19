@@ -73,6 +73,17 @@ const paths: Record<string, ReactElement> = {
       <rect x="4.5" y="10.5" width="7" height="3.5" rx="0.5" />
     </>
   ),
+  component: <path d="M8 1.8 10.2 4 8 6.2 5.8 4zM4 5.8 6.2 8 4 10.2 1.8 8zM12 5.8 14.2 8 12 10.2 9.8 8zM8 9.8l2.2 2.2L8 14.2 5.8 12z" />,
+  instance: <path d="M8 1.5 14.5 8 8 14.5 1.5 8z" />,
+  variable: <path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5z M8 1.8v6.2m0 0 5.5-3m-5.5 3-5.5-3M8 8v6.2" />,
+  link: <path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1" />,
+  target: (
+    <>
+      <circle cx="8" cy="8" r="5.5" />
+      <circle cx="8" cy="8" r="2" />
+    </>
+  ),
+  close: <path d="M4 4l8 8M12 4l-8 8" />,
   trash: <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4" />,
 };
 
@@ -99,6 +110,8 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 
 export const NODE_ICONS: Record<string, IconName> = {
   frame: 'frame',
+  component: 'component',
+  instance: 'instance',
   group: 'group',
   rectangle: 'rectangle',
   ellipse: 'ellipse',

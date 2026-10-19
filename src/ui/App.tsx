@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Editor, type Tool } from '../core/editor';
 import { Canvas, readImageFile } from './Canvas';
 import { EditorContext, useEditorState } from './EditorContext';
 import { LayersPanel } from './LayersPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import { Toolbar } from './Toolbar';
+import { VariablesDialog } from './VariablesDialog';
 
 const TOOL_KEYS: Record<string, Tool> = {
   v: 'select',
@@ -26,7 +27,7 @@ function isTyping(target: EventTarget | null): boolean {
 function useShortcuts(editor: Editor, openFile: () => void): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isTyping(e.target)) return;
+      if (isTyping(e.target) || document.querySelector('.dialog')) return;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
@@ -45,6 +46,8 @@ function useShortcuts(editor: Editor, openFile: () => void): void {
         else if ((key === 'z' && e.shiftKey) || key === 'y') editor.redo();
         else if (key === 'd') editor.duplicateSelection();
         else if (key === 'a') editor.selectAll();
+        else if (key === 'k' && e.altKey) editor.createComponent();
+        else if (key === 'b' && e.altKey) editor.detachInstances();
         else if (key === 'g' && e.altKey) editor.frameSelection();
         else if (key === 'g' && e.shiftKey) editor.ungroup();
         else if (key === 'g') editor.group();
@@ -178,6 +181,7 @@ export function App() {
   const editor = useMemo(() => new Editor(), []);
   const fileInput = useRef<HTMLInputElement>(null);
   const openFile = useMemo(() => () => fileInput.current?.click(), []);
+  const [variablesOpen, setVariablesOpen] = useState(false);
   useShortcuts(editor, openFile);
 
   useEffect(() => {
@@ -187,7 +191,7 @@ export function App() {
   return (
     <EditorContext.Provider value={editor}>
       <div className="app">
-        <Toolbar onOpen={openFile} />
+        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} />
         <div className="workspace">
           <LayersPanel />
           <main className="stage">
@@ -196,6 +200,7 @@ export function App() {
           <PropertiesPanel />
         </div>
         <Toast />
+        {variablesOpen && <VariablesDialog onClose={() => setVariablesOpen(false)} />}
         <input
           ref={fileInput}
           type="file"

@@ -66,7 +66,7 @@ function Dropdown({ button, items, className }: { button: ReactNode; items: (Men
   );
 }
 
-export function Toolbar({ onOpen }: { onOpen: () => void }) {
+export function Toolbar({ onOpen, onVariables }: { onOpen: () => void; onVariables: () => void }) {
   const editor = useEditorState();
   const [name, setName] = useState(editor.doc.name);
   useEffect(() => setName(editor.doc.name), [editor.doc.name]);
@@ -88,6 +88,9 @@ export function Toolbar({ onOpen }: { onOpen: () => void }) {
             '-',
             { label: 'Export PNG', shortcut: `${MOD}Shift+E`, action: () => editor.exportAs('png', 2) },
             { label: 'Export SVG', action: () => editor.exportAs('svg') },
+            '-',
+            { label: 'Variables…', action: onVariables },
+            { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: !editor.selection.length },
             '-',
             { label: 'Undo', shortcut: `${MOD}Z`, action: () => editor.undo(), disabled: !editor.canUndo },
             { label: 'Redo', shortcut: `${MOD}Shift+Z`, action: () => editor.redo(), disabled: !editor.canRedo },
@@ -130,6 +133,10 @@ export function Toolbar({ onOpen }: { onOpen: () => void }) {
         />
       </div>
       <div className="toolbar-right">
+        <button type="button" className="toolbar-button" title="Variables" onClick={onVariables}>
+          <Icon name="variable" />
+          <span className="toolbar-label">Variables</span>
+        </button>
         <button type="button" className="toolbar-button" title={`Undo (${MOD}Z)`} disabled={!editor.canUndo} onClick={() => editor.undo()}>
           <Icon name="undo" />
         </button>

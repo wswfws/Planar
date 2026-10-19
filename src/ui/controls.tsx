@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
+import type { VariableType } from '../core/types';
 import { useEditor } from './EditorContext';
 import { Icon, type IconName } from './icons';
 
@@ -72,15 +73,18 @@ interface NumberFieldProps {
   suffix?: string;
   title?: string;
   disabled?: boolean;
+  /** Optional variable binding for this field. */
+  bind?: BindProps;
 }
 
 /** Numeric input with arithmetic support and a draggable (scrub) label. */
-export function NumberField({ label, value, onChange, min = -Infinity, max = Infinity, step = 1, precision = 2, suffix, title, disabled }: NumberFieldProps) {
+export function NumberField({ label, value, onChange, min = -Infinity, max = Infinity, step = 1, precision = 2, suffix, title, disabled, bind }: NumberFieldProps) {
   // Text being typed while the field is focused; otherwise the live value is shown.
   const [draft, setDraft] = useState<string | null>(null);
   const skipCommit = useRef(false);
   const scrub = useRef<{ x: number; start: number } | null>(null);
   const editor = useEditor();
+  const boundName = bind?.boundId ? editor.doc.variables.find((v) => v.id === bind.boundId)?.name : undefined;
 
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
   const commit = () => {
@@ -93,7 +97,7 @@ export function NumberField({ label, value, onChange, min = -Infinity, max = Inf
   };
 
   return (
-    <label className={`number-field${disabled ? ' disabled' : ''}`} title={title}>
+    <label className={`number-field${disabled ? ' disabled' : ''}${boundName ? ' bound' : ''}`} title={title}>
       <span
         className="number-label"
         onPointerDown={(e) => {
@@ -117,8 +121,9 @@ export function NumberField({ label, value, onChange, min = -Infinity, max = Inf
         {label}
       </span>
       <input
-        value={draft ?? format(value, precision)}
+        value={draft ?? boundName ?? format(value, precision)}
         disabled={disabled}
+        readOnly={!!boundName}
         placeholder={value === null ? 'Mixed' : undefined}
         onFocus={(e) => {
           setDraft(format(value, precision));
@@ -141,7 +146,8 @@ export function NumberField({ label, value, onChange, min = -Infinity, max = Inf
           }
         }}
       />
-      {suffix && <span className="number-suffix">{suffix}</span>}
+      {suffix && !boundName && <span className="number-suffix">{suffix}</span>}
+      {bind && !disabled && <BindSelect {...bind} />}
     </label>
   );
 }
@@ -153,7 +159,40 @@ export function normalizeHex(input: string): string | null {
   return /^[0-9a-f]{6}$/i.test(h) ? `#${h.toUpperCase()}` : null;
 }
 
-export function ColorField({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+export interface BindProps {
+  type: VariableType;
+  boundId?: string;
+  onBind: (variableId: string | null) => void;
+}
+
+/** Compact picker that binds a property to a variable of the given type. */
+export function BindSelect({ type, boundId, onBind }: BindProps) {
+  const editor = useEditor();
+  const options = editor.doc.variables.filter((v) => v.type === type);
+  if (!options.length && !boundId) return null;
+  return (
+    <select
+      className={`bind-select${boundId ? ' bound' : ''}`}
+      title={boundId ? 'Bound to a variable' : 'Bind to a variable'}
+      aria-label="Variable"
+      value={boundId ?? ''}
+      onChange={(e) => onBind(e.target.value === '__detach' ? null : e.target.value || null)}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <option value="">⬡</option>
+      {options.map((v) => (
+        <option key={v.id} value={v.id}>
+          {v.name}
+        </option>
+      ))}
+      {boundId && <option value="__detach">Detach variable</option>}
+    </select>
+  );
+}
+
+export function ColorField({ value, onChange, bind }: { value: string; onChange: (hex: string) => void; bind?: BindProps }) {
+  const editor = useEditor();
+  const boundName = bind?.boundId ? editor.doc.variables.find((v) => v.id === bind.boundId)?.name : undefined;
   const [draft, setDraft] = useState<string | null>(null);
   const commit = () => {
     const hex = draft === null ? null : normalizeHex(draft);
@@ -161,11 +200,12 @@ export function ColorField({ value, onChange }: { value: string; onChange: (hex:
     setDraft(null);
   };
   return (
-    <span className="color-field">
-      <input type="color" value={value} onChange={(e) => onChange(e.target.value.toUpperCase())} />
+    <span className={`color-field${boundName ? ' bound' : ''}`}>
+      <input type="color" value={value} disabled={!!boundName} onChange={(e) => onChange(e.target.value.toUpperCase())} />
       <input
         className="hex"
-        value={draft ?? value.replace('#', '').toUpperCase()}
+        readOnly={!!boundName}
+        value={draft ?? boundName ?? value.replace('#', '').toUpperCase()}
         onFocus={(e) => {
           setDraft(e.target.value);
           e.target.select();
@@ -177,6 +217,7 @@ export function ColorField({ value, onChange }: { value: string; onChange: (hex:
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         }}
       />
+      {bind && <BindSelect {...bind} />}
     </span>
   );
 }

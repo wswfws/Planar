@@ -14,6 +14,8 @@ export function solid(color: string, opacity = 1): SolidPaint {
 const DEFAULT_NAMES: Record<NodeType, string> = {
   page: 'Page',
   frame: 'Frame',
+  component: 'Component',
+  instance: 'Instance',
   group: 'Group',
   rectangle: 'Rectangle',
   ellipse: 'Ellipse',
@@ -24,6 +26,8 @@ const DEFAULT_NAMES: Record<NodeType, string> = {
 const DEFAULT_FILLS: Record<NodeType, () => Paint[]> = {
   page: () => [solid('#1e1e24')],
   frame: () => [solid('#ffffff')],
+  component: () => [solid('#ffffff')],
+  instance: () => [solid('#ffffff')],
   group: () => [],
   rectangle: () => [solid('#d9d9d9')],
   ellipse: () => [solid('#d9d9d9')],
@@ -50,7 +54,7 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     strokes: type === 'vector' ? [solid('#000000')] : [],
     strokeWidth: type === 'vector' ? 2 : 1,
     cornerRadius: 0,
-    clipContent: type === 'frame',
+    clipContent: type === 'frame' || type === 'component' || type === 'instance',
     characters: '',
     fontFamily: 'system-ui, sans-serif',
     fontSize: 24,
@@ -71,13 +75,26 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     sizingH: 'fixed',
     sizingV: 'fixed',
     layoutAbsolute: false,
+    componentId: '',
+    sourceId: '',
+    overrides: [],
+    bindings: {},
+    variableMode: '',
     ...props,
   };
 }
 
 export function createDocument(name = 'Untitled'): PlanarDocument {
   const page = createNode('page', { name: 'Page 1', width: 0, height: 0 });
-  return { format: 'planar', version: 1, name, pageIds: [page.id], nodes: { [page.id]: page } };
+  return {
+    format: 'planar',
+    version: 1,
+    name,
+    pageIds: [page.id],
+    nodes: { [page.id]: page },
+    variables: [],
+    modes: [{ id: newId(), name: 'Mode 1' }],
+  };
 }
 
 export function getNode(doc: PlanarDocument, id: string): SceneNode {
@@ -218,5 +235,23 @@ export function parseDocument(data: unknown): PlanarDocument {
   }
   const pageIds = d.pageIds.filter((id) => nodes[id]?.type === 'page');
   if (!pageIds.length) throw new Error('Document has no pages');
-  return { format: 'planar', version: 1, name: typeof d.name === 'string' ? d.name : 'Untitled', pageIds, nodes };
+  const modes = Array.isArray(d.modes)
+    ? d.modes.filter((m) => m && typeof m.id === 'string' && typeof m.name === 'string')
+    : [];
+  if (!modes.length) modes.push({ id: newId(), name: 'Mode 1' });
+  const types = new Set(['color', 'number', 'string', 'boolean']);
+  const variables = Array.isArray(d.variables)
+    ? d.variables
+        .filter((v) => v && typeof v.id === 'string' && typeof v.name === 'string' && types.has(v.type))
+        .map((v) => ({ id: v.id, name: v.name, type: v.type, values: v.values && typeof v.values === 'object' ? { ...v.values } : {} }))
+    : [];
+  return {
+    format: 'planar',
+    version: 1,
+    name: typeof d.name === 'string' ? d.name : 'Untitled',
+    pageIds,
+    nodes,
+    variables,
+    modes,
+  };
 }

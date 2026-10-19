@@ -1,6 +1,6 @@
 import { localMatrix, vectorPoints } from './geometry';
 import { fontString, layoutLines, lineHeightPx } from './text';
-import type { ImagePaint, Paint, PlanarDocument, SceneNode } from './types';
+import { isFrameLike, type ImagePaint, type Paint, type PlanarDocument, type SceneNode } from './types';
 
 const images = new Map<string, HTMLImageElement>();
 let onImageLoad: (() => void) | null = null;
@@ -135,7 +135,7 @@ export function drawNode(ctx: CanvasRenderingContext2D, doc: PlanarDocument, id:
   if (!opts.hidden?.has(id)) paintNode(ctx, node);
   if (node.children.length) {
     ctx.save();
-    if (node.type === 'frame' && node.clipContent) {
+    if (isFrameLike(node) && node.clipContent) {
       shapePath(ctx, node);
       ctx.clip();
     }

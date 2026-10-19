@@ -1,7 +1,7 @@
 import { localMatrix, worldMatrix } from './geometry';
 import { apply, deg2rad, type Vec } from './math';
 import { measureTextNode } from './text';
-import type { PlanarDocument, SceneNode, Sizing } from './types';
+import { isFrameLike, type PlanarDocument, type SceneNode, type Sizing } from './types';
 
 const NONE: ReadonlySet<string> = new Set();
 
@@ -14,7 +14,7 @@ const H: Axis = { size: 'width', sizing: 'sizingH' };
 const V: Axis = { size: 'height', sizing: 'sizingV' };
 
 export function isAutoLayout(node: SceneNode | null | undefined): boolean {
-  return !!node && node.type === 'frame' && node.layoutMode !== 'none';
+  return isFrameLike(node) && node!.layoutMode !== 'none';
 }
 
 /** True when the node is positioned by its parent's auto layout. */

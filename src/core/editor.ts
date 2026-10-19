@@ -1,13 +1,27 @@
 import {
+  createInstanceNode,
+  detachInstance,
+  isInInstance,
+  listComponents,
+  markOverrides,
+  owningInstance,
+  resetOverrides,
+  syncInstances,
+  tracksOverrides,
+  wouldCycle,
+} from './components';
+import {
   cloneSubtree,
   createDocument,
   createNode,
   getAncestors,
   getNode,
+  getPageOf,
   getParent,
   insertNode,
   insertSubtree,
   moveNode,
+  newId,
   parseDocument,
   removeNode,
   uniquePageName,
@@ -15,6 +29,7 @@ import {
 import { downloadBlob, exportPng, exportSvg, safeFilename } from './export';
 import {
   fitGroups,
+  frameAt,
   localMatrix,
   parentWorldMatrix,
   placeNode,
@@ -23,12 +38,14 @@ import {
   topLevelSelection,
   worldBounds,
   worldCenter,
+  worldMatrix,
   worldRotation,
 } from './geometry';
 import { applyAutoLayout, isAutoLayout, isLaidOut } from './layout';
 import { apply, applyLinear, invert, rectCenter, rectFromPoints, rectsIntersect, type Rect, type Vec } from './math';
 import { measureTextNode } from './text';
-import type { PlanarDocument, SceneNode } from './types';
+import type { PlanarDocument, SceneNode, VariableType } from './types';
+import { coerce, defaultValue, resolveVariables, unbindVariable } from './variables';
 import { createWelcomeDocument } from './welcome';
 
 export type Tool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'text';
@@ -204,9 +221,16 @@ export class Editor {
   }
 
   private normalize(): void {
-    fitGroups(this.doc, this.pageId);
-    applyAutoLayout(this.doc, this.pageId, this.layoutSkip);
-    fitGroups(this.doc, this.pageId);
+    const { doc } = this;
+    // Order matters: variables feed sizes, groups and layout feed the
+    // components that instances copy, and instances then lay out themselves.
+    resolveVariables(doc);
+    for (const p of doc.pageIds) fitGroups(doc, p);
+    for (const p of doc.pageIds) applyAutoLayout(doc, p, this.layoutSkip);
+    syncInstances(doc);
+    resolveVariables(doc);
+    for (const p of doc.pageIds) applyAutoLayout(doc, p, this.layoutSkip);
+    for (const p of doc.pageIds) fitGroups(doc, p);
     this.selection = this.selection.filter((id) => this.doc.nodes[id]);
     if (this.editingTextId && !this.doc.nodes[this.editingTextId]) this.editingTextId = null;
   }
@@ -301,15 +325,20 @@ export class Editor {
 
   // ------------------------------------------------------------ operations
 
+  /** Top-level selection minus layers locked inside instances. */
+  private editableSelection(): string[] {
+    return topLevelSelection(this.doc, this.selection).filter((id) => !isInInstance(this.doc, id));
+  }
+
   deleteSelection(): void {
-    const ids = topLevelSelection(this.doc, this.selection);
+    const ids = this.editableSelection();
     if (!ids.length) return;
     this.change((doc) => ids.forEach((id) => removeNode(doc, id)));
     this.select([]);
   }
 
   duplicateSelection(offset = 10): string[] {
-    const ids = this.sortedTopSelection();
+    const ids = this.sortedTopSelection().filter((id) => !isInInstance(this.doc, id));
     const created: string[] = [];
     this.change((doc) => {
       for (const id of ids) {
@@ -361,13 +390,20 @@ export class Editor {
     }
     const sel = this.selectedNodes;
     const target =
-      sel.length === 1 && sel[0].type === 'frame' ? sel[0].id : sel.length ? sel[0].parentId ?? this.pageId : this.pageId;
+      sel.length === 1 && (sel[0].type === 'frame' || sel[0].type === 'component') ? sel[0].id : sel.length ? sel[0].parentId ?? this.pageId : this.pageId;
+    let pasteTarget = target;
+    while (pasteTarget !== this.pageId && (this.doc.nodes[pasteTarget]?.type === 'instance' || isInInstance(this.doc, pasteTarget))) {
+      pasteTarget = this.doc.nodes[pasteTarget]?.parentId ?? this.pageId;
+    }
     const created: string[] = [];
     this.change((doc) => {
       for (const root of data.roots) {
         if (!data.nodes[root.id]) continue;
         const nodes = cloneSubtree(data.nodes, root.id);
-        const node = insertSubtree(doc, nodes, target);
+        // Clipboard roots keep their links; an instance cannot land inside its own component.
+        const parent = nodes[0].type === 'instance' && wouldCycle(doc, nodes[0].componentId, pasteTarget) ? this.pageId : pasteTarget;
+        unlinkCopiedLayers(nodes);
+        const node = insertSubtree(doc, nodes, parent);
         placeNode(doc, node.id, root.center, root.rotation);
         created.push(node.id);
       }
@@ -392,7 +428,7 @@ export class Editor {
   }
 
   nudge(dx: number, dy: number): void {
-    const ids = topLevelSelection(this.doc, this.selection);
+    const ids = this.editableSelection();
     if (!ids.length) return;
     this.change((doc) => {
       for (const id of ids) {
@@ -420,7 +456,7 @@ export class Editor {
     const single = ids.length === 1 ? this.doc.nodes[ids[0]] : null;
     this.begin();
     let frameId: string;
-    if (single && single.type === 'frame' && single.layoutMode === 'none') {
+    if (single && (single.type === 'frame' || single.type === 'component') && single.layoutMode === 'none') {
       frameId = single.id;
     } else {
       this.frameSelection();
@@ -450,7 +486,7 @@ export class Editor {
   }
 
   group(): void {
-    const ids = this.sortedTopSelection();
+    const ids = this.sortedTopSelection().filter((id) => !isInInstance(this.doc, id));
     if (!ids.length) return;
     const top = ids[ids.length - 1];
     const parent = getParent(this.doc, top);
@@ -465,7 +501,7 @@ export class Editor {
   }
 
   frameSelection(): void {
-    const ids = this.sortedTopSelection();
+    const ids = this.sortedTopSelection().filter((id) => !isInInstance(this.doc, id));
     const b = selectionBounds(this.doc, ids);
     if (!ids.length || !b) return;
     const top = ids[ids.length - 1];
@@ -487,7 +523,7 @@ export class Editor {
   }
 
   ungroup(): void {
-    const containers = this.selectedNodes.filter((n) => n.type === 'group' || n.type === 'frame');
+    const containers = this.selectedNodes.filter((n) => (n.type === 'group' || n.type === 'frame') && !isInInstance(this.doc, n.id));
     if (!containers.length) return;
     const released: string[] = [];
     this.change((doc) => {
@@ -506,7 +542,7 @@ export class Editor {
   }
 
   reorder(kind: ReorderKind): void {
-    const ids = this.sortedTopSelection();
+    const ids = this.sortedTopSelection().filter((id) => !isInInstance(this.doc, id));
     if (!ids.length) return;
     this.change((doc) => {
       const list = kind === 'forward' || kind === 'front' ? [...ids].reverse() : ids;
@@ -524,7 +560,7 @@ export class Editor {
   }
 
   align(kind: AlignKind): void {
-    const ids = topLevelSelection(this.doc, this.selection);
+    const ids = this.editableSelection();
     if (!ids.length) return;
     let target: Rect | null;
     if (ids.length === 1) {
@@ -557,9 +593,21 @@ export class Editor {
       for (const id of ids) {
         const node = doc.nodes[id];
         if (!node) continue;
+        const before = typeof patch === 'function' ? structuredClone(node) : null;
         if (typeof patch === 'function') patch(node);
         else Object.assign(node, patch);
         if (node.type === 'text') this.syncTextSize(node);
+        const changed = before
+          ? (Object.keys(node) as (keyof SceneNode)[]).filter((k) => JSON.stringify(node[k]) !== JSON.stringify(before[k]))
+          : (Object.keys(patch) as (keyof SceneNode)[]);
+        // Editing a bound property by hand detaches it from its variable.
+        const unbind = changed.filter((k) => k !== 'bindings' && k in node.bindings);
+        if (unbind.length) node.bindings = Object.fromEntries(Object.entries(node.bindings).filter(([k]) => !unbind.includes(k as keyof SceneNode)));
+        if (tracksOverrides(node)) {
+          // Text sizes follow from content, so they are not overrides themselves.
+          const derived = node.type === 'text' ? ['height', ...(node.autoWidth ? ['width'] : [])] : [];
+          markOverrides(node, changed.filter((k) => !derived.includes(k) || (patch as Partial<SceneNode>)[k] !== undefined));
+        }
       }
     });
   }
@@ -592,7 +640,14 @@ export class Editor {
 
   /** Layer-panel drag and drop: moves nodes into parentId at index. */
   moveLayers(ids: string[], parentId: string, index: number): void {
-    const valid = topLevelSelection(this.doc, ids).filter((id) => id !== parentId && !getAncestors(this.doc, parentId).some((a) => a.id === id));
+    if (this.doc.nodes[parentId]?.type === 'instance' || isInInstance(this.doc, parentId)) return;
+    const valid = topLevelSelection(this.doc, ids).filter(
+      (id) =>
+        id !== parentId &&
+        !getAncestors(this.doc, parentId).some((a) => a.id === id) &&
+        !isInInstance(this.doc, id) &&
+        !(this.doc.nodes[id].type === 'instance' && wouldCycle(this.doc, this.doc.nodes[id].componentId, parentId)),
+    );
     if (!valid.length) return;
     this.change((doc) => {
       let i = index;
@@ -625,8 +680,10 @@ export class Editor {
     const node = this.doc.nodes[id];
     if (!node) return;
     const derivedName = (text: string) => text.split('\n')[0].slice(0, 40) || 'Text';
-    if (node.name === derivedName(node.characters)) node.name = derivedName(characters);
+    if (!node.sourceId && node.name === derivedName(node.characters)) node.name = derivedName(characters);
     node.characters = characters;
+    if (node.bindings.characters) node.bindings = Object.fromEntries(Object.entries(node.bindings).filter(([k]) => k !== 'characters'));
+    markOverrides(node, ['characters']);
     this.syncTextSize(node);
     this.emit();
   }
@@ -636,7 +693,7 @@ export class Editor {
     if (!id) return;
     this.editingTextId = null;
     const node = this.doc.nodes[id];
-    if (node && !node.characters.trim()) {
+    if (node && !node.characters.trim() && !node.sourceId) {
       removeNode(this.doc, id);
       this.selection = this.selection.filter((s) => s !== id);
     }
@@ -698,6 +755,191 @@ export class Editor {
     node.y = Math.round(center.y - node.height / 2);
     this.change((doc) => insertNode(doc, node, this.pageId));
     this.select([node.id]);
+  }
+
+
+  // ------------------------------------------------------------- components
+
+  /** Turns a frame into a component, or wraps the selection in a new one. */
+  createComponent(): void {
+    const ids = this.sortedTopSelection().filter((id) => !isInInstance(this.doc, id));
+    if (!ids.length) return;
+    const single = ids.length === 1 ? this.doc.nodes[ids[0]] : null;
+    const count = listComponents(this.doc).length + 1;
+    if (single && single.type === 'frame') {
+      this.change(() => {
+        single.type = 'component';
+      });
+      this.select([single.id]);
+      return;
+    }
+    this.begin();
+    this.selection = ids;
+    this.frameSelection();
+    const comp = this.doc.nodes[this.selection[0]];
+    this.change(() => {
+      comp.type = 'component';
+      comp.name = `Component ${count}`;
+      comp.fills = [];
+    });
+    this.commit();
+  }
+
+  /** Places an instance of a component; returns its id. */
+  createInstance(componentId: string, center?: Vec): string | null {
+    const comp = this.doc.nodes[componentId];
+    if (!comp || comp.type !== 'component') return null;
+    const at = center ?? this.screenToWorld({ x: this.canvasSize.width / 2, y: this.canvasSize.height / 2 });
+    let parentId = frameAt(this.doc, this.pageId, at, new Set());
+    if (wouldCycle(this.doc, componentId, parentId)) parentId = this.pageId;
+    const inst = createInstanceNode(this.doc, componentId);
+    const local = apply(invert(worldMatrix(this.doc, parentId)), at);
+    inst.x = Math.round(local.x - inst.width / 2);
+    inst.y = Math.round(local.y - inst.height / 2);
+    this.change((doc) => insertNode(doc, inst, parentId));
+    this.select([inst.id]);
+    return inst.id;
+  }
+
+  /** Creates an instance next to a main component. */
+  instanceBeside(componentId: string): void {
+    const comp = this.doc.nodes[componentId];
+    if (!comp) return;
+    const b = worldBounds(this.doc, componentId);
+    const page = getPageOf(this.doc, componentId);
+    if (page && page.id !== this.pageId) this.setPage(page.id);
+    this.createInstance(componentId, { x: b.x + b.width * 1.5 + 40, y: b.y + b.height / 2 });
+  }
+
+  detachInstances(): void {
+    const instances = this.selectedNodes.filter((n) => n.type === 'instance');
+    if (!instances.length) return;
+    this.change((doc) => instances.forEach((n) => detachInstance(doc, n.id)));
+  }
+
+  resetInstanceOverrides(): void {
+    const instances = this.selectedNodes.map((n) => owningInstance(this.doc, n.id)).filter((n): n is SceneNode => !!n);
+    if (!instances.length) return;
+    this.change((doc) => instances.forEach((n) => resetOverrides(doc, n.id)));
+  }
+
+  goToMainComponent(instanceId: string): void {
+    const comp = this.doc.nodes[this.doc.nodes[instanceId]?.componentId];
+    if (!comp) {
+      this.notify('The main component was deleted');
+      return;
+    }
+    const page = getPageOf(this.doc, comp.id);
+    if (page) this.setPage(page.id);
+    this.select([comp.id]);
+    this.zoomToRect(worldBounds(this.doc, comp.id), 1);
+  }
+
+  // ------------------------------------------------------------- variables
+
+  addVariable(type: VariableType): string {
+    const id = newId();
+    const n = this.doc.variables.filter((v) => v.type === type).length + 1;
+    const value = defaultValue(type);
+    this.change((doc) => {
+      doc.variables.push({
+        id,
+        name: `${type}-${n}`,
+        type,
+        values: Object.fromEntries(doc.modes.map((m) => [m.id, value])),
+      });
+    });
+    return id;
+  }
+
+  renameVariable(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.change((doc) => {
+      const v = doc.variables.find((x) => x.id === id);
+      if (v) v.name = trimmed;
+    });
+  }
+
+  setVariableValue(id: string, modeId: string, value: unknown): void {
+    this.change((doc) => {
+      const v = doc.variables.find((x) => x.id === id);
+      if (v) v.values[modeId] = coerce(v.type, value);
+    });
+  }
+
+  deleteVariable(id: string): void {
+    this.change((doc) => {
+      unbindVariable(doc, id);
+      doc.variables = doc.variables.filter((v) => v.id !== id);
+    });
+  }
+
+  addMode(): void {
+    this.change((doc) => {
+      const mode = { id: newId(), name: `Mode ${doc.modes.length + 1}` };
+      const from = doc.modes[doc.modes.length - 1]?.id;
+      doc.modes.push(mode);
+      for (const v of doc.variables) v.values[mode.id] = from && from in v.values ? v.values[from] : defaultValue(v.type);
+    });
+  }
+
+  renameMode(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.change((doc) => {
+      const m = doc.modes.find((x) => x.id === id);
+      if (m) m.name = trimmed;
+    });
+  }
+
+  deleteMode(id: string): void {
+    if (this.doc.modes.length <= 1) return;
+    this.change((doc) => {
+      doc.modes = doc.modes.filter((m) => m.id !== id);
+      for (const v of doc.variables) delete v.values[id];
+      for (const n of Object.values(doc.nodes)) if (n.variableMode === id) n.variableMode = '';
+    });
+  }
+
+  /** Binds (or unbinds with null) a node property to a variable. */
+  bindField(ids: string[], field: string, variableId: string | null): void {
+    this.change((doc) => {
+      for (const id of ids) {
+        const node = doc.nodes[id];
+        if (!node) continue;
+        if (variableId) {
+          node.bindings = { ...node.bindings, [field]: variableId };
+          if (field === 'width') node.sizingH = 'fixed';
+          if (field === 'height') node.sizingV = 'fixed';
+        } else {
+          const { [field]: _removed, ...rest } = node.bindings;
+          node.bindings = rest;
+        }
+        markOverrides(node, ['bindings', field]);
+      }
+    });
+  }
+
+  /** Binds (or unbinds) a solid fill/stroke colour to a colour variable. */
+  bindPaint(ids: string[], list: 'fills' | 'strokes', index: number, variableId: string | null): void {
+    this.change((doc) => {
+      for (const id of ids) {
+        const node = doc.nodes[id];
+        const paint = node?.[list][index];
+        if (!paint || paint.type !== 'solid') continue;
+        node[list] = node[list].map((p, i) => {
+          if (i !== index || p.type !== 'solid') return p;
+          const { variableId: _old, ...rest } = p;
+          return variableId ? { ...rest, variableId } : rest;
+        });
+        markOverrides(node, [list]);
+      }
+    });
+  }
+
+  setVariableMode(ids: string[], modeId: string): void {
+    this.updateNodes(ids, { variableMode: modeId });
   }
 
   // ------------------------------------------------------------- pages
@@ -922,4 +1164,25 @@ export function enableAutoLayout(doc: PlanarDocument, frameId: string): void {
   f.paddingBottom = content ? Math.max(0, Math.round(f.height - content.y - content.height)) : 10;
   f.sizingH = kids.length ? 'hug' : 'fixed';
   f.sizingV = kids.length ? 'hug' : 'fixed';
+}
+
+/**
+ * Layers copied out of an instance become ordinary layers; instances inside
+ * the copy (and their contents) keep their links.
+ */
+function unlinkCopiedLayers(nodes: SceneNode[]): void {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const walk = (n: SceneNode) => {
+    if (n.type === 'instance') {
+      n.sourceId = '';
+      return;
+    }
+    n.sourceId = '';
+    n.overrides = [];
+    for (const c of n.children) {
+      const child = byId.get(c);
+      if (child) walk(child);
+    }
+  };
+  walk(nodes[0]);
 }

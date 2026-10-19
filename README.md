@@ -15,6 +15,10 @@ shapes, text, layers, properties, undo and export — and was built with a
 - Nested frames with clipping, groups that auto-fit their children
 - Auto layout: horizontal / vertical stacks with spacing, padding, alignment,
   space-between, hug / fill / fixed sizing, absolute children and drag-to-reorder
+- Components and instances: live propagation, per-property overrides, reset,
+  detach, nested instances, Assets tab with thumbnails and drag-to-place
+- Variables (colour, number, string, boolean) with modes such as Light/Dark,
+  bound to fills, strokes, sizes, spacing, padding, text and visibility
 - Select, multi-select, marquee, move with smart snapping, resize (Shift / Alt),
   rotate (Shift snaps to 15°), Alt-drag to duplicate, drop layers into frames
 - Layers panel: tree view, rename, hide, lock, drag and drop to reorder or re-parent
@@ -66,6 +70,8 @@ GitHub Actions* once).
 | Ctrl/⌘+G, Ctrl/⌘+Shift+G | Group, ungroup |
 | Ctrl/⌘+Alt+G | Frame selection |
 | Shift+A, Alt+Shift+A | Add / remove auto layout |
+| Ctrl/⌘+Alt+K | Create component |
+| Ctrl/⌘+Alt+B | Detach instance |
 | Ctrl/⌘+] / [ (+Shift) | Bring forward / send backward (to front / back) |
 | Enter, Shift+Enter, Esc | Select children, select parent |
 | Arrows (+Shift) | Nudge 1 px (10 px) |
@@ -82,9 +88,9 @@ the file layout.
 
 ## Roadmap
 
-Real-time collaboration, comments, components and instances, wrapping auto
-layout, constraints, boolean operations, Bézier editing, gradients, shadows and blur,
-styles and variables, prototyping, plugins, version history.
+Real-time collaboration, comments, component variants and properties,
+variable collections and aliases, wrapping auto layout, constraints, boolean operations, Bézier editing, gradients, shadows and blur,
+styles, prototyping, plugins, version history.
 
 ## Contributing
 

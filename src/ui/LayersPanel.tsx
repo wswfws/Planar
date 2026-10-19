@@ -2,6 +2,7 @@ import { useState, type DragEvent, type MouseEvent } from 'react';
 import { getAncestors } from '../core/document';
 import { isAutoLayout } from '../core/layout';
 import { isContainer } from '../core/types';
+import { AssetsPanel } from './AssetsPanel';
 import { useEditorState } from './EditorContext';
 import { IconButton } from './controls';
 import { Icon, NODE_ICONS } from './icons';
@@ -82,6 +83,7 @@ export function LayersPanel() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [dragIds, setDragIds] = useState<string[]>([]);
   const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null);
+  const [tab, setTab] = useState<'layers' | 'assets'>('layers');
   const { doc } = editor;
 
   // Ancestors of the selection are always expanded.
@@ -124,7 +126,7 @@ export function LayersPanel() {
       const row = (
         <li
           key={id}
-          className={`layer-row${selected ? ' selected' : ''}${editor.hoverId === id ? ' hover' : ''}${!node.visible ? ' hidden' : ''}${dropClass}`}
+          className={`layer-row${node.type === 'component' || node.type === 'instance' || node.sourceId ? ' linked' : ''}${selected ? ' selected' : ''}${editor.hoverId === id ? ' hover' : ''}${!node.visible ? ' hidden' : ''}${dropClass}`}
           style={{ paddingLeft: 8 + depth * 14 }}
           draggable={renaming !== id}
           onClick={(e) => onRowClick(id, e)}
@@ -175,7 +177,7 @@ export function LayersPanel() {
             {hasKids && <Icon name="chevron" size={12} />}
           </span>
           <span className="layer-icon">
-            <Icon name={isAutoLayout(node) ? (node.layoutMode === 'horizontal' ? 'layoutH' : 'layoutV') : NODE_ICONS[node.type]} size={14} />
+            <Icon name={node.type !== 'component' && node.type !== 'instance' && isAutoLayout(node) ? (node.layoutMode === 'horizontal' ? 'layoutH' : 'layoutV') : NODE_ICONS[node.type]} size={14} />
           </span>
           {renaming === id ? (
             <InlineRename
@@ -202,13 +204,22 @@ export function LayersPanel() {
     <aside className="sidebar left">
       <PagesList />
       <div className="layers">
-        <header className="sidebar-header">
-          <h3>Layers</h3>
+        <header className="sidebar-header tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === 'layers'} className={tab === 'layers' ? 'active' : ''} onClick={() => setTab('layers')}>
+            Layers
+          </button>
+          <button type="button" role="tab" aria-selected={tab === 'assets'} className={tab === 'assets' ? 'active' : ''} onClick={() => setTab('assets')}>
+            Assets
+          </button>
         </header>
-        <ul onClick={(e) => e.target === e.currentTarget && editor.select([])}>
-          {renderRows(editor.pageId, 0)}
-          {!editor.page.children.length && <li className="empty-hint">Pick a tool in the toolbar and draw on the canvas.</li>}
-        </ul>
+        {tab === 'layers' ? (
+          <ul onClick={(e) => e.target === e.currentTarget && editor.select([])}>
+            {renderRows(editor.pageId, 0)}
+            {!editor.page.children.length && <li className="empty-hint">Pick a tool in the toolbar and draw on the canvas.</li>}
+          </ul>
+        ) : (
+          <AssetsPanel />
+        )}
       </div>
     </aside>
   );

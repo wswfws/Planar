@@ -17,7 +17,7 @@ import {
   type Vec,
 } from './math';
 import { getAncestors, getNode, getParent } from './document';
-import type { PlanarDocument, SceneNode } from './types';
+import { isFrameLike, type PlanarDocument, type SceneNode } from './types';
 
 export function localMatrix(node: SceneNode): Mat {
   if (node.type === 'page') return [...IDENTITY];
@@ -154,7 +154,7 @@ export function hitTest(
       if (hit) return hit;
       continue;
     }
-    if (node.type === 'frame') {
+    if (isFrameLike(node)) {
       const inside = insideBox(node, local);
       if (inside || !node.clipContent) {
         const hit = hitTest(doc, id, point, tolerance, exclude);
@@ -176,8 +176,13 @@ export function frameAt(doc: PlanarDocument, pageId: string, point: Vec, exclude
       const id = parent.children[i];
       const node = doc.nodes[id];
       if (!node || !node.visible || exclude.has(id)) continue;
-      if (node.type !== 'frame' && node.type !== 'group') continue;
+      if (!isFrameLike(node) && node.type !== 'group') continue;
       const local = apply(invert(worldMatrix(doc, id)), point);
+      // Nothing can be dropped into an instance; it hides what is below it.
+      if (node.type === 'instance') {
+        if (insideBox(node, local)) return null;
+        continue;
+      }
       if (node.type === 'group') {
         const inner = walk(id);
         if (inner) return inner;

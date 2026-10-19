@@ -1,3 +1,4 @@
+import { isInInstance, markOverrides } from './components';
 import { createNode, descendants, getAncestors, getParent, insertNode, solid } from './document';
 import type { Editor } from './editor';
 import {
@@ -31,7 +32,7 @@ import {
   type Vec,
 } from './math';
 import { insertionIndex, insertionLine, isAutoLayout, isLaidOut } from './layout';
-import type { NodeType, PlanarDocument, SceneNode } from './types';
+import { isFrameLike, type NodeType, type PlanarDocument, type SceneNode } from './types';
 
 export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
@@ -89,7 +90,8 @@ export function frameLabelRect(editor: Editor, node: SceneNode): Rect {
     { x: 0, y: node.height },
   ].map((p) => editor.worldToScreen(apply(worldMatrix(editor.doc, node.id), p)));
   const tl = rectFromPoints(corners);
-  const w = Math.min(Math.max(node.name.length * 6.5 + 4, 20), Math.max(tl.width, 20));
+  const prefix = node.type === 'component' || node.type === 'instance' ? 14 : 0;
+  const w = Math.min(Math.max(node.name.length * 6.5 + 4 + prefix, 20), Math.max(tl.width, 20));
   return { x: tl.x, y: tl.y - 20, width: w, height: 18 };
 }
 
@@ -147,7 +149,7 @@ export class Interaction {
     const chain = [...getAncestors(this.doc, hitId), this.doc.nodes[hitId]];
     const selected = new Set(this.editor.selection);
     for (const node of chain) {
-      if (node.type !== 'group') continue;
+      if (node.type !== 'group' && node.type !== 'instance') continue;
       if (selected.has(node.id)) return node.id;
       const entered = this.editor.selection.some((s) => s !== node.id && getAncestors(this.doc, s).some((a) => a.id === node.id));
       if (!entered) return node.id;
@@ -164,7 +166,7 @@ export class Interaction {
     const page = this.editor.page;
     for (let i = page.children.length - 1; i >= 0; i--) {
       const n = this.doc.nodes[page.children[i]];
-      if (n.type !== 'frame' || !n.visible || n.locked) continue;
+      if (!isFrameLike(n) || !n.visible || n.locked) continue;
       const r = frameLabelRect(this.editor, n);
       if (screen.x >= r.x && screen.x <= r.x + r.width && screen.y >= r.y && screen.y <= r.y + r.height) return n.id;
     }
@@ -176,6 +178,8 @@ export class Interaction {
     if (!frame || this.editor.editingTextId) return null;
     const single = frame.single ? this.doc.nodes[frame.single] : null;
     if (single?.locked) return null;
+    // Layers inside instances follow their component's geometry.
+    if (this.editor.selection.some((id) => isInInstance(this.doc, id))) return null;
     const toScreen = (u: number, v: number) => this.editor.worldToScreen(apply(frame.matrix, { x: u * frame.width, y: v * frame.height }));
     for (const { handle, u, v } of HANDLES) {
       if (dist(toScreen(u, v), screen) <= 6) return { handle, rotate: false };
@@ -362,7 +366,7 @@ export class Interaction {
     const node = this.doc.nodes[resolved];
     if (node.type === 'text') {
       editor.startTextEditing(node.id);
-    } else if (node.type === 'group') {
+    } else if (node.type === 'group' || node.type === 'instance') {
       const chain = [...getAncestors(this.doc, hit).map((a) => a.id), hit];
       const next = chain[chain.indexOf(resolved) + 1];
       if (next) {
@@ -384,7 +388,7 @@ export class Interaction {
       const b = worldBounds(this.doc, id);
       if (!rectsIntersect(b, rect)) continue;
       const contained = b.x >= rect.x && b.y >= rect.y && b.x + b.width <= rect.x + rect.width && b.y + b.height <= rect.y + rect.height;
-      if (n.type === 'frame' && !contained) out.push(...this.marqueePick(id, rect));
+      if ((n.type === 'frame' || n.type === 'component') && !contained) out.push(...this.marqueePick(id, rect));
       else out.push(id);
     }
     return out;
@@ -412,7 +416,7 @@ export class Interaction {
     drag.started = true;
     editor.begin();
     if (drag.duplicate) editor.duplicateSelection(0);
-    const ids = topLevelSelection(this.doc, editor.selection).filter((id) => !this.doc.nodes[id].locked);
+    const ids = topLevelSelection(this.doc, editor.selection).filter((id) => !this.doc.nodes[id].locked && !isInInstance(this.doc, id));
     drag.ids = ids;
     editor.layoutSkip = new Set(ids.filter((id) => isLaidOut(this.doc, this.doc.nodes[id])));
     for (const id of ids) {
@@ -618,6 +622,11 @@ export class Interaction {
         placeNode(doc, id, center, c0.rotation);
         if (hx) node.sizingH = 'fixed';
         if (hy) node.sizingV = 'fixed';
+        const touched = [...(hx ? ['width', 'sizingH'] : []), ...(hy ? ['height', 'sizingV'] : [])];
+        if (touched.some((k) => k in node.bindings)) {
+          node.bindings = Object.fromEntries(Object.entries(node.bindings).filter(([k]) => !touched.includes(k)));
+        }
+        markOverrides(node, touched);
       }
     });
   }

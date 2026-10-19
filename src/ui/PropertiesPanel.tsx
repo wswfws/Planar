@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { solid } from '../core/document';
 import type { AlignKind, Editor } from '../core/editor';
+import { hasOverrides, isInInstance, owningInstance } from '../core/components';
 import { scaleChildren } from '../core/geometry';
 import { effectiveSizing, isAutoLayout, isLaidOut } from '../core/layout';
-import type { CounterAlign, Paint, PrimaryAlign, SceneNode, Sizing, TextAlign } from '../core/types';
-import { ColorField, IconButton, NumberField, Section } from './controls';
+import { isFrameLike, type CounterAlign, type Paint, type PrimaryAlign, type SceneNode, type Sizing, type TextAlign } from '../core/types';
+import { BINDABLE } from '../core/variables';
+import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
 import type { IconName } from './icons';
 
@@ -73,7 +75,20 @@ function PaintList({
           return (
             <div className="paint-row" key={i}>
               {p.type === 'solid' ? (
-                <ColorField value={p.color} onChange={(color) => update(i, { color })} />
+                <ColorField
+                  value={p.color}
+                  onChange={(color) => update(i, { color, variableId: undefined })}
+                  bind={{
+                    type: 'color',
+                    boundId: nodes.every((n) => {
+                      const q = n[field][i];
+                      return q?.type === 'solid' && q.variableId === p.variableId;
+                    })
+                      ? p.variableId
+                      : undefined,
+                    onBind: (vid) => editor.bindPaint(ids, field, i, vid),
+                  }}
+                />
               ) : (
                 <span className="image-paint">
                   <img src={p.src} alt="" />
@@ -107,11 +122,21 @@ function PaintList({
             value={common(nodes, (n) => n.strokeWidth)}
             min={0}
             onChange={(v) => editor.updateNodes(ids, { strokeWidth: v })}
+            bind={bindFor(editor, nodes, 'strokeWidth')}
           />
         </div>
       )}
     </Section>
   );
+}
+
+/** Binding props for a node property shared by all selected nodes. */
+function bindFor(editor: Editor, nodes: SceneNode[], field: string): BindProps {
+  return {
+    type: BINDABLE[field],
+    boundId: common(nodes, (n) => n.bindings[field]) ?? undefined,
+    onBind: (vid) => editor.bindField(nodes.map((n) => n.id), field, vid),
+  };
 }
 
 const ALIGN_STEPS = ['start', 'center', 'end'] as const;
@@ -178,6 +203,7 @@ function AutoLayoutSection({ editor, nodes }: { editor: Editor; nodes: SceneNode
                 value={frame.itemSpacing}
                 min={0}
                 onChange={(v) => set({ itemSpacing: v })}
+                bind={bindFor(editor, [frame], 'itemSpacing')}
               />
               <label className="checkbox">
                 <input
@@ -190,15 +216,38 @@ function AutoLayoutSection({ editor, nodes }: { editor: Editor; nodes: SceneNode
             </div>
           </div>
           <div className="grid-2">
-            <NumberField label="L" title="Padding left" value={frame.paddingLeft} min={0} onChange={(v) => set({ paddingLeft: v })} />
-            <NumberField label="T" title="Padding top" value={frame.paddingTop} min={0} onChange={(v) => set({ paddingTop: v })} />
-            <NumberField label="R" title="Padding right" value={frame.paddingRight} min={0} onChange={(v) => set({ paddingRight: v })} />
-            <NumberField label="B" title="Padding bottom" value={frame.paddingBottom} min={0} onChange={(v) => set({ paddingBottom: v })} />
+            <NumberField label="L" title="Padding left" value={frame.paddingLeft} min={0} onChange={(v) => set({ paddingLeft: v })} bind={bindFor(editor, [frame], 'paddingLeft')} />
+            <NumberField label="T" title="Padding top" value={frame.paddingTop} min={0} onChange={(v) => set({ paddingTop: v })} bind={bindFor(editor, [frame], 'paddingTop')} />
+            <NumberField label="R" title="Padding right" value={frame.paddingRight} min={0} onChange={(v) => set({ paddingRight: v })} bind={bindFor(editor, [frame], 'paddingRight')} />
+            <NumberField label="B" title="Padding bottom" value={frame.paddingBottom} min={0} onChange={(v) => set({ paddingBottom: v })} bind={bindFor(editor, [frame], 'paddingBottom')} />
           </div>
         </>
       )}
     </Section>
   );
+}
+
+function BindRow({ label, bind }: { label: string; bind: BindProps }) {
+  const editor = useEditorState();
+  const options = editor.doc.variables.filter((v) => v.type === bind.type);
+  if (!options.length && !bind.boundId) return null;
+  return (
+    <label className="labeled-select">
+      {label}
+      <select value={bind.boundId ?? ''} onChange={(e) => bind.onBind(e.target.value || null)}>
+        <option value="">No variable</option>
+        {options.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function BindVisible({ editor, nodes }: { editor: Editor; nodes: SceneNode[] }) {
+  return <BindRow label="Visible" bind={bindFor(editor, nodes, 'visible')} />;
 }
 
 const SIZING_LABEL: Record<Sizing, string> = { fixed: 'Fixed', hug: 'Hug', fill: 'Fill' };
@@ -246,6 +295,75 @@ function SizingRow({ editor, node }: { editor: Editor; node: SceneNode }) {
   );
 }
 
+function ComponentSection({ editor, node }: { editor: Editor; node: SceneNode }) {
+  const { doc } = editor;
+  if (node.type === 'component') {
+    const count = Object.values(doc.nodes).filter((n) => n.type === 'instance' && n.componentId === node.id).length;
+    return (
+      <Section title="Main component">
+        <p className="hint">
+          {count} instance{count === 1 ? '' : 's'}. Changes here update every instance.
+        </p>
+        <button type="button" className="wide-button" onClick={() => editor.instanceBeside(node.id)}>
+          Create instance
+        </button>
+      </Section>
+    );
+  }
+  const inst = owningInstance(doc, node.id);
+  if (!inst) return null;
+  const comp = doc.nodes[inst.componentId];
+  const isRoot = inst.id === node.id;
+  return (
+    <Section title={isRoot ? 'Instance' : 'Inside instance'}>
+      <p className="hint">
+        {comp ? (
+          <>
+            Of <strong className="component-name">{comp.name}</strong>
+          </>
+        ) : (
+          'Main component was deleted'
+        )}
+        {!isRoot && ' · position and size follow the component'}
+      </p>
+      <div className="button-row">
+        {comp && (
+          <button type="button" className="small-button" onClick={() => editor.goToMainComponent(inst.id)}>
+            Go to main
+          </button>
+        )}
+        {hasOverrides(doc, inst.id) && (
+          <button type="button" className="small-button" onClick={() => editor.resetInstanceOverrides()}>
+            Reset changes
+          </button>
+        )}
+        {isRoot && (
+          <button type="button" className="small-button" onClick={() => editor.detachInstances()}>
+            Detach
+          </button>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function ModeSelect({ editor, ids, value }: { editor: Editor; ids: string[]; value: string | null }) {
+  if (editor.doc.modes.length < 2) return null;
+  return (
+    <label className="labeled-select">
+      Mode
+      <select value={value ?? ''} onChange={(e) => editor.setVariableMode(ids, e.target.value)}>
+        <option value="">Auto (inherit)</option>
+        {editor.doc.modes.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function ExportSection({ editor, count }: { editor: Editor; count: number }) {
   const [scale, setScale] = useState(2);
   const [format, setFormat] = useState<'png' | 'svg'>('png');
@@ -285,6 +403,7 @@ export function PropertiesPanel() {
               onChange={(color) => editor.updateNodes([editor.pageId], (n) => (n.fills = [solid(color)]))}
             />
           </div>
+          <ModeSelect editor={editor} ids={[editor.pageId]} value={editor.page.variableMode} />
         </Section>
         <ExportSection editor={editor} count={0} />
         <div className="shortcuts-hint">
@@ -304,8 +423,9 @@ export function PropertiesPanel() {
   const canAlign = nodes.length > 1 || (parent && parent.type !== 'page');
   const texts = nodes.filter((n) => n.type === 'text');
   const textIds = texts.map((n) => n.id);
-  const hasCorners = nodes.every((n) => n.type === 'rectangle' || n.type === 'frame');
-  const frames = nodes.filter((n) => n.type === 'frame');
+  const hasCorners = nodes.every((n) => n.type === 'rectangle' || isFrameLike(n));
+  const frames = nodes.filter((n) => isFrameLike(n));
+  const locked = nodes.some((n) => isInInstance(editor.doc, n.id));
   const paintable = nodes.filter((n) => n.type !== 'group');
 
   const allLaidOut = nodes.every((n) => isLaidOut(editor.doc, n));
@@ -328,6 +448,8 @@ export function PropertiesPanel() {
         <span className="type-badge">{single ? single.type : 'mixed'}</span>
       </div>
 
+      {single && <ComponentSection editor={editor} node={single} />}
+
       <Section title="Align">
         <div className="align-row">
           {ALIGN_BUTTONS.map((b) => (
@@ -338,14 +460,15 @@ export function PropertiesPanel() {
 
       <Section title="Layout">
         <div className="grid-2">
-          <NumberField label="X" disabled={allLaidOut} value={common(nodes, (n) => n.x)} onChange={(v) => editor.updateNodes(ids, { x: v })} />
-          <NumberField label="Y" disabled={allLaidOut} value={common(nodes, (n) => n.y)} onChange={(v) => editor.updateNodes(ids, { y: v })} />
-          <NumberField label="W" value={common(nodes, (n) => n.width)} min={0} onChange={(v) => setSize('width', v)} />
-          <NumberField label="H" value={common(nodes, (n) => n.height)} min={0} onChange={(v) => setSize('height', v)} />
+          <NumberField label="X" disabled={allLaidOut || locked} value={common(nodes, (n) => n.x)} onChange={(v) => editor.updateNodes(ids, { x: v })} />
+          <NumberField label="Y" disabled={allLaidOut || locked} value={common(nodes, (n) => n.y)} onChange={(v) => editor.updateNodes(ids, { y: v })} />
+          <NumberField label="W" disabled={locked} value={common(nodes, (n) => n.width)} min={0} onChange={(v) => setSize('width', v)} bind={bindFor(editor, nodes, 'width')} />
+          <NumberField label="H" disabled={locked} value={common(nodes, (n) => n.height)} min={0} onChange={(v) => setSize('height', v)} bind={bindFor(editor, nodes, 'height')} />
           <NumberField
             label="↻"
             title="Rotation"
             suffix="°"
+            disabled={locked}
             value={common(nodes, (n) => n.rotation)}
             onChange={(v) => editor.updateNodes(ids, { rotation: ((((v + 180) % 360) + 360) % 360) - 180 })}
           />
@@ -356,10 +479,11 @@ export function PropertiesPanel() {
               value={common(nodes, (n) => n.cornerRadius)}
               min={0}
               onChange={(v) => editor.updateNodes(ids, { cornerRadius: v })}
+              bind={bindFor(editor, nodes, 'cornerRadius')}
             />
           )}
         </div>
-        {single && <SizingRow editor={editor} node={single} />}
+        {single && !locked && <SizingRow editor={editor} node={single} />}
         {frames.length > 0 && (
           <label className="checkbox">
             <input
@@ -392,7 +516,9 @@ export function PropertiesPanel() {
             value={common(nodes, (n) => Math.round(n.opacity * 100))}
             onChange={(v) => editor.updateNodes(ids, { opacity: v / 100 })}
           />
+          <BindVisible editor={editor} nodes={nodes} />
         </div>
+        {nodes.every((n) => isFrameLike(n)) && <ModeSelect editor={editor} ids={ids} value={common(nodes, (n) => n.variableMode)} />}
       </Section>
 
       {texts.length > 0 && (
@@ -427,7 +553,14 @@ export function PropertiesPanel() {
                 </option>
               ))}
             </select>
-            <NumberField label="Aa" title="Font size" value={common(texts, (n) => n.fontSize)} min={1} onChange={(v) => editor.updateNodes(textIds, { fontSize: v })} />
+            <NumberField
+              label="Aa"
+              title="Font size"
+              value={common(texts, (n) => n.fontSize)}
+              min={1}
+              onChange={(v) => editor.updateNodes(textIds, { fontSize: v })}
+              bind={bindFor(editor, texts, 'fontSize')}
+            />
             <NumberField
               label="↕"
               title="Line height (× font size)"
@@ -435,6 +568,7 @@ export function PropertiesPanel() {
               value={common(texts, (n) => n.lineHeight)}
               min={0.5}
               onChange={(v) => editor.updateNodes(textIds, { lineHeight: v })}
+              bind={bindFor(editor, texts, 'lineHeight')}
             />
             <div className="align-row">
               {(['left', 'center', 'right'] as TextAlign[]).map((a) => (
@@ -456,6 +590,7 @@ export function PropertiesPanel() {
             />
             Auto width
           </label>
+          <BindRow label="Content" bind={bindFor(editor, texts, 'characters')} />
         </Section>
       )}
 

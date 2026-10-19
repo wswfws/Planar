@@ -8,6 +8,10 @@ A Planar document is a single UTF-8 JSON object.
   "version": 1,
   "name": "Untitled",
   "pageIds": ["page-id-1"],
+  "modes": [{ "id": "m1", "name": "Light" }, { "id": "m2", "name": "Dark" }],
+  "variables": [
+    { "id": "v1", "name": "brand", "type": "color", "values": { "m1": "#5B5BD6", "m2": "#F2A65A" } }
+  ],
   "nodes": {
     "page-id-1": { "id": "page-id-1", "type": "page", "name": "Page 1", "parentId": null, "children": ["n1"], ... },
     "n1": { "id": "n1", "type": "rectangle", "parentId": "page-id-1", ... }
@@ -28,7 +32,7 @@ their default value.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | string | Unique id |
-| `type` | `page` \| `frame` \| `group` \| `rectangle` \| `ellipse` \| `vector` \| `text` | |
+| `type` | `page` \| `frame` \| `component` \| `instance` \| `group` \| `rectangle` \| `ellipse` \| `vector` \| `text` | |
 | `name` | string | Layer name |
 | `parentId` | string \| null | Parent node (null for pages) |
 | `children` | string[] | Child ids, bottom to top |
@@ -57,16 +61,37 @@ their default value.
 | `counterAlign` | `start` \| `center` \| `end` | Cross-axis alignment |
 | `sizingH`, `sizingV` | `fixed` \| `hug` \| `fill` | Horizontal / vertical sizing |
 | `layoutAbsolute` | boolean | Child ignores its parent's auto layout |
+| `componentId` | string | Instance: id of its main component |
+| `sourceId` | string | Layer inside an instance: id of the component layer it mirrors |
+| `overrides` | string[] | Instance layers: property names changed locally |
+| `bindings` | {property: variableId} | Properties bound to variables |
+| `variableMode` | string | Mode id used for this subtree (`""` = inherit) |
 
-Files written before auto layout existed simply lack these fields; readers
-fill in the defaults (`none`, `10`, `0`, `start`, `start`, `fixed`, `false`).
+Older files simply lack newer fields; readers fill in the defaults
+(`none`, `10`, `0`, `start`, `start`, `fixed`, `false`, `""`, `""`, `[]`,
+`{}`, `""`), an empty variable list and a single mode.
+
+## Components and instances
+
+An instance stores a full copy of its component's layers so it can be drawn
+without the component. Each copied layer's `sourceId` names the component
+layer it mirrors; properties listed in its `overrides` are kept, all others
+are refreshed from the component whenever the document changes.
+
+## Variables
+
+`variables[].values` maps mode ids to values (`#RRGGBB` strings for
+colours). Numeric/string/boolean properties are bound through `bindings`;
+solid paints are bound through their own `variableId`. The stored property
+values are the last resolved values, so files render correctly without
+resolving variables.
 
 For pages, `fills[0]` is the canvas background colour.
 
 ## Paint
 
 ```jsonc
-{ "type": "solid", "color": "#RRGGBB", "opacity": 1, "visible": true }
+{ "type": "solid", "color": "#RRGGBB", "opacity": 1, "visible": true, "variableId": "optional" }
 { "type": "image", "src": "data:image/png;base64,...", "scaleMode": "fill", "opacity": 1, "visible": true }
 ```
 

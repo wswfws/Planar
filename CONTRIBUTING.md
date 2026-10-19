@@ -21,6 +21,8 @@ src/core/      editor engine, no React
   geometry.ts    transforms, bounds, hit testing, group fitting
   text.ts        text layout and measurement
   layout.ts      auto layout engine
+  components.ts  component/instance sync, overrides, detach
+  variables.ts   variable resolution and bindings
   render.ts      Canvas 2D renderer
   overlay.ts     selection, handles, guides, marquee
   interaction.ts pointer tools: move, resize, rotate, create, pen

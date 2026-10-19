@@ -4,6 +4,7 @@ import { Interaction, type PointerInput } from '../core/interaction';
 import { drawOverlay } from '../core/overlay';
 import { drawPage, setImageLoadListener } from '../core/render';
 import { lineHeightPx } from '../core/text';
+import { COMPONENT_DRAG_TYPE } from './AssetsPanel';
 import { useEditor, useEditorState } from './EditorContext';
 
 export function readImageFile(file: File): Promise<{ src: string; width: number; height: number }> {
@@ -117,6 +118,11 @@ export function Canvas() {
     e.preventDefault();
     const rect = canvasRef.current!.getBoundingClientRect();
     const at = editor.screenToWorld({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    const componentId = e.dataTransfer.getData(COMPONENT_DRAG_TYPE);
+    if (componentId) {
+      editor.createInstance(componentId, at);
+      return;
+    }
     for (const file of Array.from(e.dataTransfer.files)) {
       if (file.type.startsWith('image/')) {
         try {

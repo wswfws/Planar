@@ -1,7 +1,9 @@
-import { createDocument, createNode, insertNode, solid } from './document';
+import { createInstanceNode, syncInstances } from './components';
+import { createDocument, createNode, insertNode, newId, solid } from './document';
 import { fitGroups } from './geometry';
 import { applyAutoLayout } from './layout';
 import { measureTextNode } from './text';
+import { resolveVariables } from './variables';
 import type { PlanarDocument, SceneNode } from './types';
 
 /** A small sample document shown on first launch. */
@@ -63,6 +65,15 @@ export function createWelcomeDocument(): PlanarDocument {
     card.id,
   );
   text(button.id, { characters: 'Get started  →', fontSize: 15, fontWeight: 600, fills: [solid('#ffffff')] });
+  // The button is a component whose colour comes from a variable with two modes.
+  button.type = 'component';
+  const [light] = doc.modes;
+  light.name = 'Light';
+  const dark = { id: newId(), name: 'Dark' };
+  doc.modes.push(dark);
+  const brand = { id: newId(), name: 'brand', type: 'color' as const, values: { [light.id]: '#5B5BD6', [dark.id]: '#F2A65A' } };
+  doc.variables.push(brand);
+  button.fills = [{ ...solid('#5b5bd6'), variableId: brand.id }];
   applyAutoLayout(doc, pageId);
 
   const shapes = insertNode(doc, createNode('group', { name: 'Shapes' }), pageId);
@@ -97,5 +108,13 @@ export function createWelcomeDocument(): PlanarDocument {
   );
   Object.assign(shapes, { x: 0, y: 0, width: 0, height: 0 });
   fitGroups(doc, pageId);
+
+  // An instance of the button, switched to the dark mode.
+  const instance = createInstanceNode(doc, button.id);
+  Object.assign(instance, { x: 560, y: 300, variableMode: dark.id });
+  insertNode(doc, instance, pageId);
+  syncInstances(doc);
+  resolveVariables(doc);
+  applyAutoLayout(doc, pageId);
   return doc;
 }
