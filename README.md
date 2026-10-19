@@ -19,6 +19,8 @@ shapes, text, layers, properties, undo and export — and was built with a
   detach, nested instances, Assets tab with thumbnails and drag-to-place
 - Component properties: text, boolean (visibility) and instance-swap inputs that
   each instance sets in its own *Properties* section
+- Variants: combine components into a set with variant properties (e.g. Type,
+  Size); instances switch variants from selectors and keep matching overrides
 - Variables (colour, number, string, boolean) with modes such as Light/Dark,
   bound to fills, strokes, sizes, spacing, padding, text and visibility
 - Select, multi-select, marquee, move with smart snapping, resize (Shift / Alt),
@@ -95,7 +97,7 @@ the file layout.
 
 ## Roadmap
 
-Real-time collaboration, comments, component variants,
+Real-time collaboration, comments,
 variable collections and aliases, wrapping auto layout, constraints, boolean operations, Bézier editing, gradients, shadows and blur,
 styles, prototyping, plugins, version history.
 

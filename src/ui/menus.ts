@@ -1,4 +1,4 @@
-import { hasOverrides, isInInstance, owningInstance } from '../core/components';
+import { hasOverrides, isInInstance, owningInstance, variantSet } from '../core/components';
 import type { Editor } from '../core/editor';
 import { exportSvg } from '../core/export';
 import { nodesAt, selectionBounds } from '../core/geometry';
@@ -124,7 +124,13 @@ export function selectionMenu(editor: Editor, at?: Vec): MenuEntry[] {
       : !nodes.every((n) => n.type === 'component') && { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: locked },
     instance && hasOverrides(doc, instance.id) && { label: 'Reset all changes', action: () => editor.resetInstanceOverrides() },
     nodes.some((n) => n.type === 'instance') && { label: 'Detach instance', shortcut: `${MOD}Alt+B`, action: () => editor.detachInstances() },
-    single?.type === 'component' && { label: 'Create instance', action: () => editor.instanceBeside(single.id) },
+    (single?.type === 'component' || single?.type === 'componentSet') && { label: 'Create instance', action: () => editor.instanceBeside(single.id) },
+    nodes.length > 1 &&
+      nodes.every((n) => n.type === 'component' && !variantSet(doc, n.id)) && { label: 'Combine as variants', action: () => editor.combineAsVariants() },
+    single && (single.type === 'componentSet' || (single.type === 'component' && variantSet(doc, single.id))) && {
+      label: 'Add variant',
+      action: () => editor.addVariant(single.id),
+    },
     '-',
     { label: allHidden ? 'Show' : 'Hide', shortcut: `${MOD}Shift+H`, action: () => editor.toggleVisible() },
     { label: allLocked ? 'Unlock' : 'Lock', shortcut: `${MOD}Shift+L`, action: () => editor.toggleLocked() },

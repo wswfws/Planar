@@ -241,6 +241,15 @@ export function fitGroups(doc: PlanarDocument, rootId: string): void {
     delete doc.nodes[rootId];
     return;
   }
+  fitToChildren(doc, node, 0);
+}
+
+/**
+ * Resizes a container to wrap its children plus padding; children keep
+ * their canvas position.
+ */
+export function fitToChildren(doc: PlanarDocument, node: SceneNode, pad: number): void {
+  if (!node.children.length) return;
   const pts: Vec[] = [];
   for (const c of node.children) {
     const child = doc.nodes[c];
@@ -254,7 +263,8 @@ export function fitGroups(doc: PlanarDocument, rootId: string): void {
       pts.push(apply(m, p));
     }
   }
-  const b = rectFromPoints(pts);
+  const content = rectFromPoints(pts);
+  const b = { x: content.x - pad, y: content.y - pad, width: content.width + pad * 2, height: content.height + pad * 2 };
   if (Math.abs(b.x) < 1e-6 && Math.abs(b.y) < 1e-6 && Math.abs(b.width - node.width) < 1e-6 && Math.abs(b.height - node.height) < 1e-6) {
     return;
   }

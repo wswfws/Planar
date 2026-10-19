@@ -223,15 +223,26 @@ export const PROP_FIELDS: Record<string, ComponentPropType> = {
  * The instance or main component that supplies a property to a bound layer,
  * found by walking up from the layer's parent.
  */
-export function propOwner(doc: PlanarDocument, nodeId: string, propId: string): { owner: SceneNode; prop: ComponentProp } | null {
+export function propOwner(
+  doc: PlanarDocument,
+  nodeId: string,
+  propId: string,
+): { owner: SceneNode; host: SceneNode; prop: ComponentProp } | null {
   let cur = doc.nodes[doc.nodes[nodeId]?.parentId ?? ''];
   while (cur) {
     const comp = cur.type === 'instance' ? doc.nodes[cur.componentId] : cur.type === 'component' ? cur : null;
-    const prop = comp?.componentProps.find((p) => p.id === propId);
-    if (prop) return { owner: cur, prop };
+    const host = comp ? propHost(doc, comp) : null;
+    const prop = host?.componentProps.find((p) => p.id === propId);
+    if (host && prop) return { owner: cur, host, prop };
     cur = doc.nodes[cur.parentId ?? ''];
   }
   return null;
+}
+
+/** Where a component's properties live: its component set, or itself. */
+export function propHost(doc: PlanarDocument, component: SceneNode): SceneNode {
+  const parent = component.parentId ? doc.nodes[component.parentId] : null;
+  return parent?.type === 'componentSet' ? parent : component;
 }
 
 export function propValue(owner: SceneNode, prop: ComponentProp): string | boolean {
@@ -312,4 +323,102 @@ function descendantsOf(doc: PlanarDocument, id: string): SceneNode[] {
   };
   walk(id);
   return out;
+}
+
+// ---------------------------------------------------------------- variants
+
+/** The component set a variant belongs to, if any. */
+export function variantSet(doc: PlanarDocument, componentId: string): SceneNode | null {
+  const comp = doc.nodes[componentId];
+  const parent = comp?.parentId ? doc.nodes[comp.parentId] : null;
+  return comp?.type === 'component' && parent?.type === 'componentSet' ? parent : null;
+}
+
+export function variantsOf(doc: PlanarDocument, setId: string): SceneNode[] {
+  return (doc.nodes[setId]?.children ?? []).map((id) => doc.nodes[id]).filter((n) => n?.type === 'component');
+}
+
+/** Variant property names of a set, in order of first use. */
+export function variantAxes(doc: PlanarDocument, setId: string): string[] {
+  const axes: string[] = [];
+  for (const v of variantsOf(doc, setId)) for (const k of Object.keys(v.variantProps)) if (!axes.includes(k)) axes.push(k);
+  return axes;
+}
+
+/** Every value used for an axis across a set's variants. */
+export function axisValues(doc: PlanarDocument, setId: string, axis: string): string[] {
+  const out: string[] = [];
+  for (const v of variantsOf(doc, setId)) {
+    const val = v.variantProps[axis];
+    if (val !== undefined && !out.includes(val)) out.push(val);
+  }
+  return out;
+}
+
+export function variantName(props: Record<string, string>): string {
+  return Object.entries(props)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ');
+}
+
+/**
+ * The variant matching `wanted` on every axis, or the one with the most
+ * matching values among those that match `mustMatch`.
+ */
+export function pickVariant(doc: PlanarDocument, setId: string, wanted: Record<string, string>, mustMatch?: string): SceneNode | null {
+  let best: SceneNode | null = null;
+  let bestScore = -1;
+  for (const v of variantsOf(doc, setId)) {
+    if (mustMatch && v.variantProps[mustMatch] !== wanted[mustMatch]) continue;
+    const score = Object.entries(wanted).filter(([k, val]) => v.variantProps[k] === val).length;
+    if (score > bestScore) {
+      best = v;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/** Names from a component down to one of its layers, e.g. "Icon/Shape". */
+function namePath(doc: PlanarDocument, rootId: string, id: string): string | null {
+  const names: string[] = [];
+  let cur = doc.nodes[id];
+  while (cur && cur.id !== rootId) {
+    names.unshift(cur.name);
+    cur = doc.nodes[cur.parentId ?? ''];
+  }
+  return cur ? names.join('/') : null;
+}
+
+/**
+ * Points an instance at another component, re-linking its layers by name so
+ * overrides on layers that exist in both survive.
+ */
+export function switchComponent(doc: PlanarDocument, instanceId: string, componentId: string): void {
+  const inst = doc.nodes[instanceId];
+  const next = doc.nodes[componentId];
+  if (!inst || inst.type !== 'instance' || !next || next.type !== 'component' || inst.componentId === componentId) return;
+  const oldId = inst.componentId;
+  const byPath = new Map<string, string>();
+  const index = (id: string) => {
+    for (const c of doc.nodes[id]?.children ?? []) {
+      const path = namePath(doc, componentId, c);
+      if (path !== null && !byPath.has(path)) byPath.set(path, c);
+      index(c);
+    }
+  };
+  index(componentId);
+  const relink = (id: string) => {
+    for (const c of doc.nodes[id]?.children ?? []) {
+      const n = doc.nodes[c];
+      const path = n.sourceId && doc.nodes[n.sourceId] ? namePath(doc, oldId, n.sourceId) : null;
+      n.sourceId = (path !== null && byPath.get(path)) || '';
+      relink(c);
+    }
+  };
+  relink(instanceId);
+  inst.componentId = componentId;
+  inst.width = next.width;
+  inst.height = next.height;
+  inst.overrides = inst.overrides.filter((k) => k !== 'width' && k !== 'height');
 }

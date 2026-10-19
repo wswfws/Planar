@@ -139,7 +139,7 @@ export function LayersPanel() {
       const row = (
         <li
           key={id}
-          className={`layer-row${node.type === 'component' || node.type === 'instance' || node.sourceId ? ' linked' : ''}${selected ? ' selected' : ''}${editor.hoverId === id ? ' hover' : ''}${!node.visible ? ' hidden' : ''}${dropClass}`}
+          className={`layer-row${node.type === 'component' || node.type === 'componentSet' || node.type === 'instance' || node.sourceId ? ' linked' : ''}${selected ? ' selected' : ''}${editor.hoverId === id ? ' hover' : ''}${!node.visible ? ' hidden' : ''}${dropClass}`}
           style={{ paddingLeft: 8 + depth * 14 }}
           draggable={renaming !== id}
           onClick={(e) => onRowClick(id, e)}
@@ -195,7 +195,7 @@ export function LayersPanel() {
             {hasKids && <Icon name="chevron" size={12} />}
           </span>
           <span className="layer-icon">
-            <Icon name={node.type !== 'component' && node.type !== 'instance' && isAutoLayout(node) ? (node.layoutMode === 'horizontal' ? 'layoutH' : 'layoutV') : NODE_ICONS[node.type]} size={14} />
+            <Icon name={node.type !== 'component' && node.type !== 'componentSet' && node.type !== 'instance' && isAutoLayout(node) ? (node.layoutMode === 'horizontal' ? 'layoutH' : 'layoutV') : NODE_ICONS[node.type]} size={14} />
           </span>
           {renaming === id ? (
             <InlineRename

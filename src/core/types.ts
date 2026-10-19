@@ -1,6 +1,6 @@
 import type { Vec } from './math';
 
-export type NodeType = 'page' | 'frame' | 'component' | 'instance' | 'group' | 'rectangle' | 'ellipse' | 'vector' | 'text';
+export type NodeType = 'page' | 'frame' | 'component' | 'componentSet' | 'instance' | 'group' | 'rectangle' | 'ellipse' | 'vector' | 'text';
 
 export interface SolidPaint {
   type: 'solid';
@@ -102,6 +102,8 @@ export interface SceneNode {
   propBindings: Record<string, string>;
   /** Instance: values chosen for its component's properties. */
   propValues: Record<string, string | boolean>;
+  /** Variant component: its value for each variant property of its set. */
+  variantProps: Record<string, string>;
 }
 
 export type ComponentPropType = 'text' | 'boolean' | 'instance';
@@ -140,11 +142,11 @@ export interface PlanarDocument {
   modes: VariableMode[];
 }
 
-export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 'component', 'instance', 'group']);
+export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 'component', 'componentSet', 'instance', 'group']);
 
 /** Frames, components and instances share frame behaviour. */
 export function isFrameLike(node: SceneNode | null | undefined): boolean {
-  return !!node && (node.type === 'frame' || node.type === 'component' || node.type === 'instance');
+  return !!node && (node.type === 'frame' || node.type === 'component' || node.type === 'componentSet' || node.type === 'instance');
 }
 
 export function isContainer(node: SceneNode): boolean {

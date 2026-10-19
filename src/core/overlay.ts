@@ -1,3 +1,4 @@
+import { getPageOf } from './document';
 import type { Editor } from './editor';
 import { vectorPoints, worldMatrix } from './geometry';
 import { frameLabelRect, HANDLES, selectionFrame } from './interaction';
@@ -44,15 +45,28 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
     if (!isFrameLike(n) || !n.visible) continue;
     const r = frameLabelRect(editor, n);
     const selected = editor.selection.includes(id);
-    const linked = n.type === 'component' || n.type === 'instance';
+    const linked = n.type === 'component' || n.type === 'componentSet' || n.type === 'instance';
     ctx.fillStyle = linked ? COMPONENT : selected ? ACCENT : editor.hoverId === id ? '#c9c9d6' : '#8d8d9c';
     ctx.save();
     ctx.beginPath();
     ctx.rect(r.x, r.y, r.width, r.height);
     ctx.clip();
-    ctx.fillText((n.type === 'component' ? '❖ ' : n.type === 'instance' ? '◇ ' : '') + n.name, r.x, r.y + r.height / 2);
+    ctx.fillText((n.type === 'component' || n.type === 'componentSet' ? '❖ ' : n.type === 'instance' ? '◇ ' : '') + n.name, r.x, r.y + r.height / 2);
     ctx.restore();
   }
+
+  // Component sets get a dashed outline so their variants read as a group.
+  ctx.setLineDash([5, 4]);
+  for (const n of Object.values(doc.nodes)) {
+    if (n.type !== 'componentSet' || !n.visible || getPageOf(doc, n.id)?.id !== editor.pageId) continue;
+    toScreenMatrix(n.id);
+    traceOutline(ctx, n);
+    resetTransform();
+    ctx.strokeStyle = COMPONENT;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
 
   // Hover outline.
   const hover = editor.hoverId ? doc.nodes[editor.hoverId] : null;

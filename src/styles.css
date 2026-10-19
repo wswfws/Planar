@@ -1181,3 +1181,17 @@ select:focus {
   cursor: pointer;
   font-size: 11px;
 }
+
+.axis-values {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.stacked-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--muted);
+  min-width: 0;
+}

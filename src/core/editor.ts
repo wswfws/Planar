@@ -1,5 +1,13 @@
 import {
   applyComponentProps,
+  axisValues,
+  pickVariant,
+  propHost,
+  switchComponent,
+  variantAxes,
+  variantName,
+  variantSet,
+  variantsOf,
   createInstanceNode,
   detachInstance,
   isInInstance,
@@ -31,6 +39,7 @@ import {
 import { downloadBlob, exportPng, exportSvg, safeFilename } from './export';
 import {
   fitGroups,
+  fitToChildren,
   frameAt,
   localMatrix,
   parentWorldMatrix,
@@ -546,7 +555,9 @@ export class Editor {
   }
 
   ungroup(): void {
-    const containers = this.selectedNodes.filter((n) => (n.type === 'group' || n.type === 'frame') && !isInInstance(this.doc, n.id));
+    const containers = this.selectedNodes.filter(
+      (n) => (n.type === 'group' || n.type === 'frame' || n.type === 'componentSet') && !isInInstance(this.doc, n.id),
+    );
     if (!containers.length) return;
     const released: string[] = [];
     this.change((doc) => {
@@ -555,6 +566,10 @@ export class Editor {
         if (!parent) continue;
         let index = parent.children.indexOf(c.id);
         for (const child of [...c.children]) {
+          // Variants leaving a set take a copy of the set's shared properties.
+          if (c.type === 'componentSet' && doc.nodes[child].type === 'component') {
+            doc.nodes[child].componentProps = structuredClone(c.componentProps);
+          }
           reparentKeepWorld(doc, child, parent.id, ++index);
           released.push(child);
         }
@@ -812,7 +827,9 @@ export class Editor {
   }
 
   /** Places an instance of a component; returns its id. */
-  createInstance(componentId: string, center?: Vec): string | null {
+  createInstance(componentOrSetId: string, center?: Vec): string | null {
+    const target = this.doc.nodes[componentOrSetId];
+    const componentId = target?.type === 'componentSet' ? variantsOf(this.doc, target.id)[0]?.id ?? '' : componentOrSetId;
     const comp = this.doc.nodes[componentId];
     if (!comp || comp.type !== 'component') return null;
     const at = center ?? this.screenToWorld({ x: this.canvasSize.width / 2, y: this.canvasSize.height / 2 });
@@ -829,6 +846,7 @@ export class Editor {
 
   /** Creates an instance next to a main component. */
   instanceBeside(componentId: string): void {
+    // For a set, place beside the set and use its first variant.
     const comp = this.doc.nodes[componentId];
     if (!comp) return;
     const b = worldBounds(this.doc, componentId);
@@ -862,6 +880,133 @@ export class Editor {
   }
 
 
+
+  // ------------------------------------------------------------- variants
+
+  /** Wraps two or more loose components in a component set. */
+  combineAsVariants(): void {
+    const comps = this.sortedTopSelection()
+      .map((id) => this.doc.nodes[id])
+      .filter((n) => n.type === 'component' && !variantSet(this.doc, n.id) && !isInInstance(this.doc, n.id));
+    if (comps.length < 2) {
+      this.notify('Select two or more components to combine');
+      return;
+    }
+    const parentId = comps[comps.length - 1].parentId!;
+    const parent = this.doc.nodes[parentId];
+    const b = selectionBounds(this.doc, comps.map((c) => c.id))!;
+    const set = createNode('componentSet', { name: comps[0].name.split(/[=,/]/)[0].trim() || 'Component set', width: b.width, height: b.height });
+    this.change((doc) => {
+      insertNode(doc, set, parentId, parent.children.indexOf(comps[comps.length - 1].id) + 1);
+      placeNode(doc, set.id, rectCenter(b), 0);
+      const props: ComponentProp[] = [];
+      const used = new Set<string>();
+      for (const c of comps) {
+        reparentKeepWorld(doc, c.id, set.id);
+        if (!Object.keys(c.variantProps).length) {
+          // Values must tell variants apart, so repeated names get a number.
+          let value = c.name;
+          for (let n = 2; used.has(value); n++) value = `${c.name} ${n}`;
+          used.add(value);
+          c.variantProps = { 'Property 1': value };
+        }
+        c.name = variantName(c.variantProps);
+        for (const p of c.componentProps) if (!props.some((q) => q.id === p.id)) props.push(p);
+        c.componentProps = [];
+      }
+      set.componentProps = props;
+      fitToChildren(doc, set, 20);
+    });
+    this.select([set.id]);
+  }
+
+  /** Duplicates the last variant of a set next to it with a new value. */
+  addVariant(setOrVariantId: string): void {
+    const node = this.doc.nodes[setOrVariantId];
+    const set = node?.type === 'componentSet' ? node : variantSet(this.doc, setOrVariantId);
+    if (!set) return;
+    const variants = variantsOf(this.doc, set.id);
+    const last = node?.type === 'component' ? node : variants[variants.length - 1];
+    if (!last) return;
+    const axes = variantAxes(this.doc, set.id);
+    let createdId = '';
+    this.change((doc) => {
+      const nodes = cloneSubtree(doc.nodes, last.id);
+      const copy = nodes[0];
+      const props = { ...last.variantProps };
+      const axis = axes[0] ?? 'Property 1';
+      const used = new Set(axisValues(doc, set.id, axis));
+      let n = used.size + 1;
+      while (used.has(`Variant ${n}`)) n++;
+      props[axis] = `Variant ${n}`;
+      copy.variantProps = props;
+      copy.name = variantName(props);
+      copy.x = last.x + last.width + 20;
+      insertSubtree(doc, nodes, set.id, set.children.indexOf(last.id) + 1);
+      fitToChildren(doc, doc.nodes[set.id], 20);
+      createdId = copy.id;
+    });
+    this.select([createdId]);
+  }
+
+  setVariantValue(variantId: string, axis: string, value: string): void {
+    const v = value.trim();
+    if (!v) return;
+    this.change((doc) => {
+      const n = doc.nodes[variantId];
+      if (!n) return;
+      n.variantProps = { ...n.variantProps, [axis]: v };
+      n.name = variantName(n.variantProps);
+    });
+  }
+
+  renameVariantAxis(setId: string, from: string, to: string): void {
+    const name = to.trim();
+    if (!name || name === from || variantAxes(this.doc, setId).includes(name)) return;
+    this.change((doc) => {
+      for (const v of variantsOf(doc, setId)) {
+        v.variantProps = Object.fromEntries(Object.entries(v.variantProps).map(([k, val]) => [k === from ? name : k, val]));
+        v.name = variantName(v.variantProps);
+      }
+    });
+  }
+
+  addVariantAxis(setId: string): void {
+    const axes = variantAxes(this.doc, setId);
+    let n = axes.length + 1;
+    while (axes.includes(`Property ${n}`)) n++;
+    this.change((doc) => {
+      for (const v of variantsOf(doc, setId)) {
+        v.variantProps = { ...v.variantProps, [`Property ${n}`]: 'Default' };
+        v.name = variantName(v.variantProps);
+      }
+    });
+  }
+
+  removeVariantAxis(setId: string, axis: string): void {
+    this.change((doc) => {
+      for (const v of variantsOf(doc, setId)) {
+        const { [axis]: _gone, ...rest } = v.variantProps;
+        v.variantProps = rest;
+        v.name = variantName(rest) || v.name;
+      }
+    });
+  }
+
+  /** Switches instances to the variant with `axis` = `value`. */
+  setInstanceVariant(instanceIds: string[], axis: string, value: string): void {
+    this.change((doc) => {
+      for (const id of instanceIds) {
+        const inst = doc.nodes[id];
+        const set = inst?.type === 'instance' ? variantSet(doc, inst.componentId) : null;
+        if (!set) continue;
+        const wanted = { ...doc.nodes[inst.componentId].variantProps, [axis]: value };
+        const target = pickVariant(doc, set.id, wanted, axis);
+        if (target) switchComponent(doc, id, target.id);
+      }
+    });
+  }
+
   // ------------------------------------------------------------- component properties
 
   /**
@@ -869,8 +1014,10 @@ export class Editor {
    * that layer's current value and the layer is bound to it.
    */
   addComponentProp(componentId: string, type: ComponentPropType, bind?: { nodeId: string; field: string }): string | null {
-    const comp = this.doc.nodes[componentId];
-    if (!comp || comp.type !== 'component') return null;
+    const target = this.doc.nodes[componentId];
+    if (!target || (target.type !== 'component' && target.type !== 'componentSet')) return null;
+    const comp = target.type === 'component' ? propHost(this.doc, target) : target;
+    componentId = comp.id;
     const node = bind ? this.doc.nodes[bind.nodeId] : null;
     const id = newId();
     const count = comp.componentProps.filter((p) => p.type === type).length + 1;
@@ -959,7 +1106,7 @@ export class Editor {
       found.owner.propValues = { ...found.owner.propValues, [propId]: v };
       markOverrides(found.owner, ['propValues']);
     } else {
-      found.owner.componentProps = found.owner.componentProps.map((p) => (p.id === propId ? { ...p, defaultValue: v } : p));
+      found.host.componentProps = found.host.componentProps.map((p) => (p.id === propId ? { ...p, defaultValue: v } : p));
     }
     return true;
   }

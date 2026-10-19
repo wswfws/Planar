@@ -102,6 +102,7 @@ under the starting point.
 | Ctrl/Cmd+Shift+L | Lock / unlock |
 | Ctrl/Cmd+Alt+K | Create component |
 | Ctrl/Cmd+Alt+B | Detach instance |
+| (context menu) | Combine as variants, Add variant |
 | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y | Undo / redo |
 
 Pasting or dropping an image file creates a rectangle with an image fill at
@@ -115,7 +116,8 @@ learnt from it. Disabled entries are shown greyed out rather than hidden
 when they are part of a group that otherwise applies.
 
 - Right-clicking a layer that is not selected selects it first; right-clicking
-  inside the current selection keeps it. Right-clicking empty canvas clears
+  inside the current selection (including on a layer nested in a selected
+  layer) keeps it. Right-clicking empty canvas clears
   the selection.
 - **Empty canvas:** paste here (at the pointer), select all, zoom to fit,
   zoom to 100 %, variables, export page.
@@ -228,6 +230,37 @@ instance sets for itself:
 - Properties can be combined with variables; when both drive the same value,
   the variable wins.
 
+### Variants
+
+A **component set** groups related components — its **variants** — that
+differ along one or more **variant properties** (for example *Type* =
+Primary / Secondary and *Size* = Small / Large).
+
+- **Combining.** Selecting two or more components that are not yet in a set
+  and choosing *Combine as variants* wraps them in a component set. Each
+  becomes a variant with a property *Property 1* whose value is its former
+  name. Component properties of the combined components move to the set and
+  are shared by all variants.
+- **Variant names** are generated from their values (`Type=Primary,
+  Size=Small`) and kept in sync.
+- **Set panel:** list of variant properties (rename, remove, add — a new
+  property starts as *Default* on every variant), *Add variant* (duplicates
+  the last variant next to it with a new value) and the shared component
+  properties.
+- **Variant panel:** a value field for each variant property, plus the
+  usual main-component actions.
+- **Instances** of any variant show one selector per variant property,
+  listing every value used in the set. Picking a value switches the instance
+  to the variant matching all chosen values (or, if none matches exactly, the
+  closest one with the picked value). Overrides on layers whose names match in
+  the new variant are kept; component property values are kept because
+  properties belong to the set.
+- **Assets** list a set once; placing it creates an instance of its first
+  variant. Instance-swap pickers list variants as *Set / Variant*.
+- On the canvas a set is shown with a dashed outline in the component colour
+  and its name label; its variants are selected like layers in a frame.
+- Ungrouping or deleting a set follows the usual rules for frames.
+
 ## 8. Variables
 
 - A document has a list of **variables**, each with a name, a type
@@ -282,7 +315,7 @@ instance sets for itself:
 
 ## 11. Out of scope for v0.1 (roadmap)
 
-Real-time collaboration, comments, component variants,
+Real-time collaboration, comments,
 variable collections and aliases, wrapping auto layout,
 constraints, boolean operations, Bézier curve editing, gradients, effects
 (shadows, blur), styles, prototyping, plugins, version history.

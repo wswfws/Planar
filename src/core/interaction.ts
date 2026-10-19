@@ -90,7 +90,7 @@ export function frameLabelRect(editor: Editor, node: SceneNode): Rect {
     { x: 0, y: node.height },
   ].map((p) => editor.worldToScreen(apply(worldMatrix(editor.doc, node.id), p)));
   const tl = rectFromPoints(corners);
-  const prefix = node.type === 'component' || node.type === 'instance' ? 14 : 0;
+  const prefix = node.type === 'component' || node.type === 'componentSet' || node.type === 'instance' ? 14 : 0;
   const w = Math.min(Math.max(node.name.length * 6.5 + 4 + prefix, 20), Math.max(tl.width, 20));
   return { x: tl.x, y: tl.y - 20, width: w, height: 18 };
 }
@@ -389,7 +389,9 @@ export class Interaction {
     const world = editor.screenToWorld(screen);
     const target = this.frameLabelAt(screen) ?? this.hitAt(world);
     if (target) {
-      if (!editor.selection.includes(target)) editor.select([target]);
+      // Clicking inside something already selected keeps the selection.
+      const inside = editor.selection.includes(target) || getAncestors(this.doc, target).some((a) => editor.selection.includes(a.id));
+      if (!inside) editor.select([target]);
       return 'selection';
     }
     const sb = editor.selection.length > 1 ? selectionBounds(this.doc, editor.selection) : null;
@@ -408,7 +410,7 @@ export class Interaction {
       const b = worldBounds(this.doc, id);
       if (!rectsIntersect(b, rect)) continue;
       const contained = b.x >= rect.x && b.y >= rect.y && b.x + b.width <= rect.x + rect.width && b.y + b.height <= rect.y + rect.height;
-      if ((n.type === 'frame' || n.type === 'component') && !contained) out.push(...this.marqueePick(id, rect));
+      if ((n.type === 'frame' || n.type === 'component' || n.type === 'componentSet') && !contained) out.push(...this.marqueePick(id, rect));
       else out.push(id);
     }
     return out;

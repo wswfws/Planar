@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { listComponents } from '../core/components';
+import { listComponents, variantSet, variantsOf } from '../core/components';
 import { getPageOf } from '../core/document';
 import { localMatrix } from '../core/geometry';
 import { invert } from '../core/math';
@@ -35,7 +35,11 @@ function Thumbnail({ node, version }: { node: SceneNode; version: number }) {
 
 export function AssetsPanel() {
   const editor = useEditorState();
-  const components = listComponents(editor.doc).sort((a, b) => a.name.localeCompare(b.name));
+  // A component set is listed once (it places its first variant).
+  const sets = Object.values(editor.doc.nodes).filter((n) => n.type === 'componentSet' && variantsOf(editor.doc, n.id).length);
+  const components = [...sets, ...listComponents(editor.doc).filter((c) => !variantSet(editor.doc, c.id))].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
   return (
     <div className="assets">
       {components.length ? (
@@ -56,9 +60,10 @@ export function AssetsPanel() {
                   e.dataTransfer.effectAllowed = 'copy';
                 }}
               >
-                <Thumbnail node={c} version={editor.version} />
+                <Thumbnail node={c.type === 'componentSet' ? variantsOf(editor.doc, c.id)[0] : c} version={editor.version} />
                 <span className="asset-text">
                   <span className="component-name">{c.name}</span>
+                  {c.type === 'componentSet' && <span className="asset-page">{variantsOf(editor.doc, c.id).length} variants</span>}
                   {page && page.id !== editor.pageId && <span className="asset-page">{page.name}</span>}
                 </span>
               </li>

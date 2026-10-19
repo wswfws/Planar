@@ -15,6 +15,7 @@ const DEFAULT_NAMES: Record<NodeType, string> = {
   page: 'Page',
   frame: 'Frame',
   component: 'Component',
+  componentSet: 'Component set',
   instance: 'Instance',
   group: 'Group',
   rectangle: 'Rectangle',
@@ -27,6 +28,7 @@ const DEFAULT_FILLS: Record<NodeType, () => Paint[]> = {
   page: () => [solid('#1e1e24')],
   frame: () => [solid('#ffffff')],
   component: () => [solid('#ffffff')],
+  componentSet: () => [],
   instance: () => [solid('#ffffff')],
   group: () => [],
   rectangle: () => [solid('#d9d9d9')],
@@ -85,6 +87,7 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     componentProps: [],
     propBindings: {},
     propValues: {},
+    variantProps: {},
     ...props,
   };
 }

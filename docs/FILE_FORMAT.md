@@ -32,7 +32,7 @@ their default value.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | string | Unique id |
-| `type` | `page` \| `frame` \| `component` \| `instance` \| `group` \| `rectangle` \| `ellipse` \| `vector` \| `text` | |
+| `type` | `page` \| `frame` \| `component` \| `componentSet` \| `instance` \| `group` \| `rectangle` \| `ellipse` \| `vector` \| `text` | |
 | `name` | string | Layer name |
 | `parentId` | string \| null | Parent node (null for pages) |
 | `children` | string[] | Child ids, bottom to top |
@@ -71,6 +71,7 @@ their default value.
 | `componentProps` | ComponentProp[] | Component: declared properties |
 | `propBindings` | {property: propId} | `characters`, `visible` or `componentId` driven by a component property |
 | `propValues` | {propId: value} | Instance: values set for its component's properties |
+| `variantProps` | {property: value} | Variant component: its value for each variant property |
 
 Older files simply lack newer fields; readers fill in the defaults
 (`none`, `10`, `0`, `start`, `start`, `fixed`, `false`, `""`, `""`, `[]`,
@@ -91,8 +92,9 @@ are refreshed from the component whenever the document changes.
 { "id": "p3", "name": "Icon", "type": "instance", "defaultValue": "<component id>" }
 ```
 
+Component properties of variants are stored on their `componentSet`.
 A bound layer resolves a property through its nearest enclosing instance
-whose component declares it (using that instance's `propValues`, else the
+whose component (or that component's set) declares it (using that instance's `propValues`, else the
 default), or through the main component itself (the default).
 
 ## Variables

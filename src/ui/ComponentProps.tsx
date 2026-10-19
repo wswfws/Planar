@@ -1,5 +1,16 @@
 import { useState } from 'react';
-import { containingComponent, PROP_FIELDS, propOwner, propValue, swapCandidates } from '../core/components';
+import {
+  axisValues,
+  containingComponent,
+  PROP_FIELDS,
+  propHost,
+  propOwner,
+  propValue,
+  swapCandidates,
+  variantAxes,
+  variantSet,
+  variantsOf,
+} from '../core/components';
 import type { Editor } from '../core/editor';
 import type { ComponentProp, ComponentPropType, SceneNode } from '../core/types';
 import { IconButton, Section } from './controls';
@@ -61,7 +72,7 @@ function ValueEditor({
         {!options.some((c) => c.id === value) && <option value={String(value)}>(missing)</option>}
         {options.map((c) => (
           <option key={c.id} value={c.id}>
-            {c.name}
+            {componentLabel(editor, c)}
           </option>
         ))}
       </select>
@@ -108,10 +119,13 @@ export function ComponentPropsSection({ editor, component }: { editor: Editor; c
 
 /** Instance: set this instance's value for each property of its component. */
 export function InstancePropsSection({ editor, instance }: { editor: Editor; instance: SceneNode }) {
-  const comp = editor.doc.nodes[instance.componentId];
-  if (!comp || !comp.componentProps.length) return null;
+  const main = editor.doc.nodes[instance.componentId];
+  const comp = main ? propHost(editor.doc, main) : null;
+  const hasVariants = !!(main && variantSet(editor.doc, main.id));
+  if (!main || !comp || (!comp.componentProps.length && !hasVariants)) return null;
   return (
     <Section title="Properties">
+      <InstanceVariantSelects editor={editor} instance={instance} />
       {comp.componentProps.map((p) => {
         const isSet = p.id in instance.propValues;
         return (
@@ -155,8 +169,9 @@ const FIELD_LABEL: Record<string, string> = { characters: 'Content', visible: 'V
 
 /** A layer inside a main component: bind its content / visibility / swap to properties. */
 export function LayerPropBindings({ editor, node }: { editor: Editor; node: SceneNode }) {
-  const comp = containingComponent(editor.doc, node.id);
-  if (!comp) return null;
+  const main = containingComponent(editor.doc, node.id);
+  if (!main) return null;
+  const comp = propHost(editor.doc, main);
   const fields = Object.keys(PROP_FIELDS).filter(
     (f) => f === 'visible' || (f === 'characters' && node.type === 'text') || (f === 'componentId' && node.type === 'instance'),
   );
@@ -191,4 +206,87 @@ export function LayerPropBindings({ editor, node }: { editor: Editor; node: Scen
       })}
     </Section>
   );
+}
+
+/** Component set: variant properties (axes) and adding variants. */
+export function VariantSetSection({ editor, set }: { editor: Editor; set: SceneNode }) {
+  const axes = variantAxes(editor.doc, set.id);
+  const variants = variantsOf(editor.doc, set.id);
+  return (
+    <Section title="Variants">
+      <p className="hint">
+        {variants.length} variant{variants.length === 1 ? '' : 's'}. Instances pick a variant with one selector per property.
+      </p>
+      {axes.map((axis) => (
+        <div className="prop-head" key={axis}>
+          <span className="prop-badge" title="Variant property">
+            ▤
+          </span>
+          <TextField label="Variant property name" value={axis} onCommit={(name) => editor.renameVariantAxis(set.id, axis, name)} />
+          <span className="axis-values" title={axisValues(editor.doc, set.id, axis).join(', ')}>
+            {axisValues(editor.doc, set.id, axis).length} values
+          </span>
+          <IconButton icon="minus" title="Remove variant property" onClick={() => editor.removeVariantAxis(set.id, axis)} />
+        </div>
+      ))}
+      <div className="button-row">
+        <button type="button" className="small-button" onClick={() => editor.addVariant(set.id)}>
+          + Variant
+        </button>
+        <button type="button" className="small-button" onClick={() => editor.addVariantAxis(set.id)}>
+          + Variant property
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+/** A variant: its value for each variant property of the set. */
+export function VariantValuesSection({ editor, variant }: { editor: Editor; variant: SceneNode }) {
+  const set = variantSet(editor.doc, variant.id);
+  if (!set) return null;
+  return (
+    <Section title={`Variant of ${set.name}`}>
+      <div className="grid-2">
+        {variantAxes(editor.doc, set.id).map((axis) => (
+          <label className="stacked-field" key={axis}>
+            <span>{axis}</span>
+            <TextField label={axis} value={variant.variantProps[axis] ?? ''} onCommit={(v) => editor.setVariantValue(variant.id, axis, v)} />
+          </label>
+        ))}
+      </div>
+      <button type="button" className="small-button" onClick={() => editor.addVariant(variant.id)}>
+        + Variant like this
+      </button>
+    </Section>
+  );
+}
+
+/** Instance of a variant: one selector per variant property. */
+function InstanceVariantSelects({ editor, instance }: { editor: Editor; instance: SceneNode }) {
+  const comp = editor.doc.nodes[instance.componentId];
+  const set = comp ? variantSet(editor.doc, comp.id) : null;
+  if (!comp || !set) return null;
+  return (
+    <>
+      {variantAxes(editor.doc, set.id).map((axis) => (
+        <label className="labeled-select" key={axis}>
+          {axis}
+          <select value={comp.variantProps[axis] ?? ''} onChange={(e) => editor.setInstanceVariant([instance.id], axis, e.target.value)}>
+            {axisValues(editor.doc, set.id, axis).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </>
+  );
+}
+
+/** Label for a component in pickers: "Set / Variant" for variants. */
+export function componentLabel(editor: Editor, c: SceneNode): string {
+  const set = variantSet(editor.doc, c.id);
+  return set ? `${set.name} / ${c.name}` : c.name;
 }

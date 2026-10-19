@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { solid } from '../core/document';
 import type { AlignKind, Editor } from '../core/editor';
-import { hasOverrides, isInInstance, owningInstance } from '../core/components';
+import { hasOverrides, isInInstance, owningInstance, propHost } from '../core/components';
 import { scaleChildren } from '../core/geometry';
 import { effectiveSizing, isAutoLayout, isLaidOut } from '../core/layout';
 import { isFrameLike, type CounterAlign, type Paint, type PrimaryAlign, type SceneNode, type Sizing, type TextAlign, type TextAlignVertical } from '../core/types';
 import { BINDABLE } from '../core/variables';
-import { ComponentPropsSection, InstancePropsSection, LayerPropBindings } from './ComponentProps';
+import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
 import type { IconName } from './icons';
@@ -484,7 +484,11 @@ export function PropertiesPanel() {
       </div>
 
       {single && <ComponentSection editor={editor} node={single} />}
-      {single?.type === 'component' && <ComponentPropsSection editor={editor} component={single} />}
+      {single?.type === 'componentSet' && <VariantSetSection editor={editor} set={single} />}
+      {single?.type === 'component' && <VariantValuesSection editor={editor} variant={single} />}
+      {(single?.type === 'component' || single?.type === 'componentSet') && (
+        <ComponentPropsSection editor={editor} component={single.type === 'component' ? propHost(editor.doc, single) : single} />
+      )}
       {single?.type === 'instance' && <InstancePropsSection editor={editor} instance={single} />}
       {single && <LayerPropBindings editor={editor} node={single} />}
 
