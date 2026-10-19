@@ -1,10 +1,12 @@
 import {
+  applyComponentProps,
   createInstanceNode,
   detachInstance,
   isInInstance,
   listComponents,
   markOverrides,
   owningInstance,
+  propOwner,
   resetOverrides,
   syncInstances,
   tracksOverrides,
@@ -44,7 +46,7 @@ import {
 import { applyAutoLayout, isAutoLayout, isLaidOut } from './layout';
 import { apply, applyLinear, invert, rectCenter, rectFromPoints, rectsIntersect, type Rect, type Vec } from './math';
 import { measureTextNode } from './text';
-import type { PlanarDocument, SceneNode, VariableType } from './types';
+import type { ComponentProp, ComponentPropType, PlanarDocument, SceneNode, VariableType } from './types';
 import { coerce, defaultValue, resolveVariables, unbindVariable } from './variables';
 import { createWelcomeDocument } from './welcome';
 
@@ -228,6 +230,11 @@ export class Editor {
     for (const p of doc.pageIds) fitGroups(doc, p);
     for (const p of doc.pageIds) applyAutoLayout(doc, p, this.layoutSkip);
     syncInstances(doc);
+    // Swapping a nested instance needs one more sync to rebuild its layers.
+    if (applyComponentProps(doc)) {
+      syncInstances(doc);
+      applyComponentProps(doc);
+    }
     resolveVariables(doc);
     for (const p of doc.pageIds) applyAutoLayout(doc, p, this.layoutSkip);
     for (const p of doc.pageIds) fitGroups(doc, p);
@@ -613,9 +620,12 @@ export class Editor {
         if (typeof patch === 'function') patch(node);
         else Object.assign(node, patch);
         if (node.type === 'text') this.syncTextSize(node);
-        const changed = before
+        const changed: (keyof SceneNode)[] = before
           ? (Object.keys(node) as (keyof SceneNode)[]).filter((k) => JSON.stringify(node[k]) !== JSON.stringify(before[k]))
           : (Object.keys(patch) as (keyof SceneNode)[]);
+        // Edits to fields driven by a component property update the property.
+        const routed = changed.filter((k) => (k === 'characters' || k === 'visible') && this.routePropEdit(node, k, node[k]));
+        for (const k of routed) changed.splice(changed.indexOf(k), 1);
         // Editing a bound property by hand detaches it from its variable.
         const unbind = changed.filter((k) => k !== 'bindings' && k in node.bindings);
         if (unbind.length) node.bindings = Object.fromEntries(Object.entries(node.bindings).filter(([k]) => !unbind.includes(k as keyof SceneNode)));
@@ -699,7 +709,7 @@ export class Editor {
     if (!node.sourceId && node.name === derivedName(node.characters)) node.name = derivedName(characters);
     node.characters = characters;
     if (node.bindings.characters) node.bindings = Object.fromEntries(Object.entries(node.bindings).filter(([k]) => k !== 'characters'));
-    markOverrides(node, ['characters']);
+    if (!this.routePropEdit(node, 'characters', characters)) markOverrides(node, ['characters']);
     this.syncTextSize(node);
     this.emit();
   }
@@ -849,6 +859,109 @@ export class Editor {
     if (page) this.setPage(page.id);
     this.select([comp.id]);
     this.zoomToRect(worldBounds(this.doc, comp.id), 1);
+  }
+
+
+  // ------------------------------------------------------------- component properties
+
+  /**
+   * Adds a property to a component. With `bind`, the property starts from
+   * that layer's current value and the layer is bound to it.
+   */
+  addComponentProp(componentId: string, type: ComponentPropType, bind?: { nodeId: string; field: string }): string | null {
+    const comp = this.doc.nodes[componentId];
+    if (!comp || comp.type !== 'component') return null;
+    const node = bind ? this.doc.nodes[bind.nodeId] : null;
+    const id = newId();
+    const count = comp.componentProps.filter((p) => p.type === type).length + 1;
+    const base = type === 'text' ? 'Text' : type === 'boolean' ? 'Show' : 'Instance';
+    const defaultValue =
+      type === 'text'
+        ? node?.characters ?? 'Text'
+        : type === 'boolean'
+          ? node?.visible ?? true
+          : node?.componentId || listComponents(this.doc).find((c) => c.id !== componentId)?.id || '';
+    const name = node && type !== 'text' ? `${base} ${node.name}` : node && type === 'text' ? node.name : `${base} ${count}`;
+    this.change((doc) => {
+      doc.nodes[componentId].componentProps = [...doc.nodes[componentId].componentProps, { id, name, type, defaultValue }];
+      if (bind) {
+        const target = doc.nodes[bind.nodeId];
+        target.propBindings = { ...target.propBindings, [bind.field]: id };
+      }
+    });
+    return id;
+  }
+
+  updateComponentProp(componentId: string, propId: string, patch: Partial<Pick<ComponentProp, 'name' | 'defaultValue'>>): void {
+    this.change((doc) => {
+      const comp = doc.nodes[componentId];
+      if (!comp) return;
+      comp.componentProps = comp.componentProps.map((p) => {
+        if (p.id !== propId) return p;
+        const next = { ...p, ...patch };
+        if (patch.name !== undefined) next.name = patch.name.trim() || p.name;
+        return next;
+      });
+    });
+  }
+
+  deleteComponentProp(componentId: string, propId: string): void {
+    this.change((doc) => {
+      const comp = doc.nodes[componentId];
+      if (!comp) return;
+      comp.componentProps = comp.componentProps.filter((p) => p.id !== propId);
+      for (const n of Object.values(doc.nodes)) {
+        if (Object.values(n.propBindings).includes(propId)) {
+          n.propBindings = Object.fromEntries(Object.entries(n.propBindings).filter(([, v]) => v !== propId));
+        }
+        if (propId in n.propValues) {
+          const { [propId]: _gone, ...rest } = n.propValues;
+          n.propValues = rest;
+        }
+      }
+    });
+  }
+
+  /** Binds a layer field (characters / visible / componentId) to a property, or unbinds. */
+  bindComponentProp(nodeId: string, field: string, propId: string | null): void {
+    this.change((doc) => {
+      const node = doc.nodes[nodeId];
+      if (!node) return;
+      if (propId) node.propBindings = { ...node.propBindings, [field]: propId };
+      else node.propBindings = Object.fromEntries(Object.entries(node.propBindings).filter(([k]) => k !== field));
+    });
+  }
+
+  setInstanceProp(instanceIds: string[], propId: string, value: string | boolean): void {
+    this.change((doc) => {
+      for (const id of instanceIds) {
+        const inst = doc.nodes[id];
+        if (inst?.type === 'instance') {
+          inst.propValues = { ...inst.propValues, [propId]: value };
+          markOverrides(inst, ['propValues']);
+        }
+      }
+    });
+  }
+
+  /**
+   * An edit to a property-bound field goes to the property instead: the
+   * instance's value inside an instance, the default in a main component.
+   * Returns true when it was handled that way.
+   */
+  private routePropEdit(node: SceneNode, field: string, value: unknown): boolean {
+    const propId = node.propBindings[field];
+    if (!propId) return false;
+    const found = propOwner(this.doc, node.id, propId);
+    if (!found) return false;
+    const v = found.prop.type === 'boolean' ? value !== false : String(value);
+    if (found.owner.type === 'instance') {
+      found.owner.propValues = { ...found.owner.propValues, [propId]: v };
+      markOverrides(found.owner, ['propValues']);
+    } else {
+      found.owner.componentProps = found.owner.componentProps.map((p) => (p.id === propId ? { ...p, defaultValue: v } : p));
+    }
+    return true;
   }
 
   // ------------------------------------------------------------- variables

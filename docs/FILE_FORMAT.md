@@ -68,6 +68,9 @@ their default value.
 | `overrides` | string[] | Instance layers: property names changed locally |
 | `bindings` | {property: variableId} | Properties bound to variables |
 | `variableMode` | string | Mode id used for this subtree (`""` = inherit) |
+| `componentProps` | ComponentProp[] | Component: declared properties |
+| `propBindings` | {property: propId} | `characters`, `visible` or `componentId` driven by a component property |
+| `propValues` | {propId: value} | Instance: values set for its component's properties |
 
 Older files simply lack newer fields; readers fill in the defaults
 (`none`, `10`, `0`, `start`, `start`, `fixed`, `false`, `""`, `""`, `[]`,
@@ -79,6 +82,18 @@ An instance stores a full copy of its component's layers so it can be drawn
 without the component. Each copied layer's `sourceId` names the component
 layer it mirrors; properties listed in its `overrides` are kept, all others
 are refreshed from the component whenever the document changes.
+
+## Component properties
+
+```jsonc
+{ "id": "p1", "name": "Label", "type": "text", "defaultValue": "Button" }
+{ "id": "p2", "name": "Show icon", "type": "boolean", "defaultValue": true }
+{ "id": "p3", "name": "Icon", "type": "instance", "defaultValue": "<component id>" }
+```
+
+A bound layer resolves a property through its nearest enclosing instance
+whose component declares it (using that instance's `propValues`, else the
+default), or through the main component itself (the default).
 
 ## Variables
 

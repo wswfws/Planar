@@ -17,6 +17,8 @@ shapes, text, layers, properties, undo and export — and was built with a
   space-between, hug / fill / fixed sizing, absolute children and drag-to-reorder
 - Components and instances: live propagation, per-property overrides, reset,
   detach, nested instances, Assets tab with thumbnails and drag-to-place
+- Component properties: text, boolean (visibility) and instance-swap inputs that
+  each instance sets in its own *Properties* section
 - Variables (colour, number, string, boolean) with modes such as Light/Dark,
   bound to fills, strokes, sizes, spacing, padding, text and visibility
 - Select, multi-select, marquee, move with smart snapping, resize (Shift / Alt),
@@ -93,7 +95,7 @@ the file layout.
 
 ## Roadmap
 
-Real-time collaboration, comments, component variants and properties,
+Real-time collaboration, comments, component variants,
 variable collections and aliases, wrapping auto layout, constraints, boolean operations, Bézier editing, gradients, shadows and blur,
 styles, prototyping, plugins, version history.
 

@@ -6,6 +6,7 @@ import { scaleChildren } from '../core/geometry';
 import { effectiveSizing, isAutoLayout, isLaidOut } from '../core/layout';
 import { isFrameLike, type CounterAlign, type Paint, type PrimaryAlign, type SceneNode, type Sizing, type TextAlign, type TextAlignVertical } from '../core/types';
 import { BINDABLE } from '../core/variables';
+import { ComponentPropsSection, InstancePropsSection, LayerPropBindings } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
 import type { IconName } from './icons';
@@ -483,6 +484,9 @@ export function PropertiesPanel() {
       </div>
 
       {single && <ComponentSection editor={editor} node={single} />}
+      {single?.type === 'component' && <ComponentPropsSection editor={editor} component={single} />}
+      {single?.type === 'instance' && <InstancePropsSection editor={editor} instance={single} />}
+      {single && <LayerPropBindings editor={editor} node={single} />}
 
       <Section title="Align">
         <div className="align-row">

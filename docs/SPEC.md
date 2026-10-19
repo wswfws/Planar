@@ -195,6 +195,39 @@ A frame can arrange its children automatically in a row or a column.
 - Components and instances are marked with their own icons and a distinct
   colour in the layer tree and on the canvas.
 
+### Component properties
+
+A main component can declare **properties** — named inputs that each
+instance sets for itself:
+
+| Type | Drives | Default |
+| --- | --- | --- |
+| Text | the content of text layers | the text it was created from |
+| Boolean | the visibility of layers | on |
+| Instance swap | which component a nested instance shows | the nested instance's component |
+
+- **Creating.** In the main component, select a layer inside it and use
+  *Create property* next to the content, visibility or swap field (the
+  property starts with the layer's current value), or add a property in the
+  component's *Properties* section and bind layers to it afterwards. Several
+  layers may share one property.
+- **Main component.** Bound layers show the property's default. Editing a
+  bound text in the main component (typing, or the panel) changes the
+  default; so does toggling a bound layer's visibility.
+- **Instances.** The *Properties* section of an instance lists every
+  property of its component with a text box, a switch or a component picker.
+  Typing into a bound text layer inside an instance, or toggling a bound
+  layer's visibility there, sets the instance's property value instead of
+  creating an override. Instances that never set a property follow the
+  default.
+- **Instance swap** offers every component except ones that would nest the
+  component inside itself. Changes made inside a swapped nested instance are
+  lost when it is swapped.
+- Renaming a property or changing its default updates all instances at once.
+  Deleting a property unbinds its layers and keeps their current values.
+- Properties can be combined with variables; when both drive the same value,
+  the variable wins.
+
 ## 8. Variables
 
 - A document has a list of **variables**, each with a name, a type
@@ -249,7 +282,7 @@ A frame can arrange its children automatically in a row or a column.
 
 ## 11. Out of scope for v0.1 (roadmap)
 
-Real-time collaboration, comments, component variants and properties,
+Real-time collaboration, comments, component variants,
 variable collections and aliases, wrapping auto layout,
 constraints, boolean operations, Bézier curve editing, gradients, effects
 (shadows, blur), styles, prototyping, plugins, version history.

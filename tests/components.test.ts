@@ -153,3 +153,96 @@ describe('variables', () => {
     expect(editor.doc.nodes[text.id].width).toBeGreaterThan(50);
   });
 });
+
+describe('component properties', () => {
+  function withProps() {
+    const editor = new Editor(createDocument(), { autosave: false });
+    const label = createNode('text', { name: 'Label', characters: 'Buy' });
+    const icon = createNode('ellipse', { name: 'Icon', x: 60, width: 10, height: 10 });
+    editor.change((doc) => {
+      insertNode(doc, label, editor.pageId);
+      insertNode(doc, icon, editor.pageId);
+    });
+    editor.select([label.id, icon.id]);
+    editor.createComponent();
+    const compId = editor.selection[0];
+    const textProp = editor.addComponentProp(compId, 'text', { nodeId: label.id, field: 'characters' })!;
+    const showProp = editor.addComponentProp(compId, 'boolean', { nodeId: icon.id, field: 'visible' })!;
+    const instId = editor.createInstance(compId, { x: 400, y: 400 })!;
+    const child = (name: string) => kids(editor, instId).find((n) => n.name === name)!;
+    return { editor, compId, instId, textProp, showProp, label, icon, child };
+  }
+
+  it('creates properties from bound layers with their current values', () => {
+    const { editor, compId } = withProps();
+    const props = editor.doc.nodes[compId].componentProps;
+    expect(props.map((p) => [p.type, p.defaultValue])).toEqual([
+      ['text', 'Buy'],
+      ['boolean', true],
+    ]);
+  });
+
+  it('lets each instance set values and follows defaults otherwise', () => {
+    const { editor, compId, instId, textProp, showProp, child } = withProps();
+    editor.setInstanceProp([instId], textProp, 'Sell');
+    editor.setInstanceProp([instId], showProp, false);
+    expect(child('Label').characters).toBe('Sell');
+    expect(child('Icon').visible).toBe(false);
+
+    const other = editor.createInstance(compId, { x: 800, y: 400 })!;
+    const otherLabel = kids(editor, other).find((n) => n.name === 'Label')!;
+    expect(otherLabel.characters).toBe('Buy');
+    editor.updateComponentProp(compId, textProp, { defaultValue: 'Order' });
+    expect(editor.doc.nodes[otherLabel.id].characters).toBe('Order');
+    expect(child('Label').characters).toBe('Sell');
+  });
+
+  it('routes text edits to the property instead of overriding', () => {
+    const { editor, instId, textProp, label, compId, child } = withProps();
+    const lbl = child('Label');
+    editor.startTextEditing(lbl.id);
+    editor.setText(lbl.id, 'Typed');
+    editor.finishTextEditing();
+    expect(editor.doc.nodes[instId].propValues[textProp]).toBe('Typed');
+    expect(editor.doc.nodes[lbl.id].overrides).not.toContain('characters');
+    // Editing the main component's text changes the default.
+    editor.updateNodes([label.id], { characters: 'Main' });
+    expect(editor.doc.nodes[compId].componentProps.find((p) => p.id === textProp)!.defaultValue).toBe('Main');
+  });
+
+  it('swaps nested instances', () => {
+    const editor = new Editor(createDocument(), { autosave: false });
+    const a = createNode('rectangle', { name: 'Square', width: 10, height: 10 });
+    const b = createNode('ellipse', { name: 'Round', width: 20, height: 20 });
+    editor.change((doc) => {
+      insertNode(doc, a, editor.pageId);
+      insertNode(doc, b, editor.pageId);
+    });
+    editor.select([a.id]);
+    editor.createComponent();
+    const squareComp = editor.selection[0];
+    editor.select([b.id]);
+    editor.createComponent();
+    const roundComp = editor.selection[0];
+    const nested = editor.createInstance(squareComp, { x: 500, y: 500 })!;
+    editor.select([nested]);
+    editor.createComponent();
+    const card = editor.selection[0];
+    const swap = editor.addComponentProp(card, 'instance', { nodeId: nested, field: 'componentId' })!;
+    const inst = editor.createInstance(card, { x: 900, y: 900 })!;
+    const nestedCopy = () => editor.doc.nodes[editor.doc.nodes[inst].children[0]];
+    expect(kids(editor, nestedCopy().id)[0].name).toBe('Square');
+    editor.setInstanceProp([inst], swap, roundComp);
+    expect(nestedCopy().componentId).toBe(roundComp);
+    expect(kids(editor, nestedCopy().id)[0].name).toBe('Round');
+    // The main component keeps its default.
+    expect(editor.doc.nodes[nested].componentId).toBe(squareComp);
+  });
+
+  it('unbinds layers when a property is deleted', () => {
+    const { editor, compId, textProp, label } = withProps();
+    editor.deleteComponentProp(compId, textProp);
+    expect(editor.doc.nodes[label.id].propBindings.characters).toBeUndefined();
+    expect(editor.doc.nodes[label.id].characters).toBe('Buy');
+  });
+});

@@ -82,6 +82,9 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     overrides: [],
     bindings: {},
     variableMode: '',
+    componentProps: [],
+    propBindings: {},
+    propValues: {},
     ...props,
   };
 }

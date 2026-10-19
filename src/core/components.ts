@@ -1,6 +1,6 @@
 import { createNode, getAncestors, newId } from './document';
 import { measureTextNode } from './text';
-import type { PlanarDocument, SceneNode } from './types';
+import type { ComponentProp, ComponentPropType, PlanarDocument, SceneNode } from './types';
 
 /** Fields a layer never takes from the component layer it mirrors. */
 const NEVER_SYNCED = new Set<keyof SceneNode>(['id', 'parentId', 'children', 'sourceId', 'overrides']);
@@ -18,6 +18,8 @@ const ROOT_OWN = new Set<keyof SceneNode>([
   'layoutAbsolute',
   'componentId',
   'variableMode',
+  'propValues',
+  'propBindings',
 ]);
 
 /** Properties that make an instance's text need re-measuring. */
@@ -66,6 +68,17 @@ function removeSubtree(doc: PlanarDocument, id: string): void {
 
 /** Makes `target`'s subtree mirror `source`'s, keeping overrides. */
 function mirror(doc: PlanarDocument, target: SceneNode, source: SceneNode, root: boolean): void {
+  // A nested instance whose component is chosen by an instance-swap property
+  // mirrors the swapped-in component instead of its source's.
+  if (!root && source.type === 'instance' && source.propBindings.componentId) {
+    const current = target.componentId;
+    if (current && current !== source.componentId && doc.nodes[current]?.type === 'component') {
+      copyFields(target, source, false);
+      target.componentId = current;
+      mirror(doc, target, doc.nodes[current], true);
+      return;
+    }
+  }
   copyFields(target, source, root);
   const bySource = new Map<string, string>();
   for (const c of target.children) {
@@ -196,4 +209,107 @@ export function hasOverrides(doc: PlanarDocument, id: string): boolean {
 
 export function listComponents(doc: PlanarDocument): SceneNode[] {
   return Object.values(doc.nodes).filter((n) => n.type === 'component');
+}
+
+// ---------------------------------------------------------------- properties
+
+export const PROP_FIELDS: Record<string, ComponentPropType> = {
+  characters: 'text',
+  visible: 'boolean',
+  componentId: 'instance',
+};
+
+/**
+ * The instance or main component that supplies a property to a bound layer,
+ * found by walking up from the layer's parent.
+ */
+export function propOwner(doc: PlanarDocument, nodeId: string, propId: string): { owner: SceneNode; prop: ComponentProp } | null {
+  let cur = doc.nodes[doc.nodes[nodeId]?.parentId ?? ''];
+  while (cur) {
+    const comp = cur.type === 'instance' ? doc.nodes[cur.componentId] : cur.type === 'component' ? cur : null;
+    const prop = comp?.componentProps.find((p) => p.id === propId);
+    if (prop) return { owner: cur, prop };
+    cur = doc.nodes[cur.parentId ?? ''];
+  }
+  return null;
+}
+
+export function propValue(owner: SceneNode, prop: ComponentProp): string | boolean {
+  const v = owner.type === 'instance' && prop.id in owner.propValues ? owner.propValues[prop.id] : prop.defaultValue;
+  return prop.type === 'boolean' ? v !== false : String(v);
+}
+
+/** Main component containing a layer (not passing through an instance). */
+export function containingComponent(doc: PlanarDocument, id: string): SceneNode | null {
+  let cur = doc.nodes[doc.nodes[id]?.parentId ?? ''];
+  while (cur) {
+    if (cur.type === 'instance') return null;
+    if (cur.type === 'component') return cur;
+    cur = doc.nodes[cur.parentId ?? ''];
+  }
+  return null;
+}
+
+/**
+ * Writes component property values into bound layers. Returns true when a
+ * swapped instance changed component (instances then need another sync).
+ */
+export function applyComponentProps(doc: PlanarDocument): boolean {
+  let swapped = false;
+  for (const node of Object.values(doc.nodes)) {
+    const entries = Object.entries(node.propBindings);
+    if (!entries.length) continue;
+    let textChanged = false;
+    for (const [field, propId] of entries) {
+      const found = propOwner(doc, node.id, propId);
+      if (!found || PROP_FIELDS[field] !== found.prop.type) continue;
+      const value = propValue(found.owner, found.prop);
+      if (field === 'characters' && node.type === 'text' && node.characters !== value) {
+        node.characters = String(value);
+        textChanged = true;
+      } else if (field === 'visible' && node.visible !== value) {
+        node.visible = value === true;
+      } else if (field === 'componentId' && node.type === 'instance' && node.componentId !== value) {
+        const target = doc.nodes[String(value)];
+        if (target?.type === 'component' && !wouldCycle(doc, target.id, node.parentId ?? '')) {
+          node.componentId = target.id;
+          swapped = true;
+        }
+      }
+    }
+    if (textChanged) {
+      const size = measureTextNode(node);
+      if (node.autoWidth) node.width = size.width;
+      node.height = size.height;
+    }
+  }
+  return swapped;
+}
+
+/** Components an instance-swap property inside `componentId` may offer. */
+export function swapCandidates(doc: PlanarDocument, componentId: string): SceneNode[] {
+  return listComponents(doc).filter((c) => {
+    if (c.id === componentId) return false;
+    const nests = (id: string, seen: Set<string>): boolean => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      for (const n of [doc.nodes[id], ...descendantsOf(doc, id)]) {
+        if (n?.type === 'instance' && (n.componentId === componentId || nests(n.componentId, seen))) return true;
+      }
+      return false;
+    };
+    return !nests(c.id, new Set());
+  });
+}
+
+function descendantsOf(doc: PlanarDocument, id: string): SceneNode[] {
+  const out: SceneNode[] = [];
+  const walk = (nid: string) => {
+    for (const c of doc.nodes[nid]?.children ?? []) {
+      out.push(doc.nodes[c]);
+      walk(c);
+    }
+  };
+  walk(id);
+  return out;
 }

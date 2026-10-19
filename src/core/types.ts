@@ -95,6 +95,23 @@ export interface SceneNode {
   bindings: Record<string, string>;
   /** Variable mode chosen for this subtree ('' = inherit). */
   variableMode: string;
+
+  /** Component: declared properties. */
+  componentProps: ComponentProp[];
+  /** 'characters' | 'visible' | 'componentId' → component property id. */
+  propBindings: Record<string, string>;
+  /** Instance: values chosen for its component's properties. */
+  propValues: Record<string, string | boolean>;
+}
+
+export type ComponentPropType = 'text' | 'boolean' | 'instance';
+
+export interface ComponentProp {
+  id: string;
+  name: string;
+  type: ComponentPropType;
+  /** Text, visibility, or a component id for instance swap. */
+  defaultValue: string | boolean;
 }
 
 export type VariableType = 'color' | 'number' | 'string' | 'boolean';

@@ -1,4 +1,4 @@
-import { createInstanceNode, syncInstances } from './components';
+import { applyComponentProps, createInstanceNode, syncInstances } from './components';
 import { createDocument, createNode, insertNode, newId, solid } from './document';
 import { fitGroups } from './geometry';
 import { applyAutoLayout } from './layout';
@@ -64,7 +64,11 @@ export function createWelcomeDocument(): PlanarDocument {
     }),
     card.id,
   );
-  text(button.id, { characters: 'Get started  →', fontSize: 15, fontWeight: 600, fills: [solid('#ffffff')] });
+  const label = text(button.id, { characters: 'Get started  →', fontSize: 15, fontWeight: 600, fills: [solid('#ffffff')] });
+  // A text property lets each instance choose its own label.
+  const labelProp = { id: newId(), name: 'Label', type: 'text' as const, defaultValue: label.characters };
+  button.componentProps = [labelProp];
+  label.propBindings = { characters: labelProp.id };
   // The button is a component whose colour comes from a variable with two modes.
   button.type = 'component';
   const [light] = doc.modes;
@@ -111,9 +115,10 @@ export function createWelcomeDocument(): PlanarDocument {
 
   // An instance of the button, switched to the dark mode.
   const instance = createInstanceNode(doc, button.id);
-  Object.assign(instance, { x: 560, y: 300, variableMode: dark.id });
+  Object.assign(instance, { x: 560, y: 300, variableMode: dark.id, propValues: { [labelProp.id]: 'Dark mode  →' } });
   insertNode(doc, instance, pageId);
   syncInstances(doc);
+  applyComponentProps(doc);
   resolveVariables(doc);
   applyAutoLayout(doc, pageId);
   return doc;
