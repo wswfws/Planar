@@ -313,9 +313,45 @@ Primary / Secondary and *Size* = Small / Large).
 - Unknown or invalid files are rejected with a message; the current document
   is not changed.
 
-## 11. Out of scope for v0.1 (roadmap)
+## 11. Real-time collaboration
 
-Real-time collaboration, comments,
+Several people can edit the same document at once through a self-hosted
+Planar server (see [SELF_HOSTING.md](SELF_HOSTING.md); wire protocol in
+[PROTOCOL.md](PROTOCOL.md)).
+
+- **Rooms.** A shared document lives in a *room* on the server, named by a
+  random id. *Share* in the toolbar asks for the server address (filled in
+  automatically when the editor itself is served by a Planar server), your
+  name and an optional access token, then uploads the current document into
+  a new room and shows a link to it. Opening the link joins the room. *Leave*
+  disconnects and keeps a local copy.
+- **Live editing.** Every change — including moves and resizes while they
+  are being dragged — appears for everyone within a fraction of a second.
+  Changes are exchanged per layer (and per document-level list: pages,
+  variables, modes, the name). When two people change the same layer at the
+  same moment, the change the server receives last wins, and everyone ends
+  up with the same result. Concurrent structural edits (for example two
+  people adding layers to one frame, or one deleting a frame another is
+  editing inside) are reconciled so the layer tree stays valid.
+- **Undo** only undoes your own changes, layer by layer; it never reverts
+  what others did to other layers.
+- **Presence.** Everyone gets a colour. Other people's pointers are shown
+  with their name, and their selections are outlined in their colour, on
+  the page they are looking at. The toolbar shows an avatar per person;
+  clicking it jumps to their page and pointer. A dot shows the connection
+  state.
+- **Connection loss.** Editing continues offline; on reconnection the
+  latest server version is loaded and changes made in the meantime are
+  re-applied on top of it and sent.
+- **Persistence.** The server keeps rooms on disk and restores them after a
+  restart. In a room the server copy is the source of truth; local
+  autosave is not used.
+- **Access.** Room ids are unguessable. A server can additionally require
+  an access token. There are no per-user accounts or permissions yet.
+
+## 12. Out of scope (roadmap)
+
+Comments, accounts and permissions,
 variable collections and aliases, wrapping auto layout,
 constraints, boolean operations, Bézier curve editing, gradients, effects
 (shadows, blur), styles, prototyping, plugins, version history.

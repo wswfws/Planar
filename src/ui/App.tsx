@@ -7,6 +7,8 @@ import { LayersPanel } from './LayersPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import { Toolbar } from './Toolbar';
 import { VariablesDialog } from './VariablesDialog';
+import { ShareDialog } from './ShareDialog';
+import { detectServer, loadSettings, parseJoinLink, startSession } from '../collab/session';
 
 const TOOL_KEYS: Record<string, Tool> = {
   v: 'select',
@@ -184,6 +186,30 @@ export function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const openFile = useMemo(() => () => fileInput.current?.click(), []);
   const [variablesOpen, setVariablesOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // Opening a share link joins its room.
+  useEffect(() => {
+    const join = parseJoinLink();
+    if (!join) return;
+    void (async () => {
+      const settings = loadSettings();
+      const serverUrl = join.serverUrl ?? (await detectServer()) ?? settings.serverUrl;
+      if (!serverUrl) {
+        editor.notify('This link has no collaboration server address');
+        return;
+      }
+      startSession(editor, {
+        serverUrl,
+        roomId: join.roomId,
+        name: settings.name || 'Guest',
+        color: settings.color,
+        token: join.token || settings.token,
+        create: false,
+      });
+      if (!settings.name) setShareOpen(true);
+    })();
+  }, [editor]);
   useShortcuts(editor, openFile);
 
   useEffect(() => {
@@ -194,7 +220,7 @@ export function App() {
     <EditorContext.Provider value={editor}>
       <ContextMenuProvider>
       <div className="app">
-        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} />
+        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} />
         <div className="workspace">
           <LayersPanel />
           <main className="stage">
@@ -204,6 +230,7 @@ export function App() {
         </div>
         <Toast />
         {variablesOpen && <VariablesDialog onClose={() => setVariablesOpen(false)} />}
+        {shareOpen && <ShareDialog onClose={() => setShareOpen(false)} />}
         <input
           ref={fileInput}
           type="file"

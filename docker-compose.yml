@@ -1,0 +1,30 @@
+# Planar + Caddy (automatic HTTPS). Usage:
+#   DOMAIN=planar.example.com PLANAR_TOKEN=change-me docker compose up -d --build
+services:
+  planar:
+    build: .
+    restart: unless-stopped
+    environment:
+      PLANAR_TOKEN: ${PLANAR_TOKEN:-}
+    volumes:
+      - planar-data:/data
+
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    depends_on:
+      - planar
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN to your server's domain name}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  planar-data:
+  caddy-data:
+  caddy-config:

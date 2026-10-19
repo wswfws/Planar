@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["server", "src/core/ops.ts", "src/core/document.ts", "src/core/types.ts", "src/core/math.ts"]
+}

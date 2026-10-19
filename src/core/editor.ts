@@ -57,6 +57,7 @@ import { apply, applyLinear, invert, rectCenter, rectFromPoints, rectsIntersect,
 import { measureTextNode } from './text';
 import type { ComponentProp, ComponentPropType, PlanarDocument, SceneNode, VariableType } from './types';
 import { coerce, defaultValue, resolveVariables, unbindVariable } from './variables';
+import { applyOps, diffDocs, repairTree, type Op } from './ops';
 import { createWelcomeDocument } from './welcome';
 
 export type Tool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'text';
@@ -81,8 +82,14 @@ export interface Overlay {
   insertion: [Vec, Vec] | null;
 }
 
-interface Snapshot {
-  doc: string;
+/**
+ * One undo step: the ops that revert it and the ops that redo it. Only the
+ * layers the step changed are included, so undo never touches other
+ * people's work in a shared document.
+ */
+interface HistoryEntry {
+  undo: Op[];
+  redo: Op[];
   selection: string[];
   pageId: string;
 }
@@ -91,6 +98,25 @@ interface ClipboardData {
   planarClipboard: 1;
   nodes: Record<string, SceneNode>;
   roots: { id: string; center: Vec; rotation: number }[];
+}
+
+/** Someone else in a shared document. */
+export interface RemotePeer {
+  id: string;
+  name: string;
+  color: string;
+  presence: { pageId: string; cursor: Vec | null; selection: string[] } | null;
+}
+
+/** State of the collaboration session, if any (set by the collab client). */
+export interface CollabInfo {
+  status: 'connecting' | 'connected' | 'reconnecting' | 'error';
+  roomId: string;
+  shareUrl: string;
+  serverUrl: string;
+  peers: RemotePeer[];
+  error: string | null;
+  leave: () => void;
 }
 
 export type ReorderKind = 'forward' | 'backward' | 'front' | 'back';
@@ -120,15 +146,22 @@ export class Editor {
   hoverId: string | null = null;
   overlay: Overlay = { marquee: null, guides: [], pen: null, insertion: null };
   spaceDown = false;
+  /** Shared-document session, when collaborating. */
+  collab: CollabInfo | null = null;
+  /** Pointer position in world space (for presence). */
+  pointer: Vec | null = null;
+  private redrawListeners = new Set<() => void>();
+  private pointerListeners = new Set<() => void>();
   /** Layers temporarily left out of auto layout (being dragged). */
   layoutSkip: Set<string> = new Set();
   message: string | null = null;
   version = 0;
 
   private listeners = new Set<() => void>();
-  private undoStack: Snapshot[] = [];
-  private redoStack: Snapshot[] = [];
-  private txBase: Snapshot | null = null;
+  private undoStack: HistoryEntry[] = [];
+  private redoStack: HistoryEntry[] = [];
+  /** Document as it was when the current transaction began. */
+  private txBase: { doc: PlanarDocument; selection: string[]; pageId: string } | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private messageTimer: ReturnType<typeof setTimeout> | null = null;
   private pageViewports = new Map<string, Viewport>();
@@ -152,6 +185,26 @@ export class Editor {
   };
 
   getVersion = (): number => this.version;
+
+  /** Canvas-only repaint (e.g. remote cursors) without re-rendering panels. */
+  onRedraw = (fn: () => void): (() => void) => {
+    this.redrawListeners.add(fn);
+    return () => this.redrawListeners.delete(fn);
+  };
+
+  requestRedraw(): void {
+    for (const fn of this.redrawListeners) fn();
+  }
+
+  onPointer = (fn: () => void): (() => void) => {
+    this.pointerListeners.add(fn);
+    return () => this.pointerListeners.delete(fn);
+  };
+
+  setPointer(p: Vec | null): void {
+    this.pointer = p;
+    for (const fn of this.pointerListeners) fn();
+  }
 
   emit(): void {
     this.version++;
@@ -182,15 +235,11 @@ export class Editor {
 
   // ---------------------------------------------------------- transactions
 
-  private snapshot(): Snapshot {
-    return { doc: JSON.stringify(this.doc), selection: [...this.selection], pageId: this.pageId };
-  }
-
-  private restore(s: Snapshot): void {
-    this.doc = JSON.parse(s.doc);
-    this.pageId = this.doc.nodes[s.pageId] ? s.pageId : this.doc.pageIds[0];
-    this.selection = s.selection.filter((id) => this.doc.nodes[id]);
-    this.editingTextId = null;
+  /** Applies history or remote ops and tidies up what depends on them. */
+  private applyAndNormalize(ops: Op[]): void {
+    applyOps(this.doc, ops);
+    this.normalize();
+    if (!this.doc.nodes[this.pageId]) this.pageId = this.doc.pageIds[0];
   }
 
   get inTransaction(): boolean {
@@ -198,7 +247,7 @@ export class Editor {
   }
 
   begin(): void {
-    if (!this.txBase) this.txBase = this.snapshot();
+    if (!this.txBase) this.txBase = { doc: structuredClone(this.doc), selection: [...this.selection], pageId: this.pageId };
   }
 
   commit(): void {
@@ -206,8 +255,9 @@ export class Editor {
     this.txBase = null;
     if (!base) return;
     this.normalize();
-    if (base.doc !== JSON.stringify(this.doc)) {
-      this.undoStack.push(base);
+    const redo = diffDocs(base.doc, this.doc);
+    if (redo.length) {
+      this.undoStack.push({ undo: diffDocs(this.doc, base.doc), redo, selection: base.selection, pageId: base.pageId });
       if (this.undoStack.length > 200) this.undoStack.shift();
       this.redoStack = [];
       this.scheduleSave();
@@ -216,9 +266,45 @@ export class Editor {
   }
 
   cancel(): void {
-    if (this.txBase) this.restore(this.txBase);
+    const base = this.txBase;
     this.txBase = null;
+    if (base) {
+      this.applyAndNormalize(diffDocs(this.doc, base.doc));
+      this.selection = base.selection.filter((id) => this.doc.nodes[id]);
+    }
     this.emit();
+  }
+
+  /**
+   * Applies changes made by someone else. They bypass undo history; if a
+   * local transaction is open, its starting point gets them too so they are
+   * not recorded as local changes.
+   */
+  applyRemote(ops: Op[]): void {
+    if (!ops.length) return;
+    if (this.txBase) applyOps(this.txBase.doc, ops);
+    this.applyAndNormalize(ops);
+    this.emit();
+  }
+
+  /** Swaps in a document from elsewhere (e.g. a shared room), clearing history. */
+  replaceDocument(doc: PlanarDocument, opts: { keepView?: boolean } = {}): void {
+    this.finishTextEditing();
+    this.txBase = null;
+    this.doc = doc;
+    repairTree(doc);
+    this.pageId = doc.nodes[this.pageId] ? this.pageId : doc.pageIds[0];
+    this.selection = this.selection.filter((id) => doc.nodes[id]);
+    this.undoStack = [];
+    this.redoStack = [];
+    this.normalize();
+    if (!opts.keepView) this.zoomToFit();
+    this.emit();
+  }
+
+  /** Turns local autosave on or off (off while in a shared room). */
+  setAutosave(on: boolean): void {
+    this.autosave = on;
   }
 
   /** Runs a document mutation. Outside a transaction it is one undo step. */
@@ -261,20 +347,25 @@ export class Editor {
 
   undo(): void {
     this.finishTextEditing();
-    const s = this.undoStack.pop();
-    if (!s) return;
-    this.redoStack.push(this.snapshot());
-    this.restore(s);
+    const entry = this.undoStack.pop();
+    if (!entry) return;
+    const selection = [...this.selection];
+    this.applyAndNormalize(entry.undo);
+    this.redoStack.push({ ...entry, selection });
+    this.selection = entry.selection.filter((id) => this.doc.nodes[id]);
+    if (this.doc.nodes[entry.pageId]) this.pageId = entry.pageId;
     this.scheduleSave();
     this.emit();
   }
 
   redo(): void {
     this.finishTextEditing();
-    const s = this.redoStack.pop();
-    if (!s) return;
-    this.undoStack.push(this.snapshot());
-    this.restore(s);
+    const entry = this.redoStack.pop();
+    if (!entry) return;
+    const selection = [...this.selection];
+    this.applyAndNormalize(entry.redo);
+    this.undoStack.push({ ...entry, selection });
+    this.selection = entry.selection.filter((id) => this.doc.nodes[id]);
     this.scheduleSave();
     this.emit();
   }

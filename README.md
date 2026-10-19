@@ -42,6 +42,17 @@ shapes, text, layers, properties, undo and export — and was built with a
 See the full [functional specification](docs/SPEC.md) for behaviour and
 keyboard shortcuts.
 
+## Real-time collaboration
+
+Run your own Planar server (Docker + automatic HTTPS) and edit documents
+together: live changes, other people's pointers and selections, per-person
+undo, reconnection with offline edits. See
+[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md):
+
+```bash
+DOMAIN=planar.example.com PLANAR_TOKEN=$(openssl rand -hex 16) docker compose up -d --build
+```
+
 ## Getting started
 
 Requires Node.js 18 or newer.
@@ -59,6 +70,7 @@ Then open http://localhost:5173.
 | `npm test` | Run unit tests (Vitest) |
 | `npm run build` | Type-check and build to `dist/` |
 | `npm run preview` | Serve the production build |
+| `npm run server` | Build and run the collaboration server (port 8080; the dev server proxies to it) |
 
 The production build is a static site; `.github/workflows/pages.yml` deploys
 it to GitHub Pages on every push to `main` (enable *Settings → Pages → Source:
@@ -97,7 +109,7 @@ the file layout.
 
 ## Roadmap
 
-Real-time collaboration, comments,
+Comments, accounts and permissions,
 variable collections and aliases, wrapping auto layout, constraints, boolean operations, Bézier editing, gradients, shadows and blur,
 styles, prototyping, plugins, version history.
 

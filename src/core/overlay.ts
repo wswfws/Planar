@@ -200,4 +200,49 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
       ctx.stroke();
     });
   }
+
+  // Other people in a shared document: selections and pointers.
+  for (const peer of editor.collab?.peers ?? []) {
+    const p = peer.presence;
+    if (!p || p.pageId !== editor.pageId) continue;
+    for (const id of p.selection) {
+      const n = doc.nodes[id];
+      if (!n) continue;
+      toScreenMatrix(id);
+      traceOutline(ctx, n);
+      resetTransform();
+      ctx.strokeStyle = peer.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    if (p.cursor) {
+      const s = editor.worldToScreen(p.cursor);
+      ctx.save();
+      ctx.translate(Math.round(s.x), Math.round(s.y));
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, 16);
+      ctx.lineTo(4.5, 12);
+      ctx.lineTo(8, 19);
+      ctx.lineTo(10.5, 18);
+      ctx.lineTo(7, 11);
+      ctx.lineTo(12.5, 11);
+      ctx.closePath();
+      ctx.fillStyle = peer.color;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '600 11px system-ui, sans-serif';
+      const w = ctx.measureText(peer.name).width + 10;
+      ctx.beginPath();
+      ctx.roundRect(12, 18, w, 18, 4);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      ctx.fillText(peer.name, 17, 27);
+      ctx.restore();
+    }
+  }
 }

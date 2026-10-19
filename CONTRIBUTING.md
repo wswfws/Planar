@@ -28,6 +28,9 @@ src/core/      editor engine, no React
   interaction.ts pointer tools: move, resize, rotate, create, pen
   editor.ts      editor state, undo/redo, commands, files
   export.ts      PNG and SVG export
+  ops.ts         document diffs/ops, tree repair (undo + collaboration)
+src/collab/    collaboration client and session helpers
+server/        collaboration server (Node.js + ws)
 src/ui/        React panels and canvas host
 tests/         Vitest unit tests
 docs/          specification and file format

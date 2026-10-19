@@ -7,21 +7,30 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build && npm run build:server",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist-server/index.js --packages=external --log-level=warning",
+    "server": "npm run build:server && node dist-server/index.js"
   },
   "dependencies": {
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "ws": "8.18.0"
   },
   "devDependencies": {
+    "@types/node": "22.10.2",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
+    "@types/ws": "8.5.13",
     "@vitejs/plugin-react": "4.3.4",
+    "esbuild": "0.21.5",
     "typescript": "5.6.3",
     "vite": "5.4.11",
     "vitest": "2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

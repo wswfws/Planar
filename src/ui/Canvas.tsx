@@ -76,9 +76,11 @@ export function Canvas({ onOpenVariables }: { onOpenVariables: () => void }) {
     };
     setImageLoadListener(schedule);
     const unsubscribe = editor.subscribe(schedule);
+    const unsubscribeRedraw = editor.onRedraw(schedule);
     schedule();
     return () => {
       unsubscribe();
+      unsubscribeRedraw();
       setImageLoadListener(null);
       cancelAnimationFrame(frame);
     };
@@ -153,7 +155,9 @@ export function Canvas({ onOpenVariables }: { onOpenVariables: () => void }) {
           setCursor(interaction.cursor());
         }}
         onPointerMove={(e) => {
-          interaction.pointerMove(input(e));
+          const pi = input(e);
+          editor.setPointer(editor.screenToWorld(pi.screen));
+          interaction.pointerMove(pi);
           setCursor(interaction.cursor());
         }}
         onPointerUp={(e) => {
@@ -161,6 +165,7 @@ export function Canvas({ onOpenVariables }: { onOpenVariables: () => void }) {
           setCursor(interaction.cursor());
         }}
         onPointerLeave={() => {
+          editor.setPointer(null);
           if (editor.hoverId && !interaction.drag) {
             editor.hoverId = null;
             editor.emit();

@@ -66,7 +66,47 @@ function Dropdown({ button, items, className }: { button: ReactNode; items: (Men
   );
 }
 
-export function Toolbar({ onOpen, onVariables }: { onOpen: () => void; onVariables: () => void }) {
+
+/** Everyone in the shared document; clicking someone jumps to them. */
+function Collaborators({ onShare }: { onShare: () => void }) {
+  const editor = useEditorState();
+  const collab = editor.collab;
+  if (!collab) return null;
+  const follow = (id: string) => {
+    const p = collab.peers.find((x) => x.id === id)?.presence;
+    if (!p) return;
+    if (p.pageId && p.pageId !== editor.pageId && editor.doc.nodes[p.pageId]) editor.setPage(p.pageId);
+    if (p.cursor) {
+      const { width, height } = editor.canvasSize;
+      const z = editor.viewport.zoom;
+      editor.viewport = { zoom: z, x: width / 2 - p.cursor.x * z, y: height / 2 - p.cursor.y * z };
+      editor.emit();
+    }
+  };
+  return (
+    <div className="collaborators">
+      <span className={`status-dot ${collab.status}`} title={collab.error ?? collab.status} />
+      {collab.peers.slice(0, 6).map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          className="avatar"
+          style={{ background: p.color }}
+          title={`${p.name} — click to go to their view`}
+          onClick={() => follow(p.id)}
+        >
+          {p.name.slice(0, 1).toUpperCase()}
+        </button>
+      ))}
+      {collab.peers.length > 6 && <span className="avatar more">+{collab.peers.length - 6}</span>}
+      <button type="button" className="avatar-button" title="Sharing" onClick={onShare}>
+        {collab.peers.length + 1}
+      </button>
+    </div>
+  );
+}
+
+export function Toolbar({ onOpen, onVariables, onShare }: { onOpen: () => void; onVariables: () => void; onShare: () => void }) {
   const editor = useEditorState();
   const [name, setName] = useState(editor.doc.name);
   useEffect(() => setName(editor.doc.name), [editor.doc.name]);
@@ -90,6 +130,7 @@ export function Toolbar({ onOpen, onVariables }: { onOpen: () => void; onVariabl
             { label: 'Export SVG', action: () => editor.exportAs('svg') },
             '-',
             { label: 'Variables…', action: onVariables },
+            { label: editor.collab ? 'Collaboration…' : 'Share / collaborate…', action: onShare },
             { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: !editor.selection.length },
             '-',
             { label: 'Undo', shortcut: `${MOD}Z`, action: () => editor.undo(), disabled: !editor.canUndo },
@@ -133,6 +174,12 @@ export function Toolbar({ onOpen, onVariables }: { onOpen: () => void; onVariabl
         />
       </div>
       <div className="toolbar-right">
+        <Collaborators onShare={onShare} />
+        {!editor.collab && (
+          <button type="button" className="share-button" title="Edit together in real time" onClick={onShare}>
+            Share
+          </button>
+        )}
         <button type="button" className="toolbar-button" title="Variables" onClick={onVariables}>
           <Icon name="variable" />
           <span className="toolbar-label">Variables</span>

@@ -1195,3 +1195,166 @@ select:focus {
   color: var(--muted);
   min-width: 0;
 }
+
+/* ------------------------------------------------------------ collaboration */
+
+.share-button,
+.primary-button {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.share-button {
+  margin-right: 4px;
+}
+
+.collaborators {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+}
+
+.avatar,
+.avatar-button {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-left: -6px;
+}
+
+.avatar.more,
+.avatar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.avatar-button {
+  margin-left: 2px;
+  border-color: var(--border);
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-dot.connected {
+  background: #4cc38a;
+}
+
+.status-dot.connecting,
+.status-dot.reconnecting {
+  background: #ffb224;
+}
+
+.status-dot.error {
+  background: var(--danger);
+}
+
+.share-dialog {
+  width: min(520px, 100%);
+}
+
+.share-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px !important;
+}
+
+.share-body .hint {
+  margin: 0;
+}
+
+.share-status {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-weight: 600;
+}
+
+.share-error {
+  color: var(--danger);
+  font-weight: 400;
+}
+
+.link-row {
+  display: flex;
+  gap: 6px;
+}
+
+.link-row input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.peer-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.peer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid;
+  border-radius: 999px;
+}
+
+.peer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.color-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.color-swatches button {
+  width: 22px;
+  height: 22px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.color-swatches button.active {
+  border-color: #fff;
+}
+
+.dialog-footer a.hint {
+  margin-left: auto;
+}
