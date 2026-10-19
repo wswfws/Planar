@@ -71,10 +71,11 @@ interface NumberFieldProps {
   precision?: number;
   suffix?: string;
   title?: string;
+  disabled?: boolean;
 }
 
 /** Numeric input with arithmetic support and a draggable (scrub) label. */
-export function NumberField({ label, value, onChange, min = -Infinity, max = Infinity, step = 1, precision = 2, suffix, title }: NumberFieldProps) {
+export function NumberField({ label, value, onChange, min = -Infinity, max = Infinity, step = 1, precision = 2, suffix, title, disabled }: NumberFieldProps) {
   // Text being typed while the field is focused; otherwise the live value is shown.
   const [draft, setDraft] = useState<string | null>(null);
   const skipCommit = useRef(false);
@@ -92,11 +93,11 @@ export function NumberField({ label, value, onChange, min = -Infinity, max = Inf
   };
 
   return (
-    <label className="number-field" title={title}>
+    <label className={`number-field${disabled ? ' disabled' : ''}`} title={title}>
       <span
         className="number-label"
         onPointerDown={(e) => {
-          if (value === null) return;
+          if (value === null || disabled) return;
           e.preventDefault();
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
           scrub.current = { x: e.clientX, start: value };
@@ -117,6 +118,7 @@ export function NumberField({ label, value, onChange, min = -Infinity, max = Inf
       </span>
       <input
         value={draft ?? format(value, precision)}
+        disabled={disabled}
         placeholder={value === null ? 'Mixed' : undefined}
         onFocus={(e) => {
           setDraft(format(value, precision));

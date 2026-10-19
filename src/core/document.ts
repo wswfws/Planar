@@ -60,6 +60,17 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     autoWidth: true,
     points: [],
     closed: false,
+    layoutMode: 'none',
+    itemSpacing: 10,
+    paddingTop: 0,
+    paddingRight: 0,
+    paddingBottom: 0,
+    paddingLeft: 0,
+    primaryAlign: 'start',
+    counterAlign: 'start',
+    sizingH: 'fixed',
+    sizingV: 'fixed',
+    layoutAbsolute: false,
     ...props,
   };
 }

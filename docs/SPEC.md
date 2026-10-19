@@ -94,7 +94,37 @@ under the starting point.
 Pasting or dropping an image file creates a rectangle with an image fill at
 the image's natural size.
 
-## 6. Panels
+## 6. Auto layout
+
+A frame can arrange its children automatically in a row or a column.
+
+- **Add / remove.** Shift+A on a frame without auto layout turns it on; on
+  any other selection it wraps the selection in a new, unfilled auto-layout
+  frame. The direction is guessed from how the layers are spread out, and the
+  children are re-ordered to match their current position along that axis.
+  Alt+Shift+A removes auto layout (layers stay where they are).
+- **Settings** (per frame): direction (horizontal / vertical), spacing
+  between items, padding on each side, alignment along the main axis (start,
+  centre, end or *space between*) and across it (start, centre, end).
+- **Sizing** (per layer, per axis):
+  - *Fixed* — the size does not change by itself;
+  - *Hug* — an auto-layout frame shrinks or grows to fit its content plus
+    padding; for text, hug width means auto width;
+  - *Fill* — a child of an auto-layout frame stretches to take the remaining
+    space on the main axis (shared equally between fill items) or the full
+    content box on the cross axis.
+  Resizing a layer by hand on an axis switches that axis to *Fixed*.
+- **Ignore auto layout.** A child can opt out; it then keeps a free position
+  inside the frame.
+- Hidden children take no space.
+- Rotated children take the space of their rotated bounding box.
+- **Re-ordering.** Dragging a child shows an insertion line; dropping inside
+  an auto-layout frame inserts the layer at that position (this also moves
+  layers in from elsewhere). Dropping outside takes it out of the frame.
+  Arrow keys along the main axis move a child one place earlier or later.
+- Child X/Y are controlled by the layout and are read-only in the panel.
+
+## 7. Panels
 
 - **Toolbar** (top): main menu (new, open, save, export, undo, redo),
   tools, editable document name, zoom menu.
@@ -116,7 +146,7 @@ the image's natural size.
 - Numeric fields accept arithmetic (`100+20`, `50*2`) and can be scrubbed by
   dragging their label.
 
-## 7. Files
+## 8. Files
 
 - The document autosaves to browser storage and is restored on reload.
 - *Save* downloads a `.planar.json` file; *Open* loads one.
@@ -124,8 +154,8 @@ the image's natural size.
 - Unknown or invalid files are rejected with a message; the current document
   is not changed.
 
-## 8. Out of scope for v0.1 (roadmap)
+## 9. Out of scope for v0.1 (roadmap)
 
-Real-time collaboration, comments, components and instances, auto layout,
+Real-time collaboration, comments, components and instances, wrapping auto layout,
 constraints, boolean operations, Bézier curve editing, gradients, effects
 (shadows, blur), styles and variables, prototyping, plugins, version history.

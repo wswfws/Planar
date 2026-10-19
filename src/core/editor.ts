@@ -15,6 +15,7 @@ import {
 import { downloadBlob, exportPng, exportSvg, safeFilename } from './export';
 import {
   fitGroups,
+  localMatrix,
   parentWorldMatrix,
   placeNode,
   reparentKeepWorld,
@@ -24,7 +25,8 @@ import {
   worldCenter,
   worldRotation,
 } from './geometry';
-import { applyLinear, invert, rectCenter, rectsIntersect, type Rect, type Vec } from './math';
+import { applyAutoLayout, isAutoLayout, isLaidOut } from './layout';
+import { apply, applyLinear, invert, rectCenter, rectFromPoints, rectsIntersect, type Rect, type Vec } from './math';
 import { measureTextNode } from './text';
 import type { PlanarDocument, SceneNode } from './types';
 import { createWelcomeDocument } from './welcome';
@@ -47,6 +49,8 @@ export interface Overlay {
   marquee: Rect | null;
   guides: Guide[];
   pen: { points: Vec[]; cursor: Vec | null } | null;
+  /** Auto-layout insertion marker while dragging (world space). */
+  insertion: [Vec, Vec] | null;
 }
 
 interface Snapshot {
@@ -86,8 +90,10 @@ export class Editor {
   canvasSize = { width: 800, height: 600 };
   editingTextId: string | null = null;
   hoverId: string | null = null;
-  overlay: Overlay = { marquee: null, guides: [], pen: null };
+  overlay: Overlay = { marquee: null, guides: [], pen: null, insertion: null };
   spaceDown = false;
+  /** Layers temporarily left out of auto layout (being dragged). */
+  layoutSkip: Set<string> = new Set();
   message: string | null = null;
   version = 0;
 
@@ -198,6 +204,8 @@ export class Editor {
   }
 
   private normalize(): void {
+    fitGroups(this.doc, this.pageId);
+    applyAutoLayout(this.doc, this.pageId, this.layoutSkip);
     fitGroups(this.doc, this.pageId);
     this.selection = this.selection.filter((id) => this.doc.nodes[id]);
     if (this.editingTextId && !this.doc.nodes[this.editingTextId]) this.editingTextId = null;
@@ -386,7 +394,59 @@ export class Editor {
   nudge(dx: number, dy: number): void {
     const ids = topLevelSelection(this.doc, this.selection);
     if (!ids.length) return;
-    this.change(() => ids.forEach((id) => this.translateWorld(id, { x: dx, y: dy })));
+    this.change((doc) => {
+      for (const id of ids) {
+        const node = doc.nodes[id];
+        if (!isLaidOut(doc, node)) {
+          this.translateWorld(id, { x: dx, y: dy });
+          continue;
+        }
+        // Inside auto layout, arrows along the main axis re-order.
+        const parent = doc.nodes[node.parentId!];
+        const step = Math.sign(parent.layoutMode === 'horizontal' ? dx : dy);
+        const i = parent.children.indexOf(id);
+        const j = i + step;
+        if (!step || j < 0 || j >= parent.children.length) continue;
+        parent.children[i] = parent.children[j];
+        parent.children[j] = id;
+      }
+    });
+  }
+
+  /** Turns on auto layout for a frame, or wraps the selection in one. */
+  addAutoLayout(): void {
+    const ids = this.sortedTopSelection();
+    if (!ids.length) return;
+    const single = ids.length === 1 ? this.doc.nodes[ids[0]] : null;
+    this.begin();
+    let frameId: string;
+    if (single && single.type === 'frame' && single.layoutMode === 'none') {
+      frameId = single.id;
+    } else {
+      this.frameSelection();
+      frameId = this.selection[0];
+      this.doc.nodes[frameId].fills = [];
+    }
+    this.change((doc) => enableAutoLayout(doc, frameId));
+    this.selection = [frameId];
+    this.commit();
+  }
+
+  removeAutoLayout(): void {
+    const frames = this.selectedNodes.filter((n) => isAutoLayout(n));
+    if (!frames.length) return;
+    this.change((doc) => {
+      for (const f of frames) {
+        f.layoutMode = 'none';
+        if (f.sizingH === 'hug') f.sizingH = 'fixed';
+        if (f.sizingV === 'hug') f.sizingV = 'fixed';
+        for (const c of f.children) {
+          const child = doc.nodes[c];
+          if (child.sizingH === 'fill') child.sizingH = 'fixed';
+          if (child.sizingV === 'fill') child.sizingV = 'fixed';
+        }
+      }
+    });
   }
 
   group(): void {
@@ -812,3 +872,54 @@ export class Editor {
   }
 }
 
+/**
+ * Enables auto layout on a frame, guessing direction, order, spacing and
+ * padding from where its children currently are so nothing jumps.
+ */
+export function enableAutoLayout(doc: PlanarDocument, frameId: string): void {
+  const f = doc.nodes[frameId];
+  const kids = f.children.map((id) => doc.nodes[id]).filter((n) => n.visible && !n.layoutAbsolute);
+  const boxes = new Map(
+    kids.map((k) => {
+      const m = localMatrix(k);
+      const corners = [
+        { x: 0, y: 0 },
+        { x: k.width, y: 0 },
+        { x: k.width, y: k.height },
+        { x: 0, y: k.height },
+      ].map((p) => apply(m, p));
+      return [k.id, rectFromPoints(corners)] as const;
+    }),
+  );
+  const centers = kids.map((k) => rectCenter(boxes.get(k.id)!));
+  const spread = (vals: number[]) => (vals.length ? Math.max(...vals) - Math.min(...vals) : 0);
+  const horizontal = spread(centers.map((c) => c.x)) >= spread(centers.map((c) => c.y));
+  const key = (id: string) => {
+    const b = boxes.get(id);
+    return b ? (horizontal ? b.x + b.width / 2 : b.y + b.height / 2) : Infinity;
+  };
+  f.children.sort((a, b) => key(a) - key(b));
+
+  const sorted = f.children.map((id) => boxes.get(id)).filter((b): b is NonNullable<typeof b> => !!b);
+  let gap = 10;
+  if (sorted.length > 1) {
+    let sum = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const a = sorted[i - 1];
+      const b = sorted[i];
+      sum += horizontal ? b.x - (a.x + a.width) : b.y - (a.y + a.height);
+    }
+    gap = Math.max(0, Math.round(sum / (sorted.length - 1)));
+  }
+  const content = sorted.length ? rectFromPoints(sorted.flatMap((b) => [{ x: b.x, y: b.y }, { x: b.x + b.width, y: b.y + b.height }])) : null;
+  f.layoutMode = horizontal ? 'horizontal' : 'vertical';
+  f.itemSpacing = gap;
+  f.primaryAlign = 'start';
+  f.counterAlign = 'start';
+  f.paddingLeft = content ? Math.max(0, Math.round(content.x)) : 10;
+  f.paddingTop = content ? Math.max(0, Math.round(content.y)) : 10;
+  f.paddingRight = content ? Math.max(0, Math.round(f.width - content.x - content.width)) : 10;
+  f.paddingBottom = content ? Math.max(0, Math.round(f.height - content.y - content.height)) : 10;
+  f.sizingH = kids.length ? 'hug' : 'fixed';
+  f.sizingV = kids.length ? 'hug' : 'fixed';
+}

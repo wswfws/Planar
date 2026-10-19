@@ -658,3 +658,77 @@ select:focus {
     width: 140px;
   }
 }
+
+.number-field.disabled {
+  opacity: 0.45;
+}
+
+.number-field.disabled .number-label {
+  cursor: default;
+}
+
+.align-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  width: 84px;
+  height: 84px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.align-grid button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.align-grid button::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+.align-grid button:hover {
+  background: var(--panel);
+}
+
+.align-grid button.active::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 1;
+}
+
+.auto-layout {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 8px;
+}
+
+.auto-layout .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.labeled-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.labeled-select select {
+  flex: 1;
+  min-width: 0;
+}

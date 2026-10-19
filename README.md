@@ -13,6 +13,8 @@ shapes, text, layers, properties, undo and export — and was built with a
 - Infinite canvas with smooth pan and zoom (2 %–25 600 %)
 - Tools: Move, Hand, Frame, Rectangle, Ellipse, Line, Pen (polygons and polylines), Text
 - Nested frames with clipping, groups that auto-fit their children
+- Auto layout: horizontal / vertical stacks with spacing, padding, alignment,
+  space-between, hug / fill / fixed sizing, absolute children and drag-to-reorder
 - Select, multi-select, marquee, move with smart snapping, resize (Shift / Alt),
   rotate (Shift snaps to 15°), Alt-drag to duplicate, drop layers into frames
 - Layers panel: tree view, rename, hide, lock, drag and drop to reorder or re-parent
@@ -63,6 +65,7 @@ GitHub Actions* once).
 | Ctrl/⌘+C / X / V / D | Copy, cut, paste, duplicate |
 | Ctrl/⌘+G, Ctrl/⌘+Shift+G | Group, ungroup |
 | Ctrl/⌘+Alt+G | Frame selection |
+| Shift+A, Alt+Shift+A | Add / remove auto layout |
 | Ctrl/⌘+] / [ (+Shift) | Bring forward / send backward (to front / back) |
 | Enter, Shift+Enter, Esc | Select children, select parent |
 | Arrows (+Shift) | Nudge 1 px (10 px) |
@@ -79,8 +82,8 @@ the file layout.
 
 ## Roadmap
 
-Real-time collaboration, comments, components and instances, auto layout,
-constraints, boolean operations, Bézier editing, gradients, shadows and blur,
+Real-time collaboration, comments, components and instances, wrapping auto
+layout, constraints, boolean operations, Bézier editing, gradients, shadows and blur,
 styles and variables, prototyping, plugins, version history.
 
 ## Contributing

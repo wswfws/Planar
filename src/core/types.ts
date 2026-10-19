@@ -21,6 +21,11 @@ export type Paint = SolidPaint | ImagePaint;
 
 export type TextAlign = 'left' | 'center' | 'right';
 
+export type LayoutMode = 'none' | 'horizontal' | 'vertical';
+export type PrimaryAlign = 'start' | 'center' | 'end' | 'space-between';
+export type CounterAlign = 'start' | 'center' | 'end';
+export type Sizing = 'fixed' | 'hug' | 'fill';
+
 /**
  * One flat node shape for every layer type. Fields that do not apply to a
  * type keep their defaults, which keeps editing code free of type narrowing.
@@ -58,6 +63,21 @@ export interface SceneNode {
 
   points: Vec[];
   closed: boolean;
+
+  /** Auto layout (frames). */
+  layoutMode: LayoutMode;
+  itemSpacing: number;
+  paddingTop: number;
+  paddingRight: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  primaryAlign: PrimaryAlign;
+  counterAlign: CounterAlign;
+  /** How the layer is sized horizontally / vertically. */
+  sizingH: Sizing;
+  sizingV: Sizing;
+  /** Child opts out of its parent's auto layout. */
+  layoutAbsolute: boolean;
 }
 
 export interface PlanarDocument {

@@ -1,5 +1,6 @@
 import { useState, type DragEvent, type MouseEvent } from 'react';
 import { getAncestors } from '../core/document';
+import { isAutoLayout } from '../core/layout';
 import { isContainer } from '../core/types';
 import { useEditorState } from './EditorContext';
 import { IconButton } from './controls';
@@ -174,7 +175,7 @@ export function LayersPanel() {
             {hasKids && <Icon name="chevron" size={12} />}
           </span>
           <span className="layer-icon">
-            <Icon name={NODE_ICONS[node.type]} size={14} />
+            <Icon name={isAutoLayout(node) ? (node.layoutMode === 'horizontal' ? 'layoutH' : 'layoutV') : NODE_ICONS[node.type]} size={14} />
           </span>
           {renaming === id ? (
             <InlineRename

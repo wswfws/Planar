@@ -30,6 +30,7 @@ import {
   type Rect,
   type Vec,
 } from './math';
+import { insertionIndex, insertionLine, isAutoLayout, isLaidOut } from './layout';
 import type { NodeType, PlanarDocument, SceneNode } from './types';
 
 export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
@@ -331,7 +332,9 @@ export class Interaction {
       case 'move':
         if (drag.started) {
           this.dropIntoFrame(drag.ids, world);
+          editor.layoutSkip = new Set();
           editor.overlay.guides = [];
+          editor.overlay.insertion = null;
           editor.commit();
         }
         break;
@@ -411,6 +414,7 @@ export class Interaction {
     if (drag.duplicate) editor.duplicateSelection(0);
     const ids = topLevelSelection(this.doc, editor.selection).filter((id) => !this.doc.nodes[id].locked);
     drag.ids = ids;
+    editor.layoutSkip = new Set(ids.filter((id) => isLaidOut(this.doc, this.doc.nodes[id])));
     for (const id of ids) {
       const n = this.doc.nodes[id];
       drag.origins.set(id, { x: n.x, y: n.y, inv: invert(parentWorldMatrix(this.doc, id)) });
@@ -469,9 +473,35 @@ export class Interaction {
         doc.nodes[id].y = o.y + ld.y;
       }
     });
+    const drop = this.autoLayoutDrop(drag.ids, world);
+    editor.overlay.insertion = drop ? insertionLine(this.doc, drop.frame, drop.index, drop.exclude) : null;
+  }
+
+  /** If dropping at `world` lands in an auto-layout frame, where it goes. */
+  private autoLayoutDrop(ids: string[], world: Vec): { frame: SceneNode; index: number; exclude: Set<string> } | null {
+    const exclude = new Set(ids.flatMap((id) => [id, ...descendants(this.doc, id)]));
+    const target = this.doc.nodes[frameAt(this.doc, this.editor.pageId, world, exclude)];
+    if (!isAutoLayout(target)) return null;
+    if (ids.every((id) => this.doc.nodes[id].layoutAbsolute && this.doc.nodes[id].parentId === target.id)) return null;
+    const local = apply(invert(worldMatrix(this.doc, target.id)), world);
+    return { frame: target, index: insertionIndex(this.doc, target, local, exclude), exclude };
   }
 
   private dropIntoFrame(ids: string[], world: Vec): void {
+    const drop = this.autoLayoutDrop(ids, world);
+    if (drop) {
+      const { frame, index } = drop;
+      this.editor.change((doc) => {
+        const moving = ids.filter((id) => doc.nodes[id].parentId !== frame.id || !doc.nodes[id].layoutAbsolute);
+        const others = frame.children.filter((c) => !moving.includes(c));
+        for (const id of moving) {
+          if (doc.nodes[id].parentId !== frame.id) reparentKeepWorld(doc, id, frame.id);
+          doc.nodes[id].layoutAbsolute = false;
+        }
+        frame.children = [...others.slice(0, index), ...moving, ...others.slice(index)];
+      });
+      return;
+    }
     const exclude = new Set(ids.flatMap((id) => [id, ...descendants(this.doc, id)]));
     const target = frameAt(this.doc, this.editor.pageId, world, exclude);
     const targetNode = this.doc.nodes[target];
@@ -586,6 +616,8 @@ export class Interaction {
           this.editor.syncTextSize(node);
         }
         placeNode(doc, id, center, c0.rotation);
+        if (hx) node.sizingH = 'fixed';
+        if (hy) node.sizingV = 'fixed';
       }
     });
   }

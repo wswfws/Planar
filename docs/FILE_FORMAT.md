@@ -50,6 +50,16 @@ their default value.
 | `autoWidth` | boolean | Text grows horizontally instead of wrapping |
 | `points` | {x, y}[] | Vector points, normalised to 0–1 of the box |
 | `closed` | boolean | Vector is a closed polygon |
+| `layoutMode` | `none` \| `horizontal` \| `vertical` | Frame auto layout direction |
+| `itemSpacing` | number | Gap between auto-layout items |
+| `paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft` | number | Auto-layout padding |
+| `primaryAlign` | `start` \| `center` \| `end` \| `space-between` | Main-axis alignment |
+| `counterAlign` | `start` \| `center` \| `end` | Cross-axis alignment |
+| `sizingH`, `sizingV` | `fixed` \| `hug` \| `fill` | Horizontal / vertical sizing |
+| `layoutAbsolute` | boolean | Child ignores its parent's auto layout |
+
+Files written before auto layout existed simply lack these fields; readers
+fill in the defaults (`none`, `10`, `0`, `start`, `start`, `fixed`, `false`).
 
 For pages, `fills[0]` is the canvas background colour.
 

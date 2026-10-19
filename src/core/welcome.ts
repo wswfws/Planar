@@ -1,5 +1,6 @@
 import { createDocument, createNode, insertNode, solid } from './document';
 import { fitGroups } from './geometry';
+import { applyAutoLayout } from './layout';
 import { measureTextNode } from './text';
 import type { PlanarDocument, SceneNode } from './types';
 
@@ -17,7 +18,7 @@ export function createWelcomeDocument(): PlanarDocument {
 
   const card = insertNode(
     doc,
-    createNode('frame', { name: 'Welcome card', x: 0, y: 0, width: 480, height: 320, cornerRadius: 24 }),
+    createNode('frame', { name: 'Welcome card', x: 0, y: 0, width: 480, height: 340, cornerRadius: 24 }),
     pageId,
   );
   insertNode(
@@ -39,6 +40,30 @@ export function createWelcomeDocument(): PlanarDocument {
     lineHeight: 1.5,
     fills: [solid('#4a4a57')],
   });
+
+  // An auto-layout button: the frame hugs its label plus padding.
+  const button = insertNode(
+    doc,
+    createNode('frame', {
+      name: 'Button',
+      x: 40,
+      y: 272,
+      cornerRadius: 10,
+      fills: [solid('#5b5bd6')],
+      clipContent: false,
+      layoutMode: 'horizontal',
+      paddingLeft: 18,
+      paddingRight: 18,
+      paddingTop: 10,
+      paddingBottom: 10,
+      counterAlign: 'center',
+      sizingH: 'hug',
+      sizingV: 'hug',
+    }),
+    card.id,
+  );
+  text(button.id, { characters: 'Get started  →', fontSize: 15, fontWeight: 600, fills: [solid('#ffffff')] });
+  applyAutoLayout(doc, pageId);
 
   const shapes = insertNode(doc, createNode('group', { name: 'Shapes' }), pageId);
   insertNode(

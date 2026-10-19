@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { solid } from '../core/document';
 import type { AlignKind, Editor } from '../core/editor';
 import { scaleChildren } from '../core/geometry';
-import type { Paint, SceneNode, TextAlign } from '../core/types';
+import { effectiveSizing, isAutoLayout, isLaidOut } from '../core/layout';
+import type { CounterAlign, Paint, PrimaryAlign, SceneNode, Sizing, TextAlign } from '../core/types';
 import { ColorField, IconButton, NumberField, Section } from './controls';
 import { useEditorState } from './EditorContext';
 import type { IconName } from './icons';
@@ -113,6 +114,138 @@ function PaintList({
   );
 }
 
+const ALIGN_STEPS = ['start', 'center', 'end'] as const;
+
+function AlignGrid({ frame, editor }: { frame: SceneNode; editor: Editor }) {
+  const horizontal = frame.layoutMode === 'horizontal';
+  const between = frame.primaryAlign === 'space-between';
+  return (
+    <div className="align-grid" role="group" aria-label="Alignment">
+      {[0, 1, 2].flatMap((row) =>
+        [0, 1, 2].map((col) => {
+          const primary = ALIGN_STEPS[horizontal ? col : row];
+          const counter = ALIGN_STEPS[horizontal ? row : col];
+          const active = frame.counterAlign === counter && (between || frame.primaryAlign === primary);
+          return (
+            <button
+              key={row * 3 + col}
+              type="button"
+              className={active ? 'active' : ''}
+              title={primary + ' / ' + counter}
+              onClick={() =>
+                editor.updateNodes([frame.id], {
+                  counterAlign: counter as CounterAlign,
+                  primaryAlign: (between ? 'space-between' : primary) as PrimaryAlign,
+                })
+              }
+            />
+          );
+        }),
+      )}
+    </div>
+  );
+}
+
+function AutoLayoutSection({ editor, nodes }: { editor: Editor; nodes: SceneNode[] }) {
+  const frame = nodes.length === 1 && isAutoLayout(nodes[0]) ? nodes[0] : null;
+  const anyOn = nodes.some((n) => isAutoLayout(n));
+  const set = (patch: Partial<SceneNode>) => {
+    if (frame) editor.updateNodes([frame.id], patch);
+  };
+  return (
+    <Section
+      title="Auto layout"
+      actions={
+        anyOn ? (
+          <IconButton icon="minus" title="Remove auto layout (Alt+Shift+A)" onClick={() => editor.removeAutoLayout()} />
+        ) : (
+          <IconButton icon="plus" title="Add auto layout (Shift+A)" onClick={() => editor.addAutoLayout()} />
+        )
+      }
+    >
+      {frame && (
+        <>
+          <div className="auto-layout">
+            <AlignGrid frame={frame} editor={editor} />
+            <div className="stack">
+              <div className="row">
+                <IconButton icon="layoutH" title="Horizontal" active={frame.layoutMode === 'horizontal'} onClick={() => set({ layoutMode: 'horizontal' })} />
+                <IconButton icon="layoutV" title="Vertical" active={frame.layoutMode === 'vertical'} onClick={() => set({ layoutMode: 'vertical' })} />
+              </div>
+              <NumberField
+                label={frame.layoutMode === 'horizontal' ? '↔' : '↕'}
+                title="Spacing between items"
+                value={frame.itemSpacing}
+                min={0}
+                onChange={(v) => set({ itemSpacing: v })}
+              />
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={frame.primaryAlign === 'space-between'}
+                  onChange={(e) => set({ primaryAlign: e.target.checked ? 'space-between' : 'start' })}
+                />
+                Space between
+              </label>
+            </div>
+          </div>
+          <div className="grid-2">
+            <NumberField label="L" title="Padding left" value={frame.paddingLeft} min={0} onChange={(v) => set({ paddingLeft: v })} />
+            <NumberField label="T" title="Padding top" value={frame.paddingTop} min={0} onChange={(v) => set({ paddingTop: v })} />
+            <NumberField label="R" title="Padding right" value={frame.paddingRight} min={0} onChange={(v) => set({ paddingRight: v })} />
+            <NumberField label="B" title="Padding bottom" value={frame.paddingBottom} min={0} onChange={(v) => set({ paddingBottom: v })} />
+          </div>
+        </>
+      )}
+    </Section>
+  );
+}
+
+const SIZING_LABEL: Record<Sizing, string> = { fixed: 'Fixed', hug: 'Hug', fill: 'Fill' };
+
+function SizingRow({ editor, node }: { editor: Editor; node: SceneNode }) {
+  const { doc } = editor;
+  const laidOut = isLaidOut(doc, node);
+  const options = (axis: 'h' | 'v'): Sizing[] => {
+    if (node.type === 'text' && axis === 'v') return [];
+    const out: Sizing[] = ['fixed'];
+    if (isAutoLayout(node) || node.type === 'text') out.push('hug');
+    if (laidOut) out.push('fill');
+    return out;
+  };
+  const apply = (axis: 'h' | 'v', v: Sizing) => {
+    if (node.type === 'text' && axis === 'h') {
+      editor.updateNodes([node.id], v === 'fill' ? { sizingH: 'fill' } : { sizingH: 'fixed', autoWidth: v === 'hug' });
+    } else {
+      editor.updateNodes([node.id], axis === 'h' ? { sizingH: v } : { sizingV: v });
+    }
+  };
+  const h = options('h');
+  const v = options('v');
+  if (h.length < 2 && v.length < 2) return null;
+  const select = (axis: 'h' | 'v', opts: Sizing[], label: string) =>
+    opts.length > 1 ? (
+      <label className="labeled-select">
+        {label}
+        <select value={effectiveSizing(doc, node, axis)} onChange={(e) => apply(axis, e.target.value as Sizing)}>
+          {opts.map((o) => (
+            <option key={o} value={o}>
+              {SIZING_LABEL[o]}
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : (
+      <span />
+    );
+  return (
+    <div className="grid-2">
+      {select('h', h, 'W')}
+      {select('v', v, 'H')}
+    </div>
+  );
+}
+
 function ExportSection({ editor, count }: { editor: Editor; count: number }) {
   const [scale, setScale] = useState(2);
   const [format, setFormat] = useState<'png' | 'svg'>('png');
@@ -175,10 +308,13 @@ export function PropertiesPanel() {
   const frames = nodes.filter((n) => n.type === 'frame');
   const paintable = nodes.filter((n) => n.type !== 'group');
 
+  const allLaidOut = nodes.every((n) => isLaidOut(editor.doc, n));
   const setSize = (key: 'width' | 'height', v: number) =>
     editor.updateNodes(ids, (n) => {
       const old = n[key];
       n[key] = Math.max(0, v);
+      if (key === 'width') n.sizingH = 'fixed';
+      else n.sizingV = 'fixed';
       if (n.type === 'text' && key === 'width') n.autoWidth = false;
       if (n.type === 'group' && old > 0) {
         scaleChildren(editor.doc, n.id, key === 'width' ? v / old : 1, key === 'height' ? v / old : 1);
@@ -202,8 +338,8 @@ export function PropertiesPanel() {
 
       <Section title="Layout">
         <div className="grid-2">
-          <NumberField label="X" value={common(nodes, (n) => n.x)} onChange={(v) => editor.updateNodes(ids, { x: v })} />
-          <NumberField label="Y" value={common(nodes, (n) => n.y)} onChange={(v) => editor.updateNodes(ids, { y: v })} />
+          <NumberField label="X" disabled={allLaidOut} value={common(nodes, (n) => n.x)} onChange={(v) => editor.updateNodes(ids, { x: v })} />
+          <NumberField label="Y" disabled={allLaidOut} value={common(nodes, (n) => n.y)} onChange={(v) => editor.updateNodes(ids, { y: v })} />
           <NumberField label="W" value={common(nodes, (n) => n.width)} min={0} onChange={(v) => setSize('width', v)} />
           <NumberField label="H" value={common(nodes, (n) => n.height)} min={0} onChange={(v) => setSize('height', v)} />
           <NumberField
@@ -223,6 +359,7 @@ export function PropertiesPanel() {
             />
           )}
         </div>
+        {single && <SizingRow editor={editor} node={single} />}
         {frames.length > 0 && (
           <label className="checkbox">
             <input
@@ -235,7 +372,15 @@ export function PropertiesPanel() {
         )}
       </Section>
 
+      <AutoLayoutSection editor={editor} nodes={nodes} />
+
       <Section title="Layer">
+        {parent && isAutoLayout(parent) && single && (
+          <label className="checkbox">
+            <input type="checkbox" checked={single.layoutAbsolute} onChange={(e) => editor.updateNodes([single.id], { layoutAbsolute: e.target.checked })} />
+            Ignore auto layout
+          </label>
+        )}
         <div className="grid-2">
           <NumberField
             label="◐"

@@ -59,6 +59,20 @@ const paths: Record<string, ReactElement> = {
   textRight: <path d="M2.5 4h11M6.5 8h7M4.5 12h9" />,
   undo: <path d="M5 3 2 6l3 3M2.5 6H10a3.5 3.5 0 0 1 0 7H6" />,
   redo: <path d="M11 3l3 3-3 3M13.5 6H6a3.5 3.5 0 0 0 0 7h4" />,
+  layoutH: (
+    <>
+      <rect x="2" y="4.5" width="3.5" height="7" rx="0.5" />
+      <rect x="6.25" y="4.5" width="3.5" height="7" rx="0.5" />
+      <rect x="10.5" y="4.5" width="3.5" height="7" rx="0.5" />
+    </>
+  ),
+  layoutV: (
+    <>
+      <rect x="4.5" y="2" width="7" height="3.5" rx="0.5" />
+      <rect x="4.5" y="6.25" width="7" height="3.5" rx="0.5" />
+      <rect x="4.5" y="10.5" width="7" height="3.5" rx="0.5" />
+    </>
+  ),
   trash: <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4" />,
 };
 

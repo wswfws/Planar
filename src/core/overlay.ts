@@ -138,6 +138,20 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
     ctx.stroke();
   }
 
+  // Auto-layout insertion marker.
+  const ins = editor.overlay.insertion;
+  if (ins) {
+    const [a, b] = ins.map((p) => editor.worldToScreen(p));
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
+
   // Marquee.
   const m = editor.overlay.marquee;
   if (m) {

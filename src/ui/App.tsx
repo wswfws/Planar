@@ -102,6 +102,13 @@ function useShortcuts(editor: Editor, openFile: () => void): void {
         }
       }
 
+      if (key === 'a' && e.shiftKey) {
+        e.preventDefault();
+        if (e.altKey) editor.removeAutoLayout();
+        else editor.addAutoLayout();
+        return;
+      }
+
       if (!e.altKey && !e.shiftKey && TOOL_KEYS[key]) editor.setTool(TOOL_KEYS[key]);
     };
 
