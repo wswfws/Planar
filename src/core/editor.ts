@@ -379,8 +379,21 @@ export class Editor {
     return text;
   }
 
+  /** Text of the last copy made inside this editor. */
+  get clipboardText(): string | null {
+    return this.clipboard;
+  }
+
+  /** Asks the layer tree to start renaming a layer. */
+  renameRequest: string | null = null;
+
+  requestRename(id: string): void {
+    this.renameRequest = id;
+    this.emit();
+  }
+
   /** Pastes clipboard text; returns false when it is not Planar data. */
-  paste(text: string | null = this.clipboard): boolean {
+  paste(text: string | null = this.clipboard, at?: Vec): boolean {
     let data: ClipboardData;
     try {
       data = JSON.parse(text ?? '');
@@ -407,10 +420,13 @@ export class Editor {
         placeNode(doc, node.id, root.center, root.rotation);
         created.push(node.id);
       }
-      // Bring pasted content into view if it landed off-screen.
+      // Paste at the pointer when asked, else keep the place but stay in view.
       const b = selectionBounds(doc, created);
       const view = this.visibleWorldRect();
-      if (b && !rectsIntersect(b, view)) {
+      if (b && at) {
+        const d = { x: Math.round(at.x - rectCenter(b).x), y: Math.round(at.y - rectCenter(b).y) };
+        for (const id of created) this.translateWorld(id, d);
+      } else if (b && !rectsIntersect(b, view)) {
         const d = { x: rectCenter(view).x - rectCenter(b).x, y: rectCenter(view).y - rectCenter(b).y };
         for (const id of created) this.translateWorld(id, d);
       }

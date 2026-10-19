@@ -107,6 +107,33 @@ under the starting point.
 Pasting or dropping an image file creates a rectangle with an image fill at
 the image's natural size.
 
+### Context menu
+
+Right-clicking opens a context menu that lists only what applies to the
+current situation, each with its keyboard shortcut so the shortcuts can be
+learnt from it. Disabled entries are shown greyed out rather than hidden
+when they are part of a group that otherwise applies.
+
+- Right-clicking a layer that is not selected selects it first; right-clicking
+  inside the current selection keeps it. Right-clicking empty canvas clears
+  the selection.
+- **Empty canvas:** paste here (at the pointer), select all, zoom to fit,
+  zoom to 100 %, variables, export page.
+- **Selection:** copy, copy as SVG, cut, paste here, duplicate, delete;
+  *Select layer* (submenu of every layer under the pointer, top-most first),
+  select parent, select children; *Order* submenu (bring to front, forward,
+  backward, send to back); group, frame selection, ungroup; add/remove auto
+  layout; create component — or for instances: go to main component, reset
+  changes, detach; show/hide, lock/unlock, rename; zoom to selection,
+  export PNG.
+- The same selection menu opens from a right-click on a row in the layer
+  tree.
+- The menu stays inside the window, opens submenus on hover or with the
+  right arrow key, and is fully usable from the keyboard (arrows, Enter,
+  Esc). It closes on Esc, on a click elsewhere, on scroll and when the window
+  loses focus.
+- Ctrl/Cmd+R renames the selected layer (in the layer tree).
+
 ## 6. Auto layout
 
 A frame can arrange its children automatically in a row or a column.

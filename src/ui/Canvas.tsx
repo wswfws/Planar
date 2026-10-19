@@ -5,7 +5,9 @@ import { drawOverlay } from '../core/overlay';
 import { drawPage, setImageLoadListener } from '../core/render';
 import { lineHeightPx, verticalOffset } from '../core/text';
 import { COMPONENT_DRAG_TYPE } from './AssetsPanel';
+import { useContextMenu } from './ContextMenu';
 import { useEditor, useEditorState } from './EditorContext';
+import { canvasMenu, selectionMenu } from './menus';
 
 export function readImageFile(file: File): Promise<{ src: string; width: number; height: number }> {
   return new Promise((resolve, reject) => {
@@ -22,8 +24,9 @@ export function readImageFile(file: File): Promise<{ src: string; width: number;
   });
 }
 
-export function Canvas() {
+export function Canvas({ onOpenVariables }: { onOpenVariables: () => void }) {
   const editor = useEditor();
+  const openMenu = useContextMenu();
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const interaction = useMemo(() => new Interaction(editor), [editor]);
@@ -167,7 +170,14 @@ export function Canvas() {
         // immediately blur a text editor opened by this click.
         onMouseDown={(e) => e.preventDefault()}
         onDoubleClick={(e) => interaction.doubleClick(input(e))}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          const rect = canvasRef.current!.getBoundingClientRect();
+          const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+          const kind = interaction.contextSelect(screen);
+          const at = editor.screenToWorld(screen);
+          openMenu(e.clientX, e.clientY, kind === 'selection' ? selectionMenu(editor, at) : canvasMenu(editor, at, onOpenVariables));
+        }}
       />
       <TextEditor />
     </div>

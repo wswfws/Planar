@@ -378,6 +378,26 @@ export class Interaction {
     }
   }
 
+  /**
+   * Prepares the selection for a right-click: a layer under the pointer is
+   * selected unless it already is; empty canvas clears the selection unless
+   * the click is inside a multi-selection. Returns what the menu is for.
+   */
+  contextSelect(screen: Vec): 'selection' | 'canvas' {
+    const { editor } = this;
+    if (editor.editingTextId) editor.finishTextEditing();
+    const world = editor.screenToWorld(screen);
+    const target = this.frameLabelAt(screen) ?? this.hitAt(world);
+    if (target) {
+      if (!editor.selection.includes(target)) editor.select([target]);
+      return 'selection';
+    }
+    const sb = editor.selection.length > 1 ? selectionBounds(this.doc, editor.selection) : null;
+    if (sb && world.x >= sb.x && world.y >= sb.y && world.x <= sb.x + sb.width && world.y <= sb.y + sb.height) return 'selection';
+    editor.select([]);
+    return 'canvas';
+  }
+
   // ------------------------------------------------------------- marquee
 
   private marqueePick(parentId: string, rect: Rect): string[] {

@@ -1017,3 +1017,88 @@ select:focus {
   color: var(--text);
   box-shadow: 0 0 0 1px var(--border);
 }
+
+/* ------------------------------------------------------------ context menu */
+
+.context-menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.context-menu {
+  position: fixed;
+  min-width: 220px;
+  max-width: 300px;
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
+  padding: 4px;
+  background: #121216;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  outline: none;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: default;
+}
+
+.context-menu button.active:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.context-menu button.danger.active:not(:disabled) {
+  background: var(--danger);
+}
+
+.context-menu button:disabled {
+  opacity: 0.38;
+}
+
+.context-menu .menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.context-menu .menu-label small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.context-menu button.active small,
+.context-menu button.active kbd {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.context-menu kbd {
+  flex: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+}
+
+.context-menu .menu-arrow {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+}

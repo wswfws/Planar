@@ -168,6 +168,27 @@ export function hitTest(
   return null;
 }
 
+/** Every visible layer under a world point, top-most first. */
+export function nodesAt(doc: PlanarDocument, parentId: string, point: Vec, tolerance: number): string[] {
+  const out: string[] = [];
+  const walk = (pid: string) => {
+    const parent = doc.nodes[pid];
+    for (let i = parent.children.length - 1; i >= 0; i--) {
+      const id = parent.children[i];
+      const node = doc.nodes[id];
+      if (!node || !node.visible) continue;
+      const local = apply(invert(worldMatrix(doc, id)), point);
+      const container = isFrameLike(node) || node.type === 'group';
+      // Same tolerance as clicking, so the clicked layer is always listed.
+      const inside = hitsShape(node, local, tolerance);
+      if (container && (inside || !(isFrameLike(node) && node.clipContent))) walk(id);
+      if (inside) out.push(id);
+    }
+  };
+  walk(parentId);
+  return out;
+}
+
 /** Deepest visible frame (or the page) containing a world point. */
 export function frameAt(doc: PlanarDocument, pageId: string, point: Vec, exclude: ReadonlySet<string>): string {
   const walk = (parentId: string): string | null => {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Editor, type Tool } from '../core/editor';
 import { Canvas, readImageFile } from './Canvas';
+import { ContextMenuProvider } from './ContextMenu';
 import { EditorContext, useEditorState } from './EditorContext';
 import { LayersPanel } from './LayersPanel';
 import { PropertiesPanel } from './PropertiesPanel';
@@ -55,6 +56,7 @@ function useShortcuts(editor: Editor, openFile: () => void): void {
         else if (e.code === 'BracketLeft') editor.reorder(e.shiftKey ? 'back' : 'backward');
         else if (key === 'h' && e.shiftKey) editor.toggleVisible();
         else if (key === 'l' && e.shiftKey) editor.toggleLocked();
+        else if (key === 'r' && !e.shiftKey && editor.selection.length === 1) editor.requestRename(editor.selection[0]);
         else if (key === 's') editor.saveFile();
         else if (key === 'o') openFile();
         else if (key === 'e' && e.shiftKey) editor.exportAs('png', 2);
@@ -190,12 +192,13 @@ export function App() {
 
   return (
     <EditorContext.Provider value={editor}>
+      <ContextMenuProvider>
       <div className="app">
         <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} />
         <div className="workspace">
           <LayersPanel />
           <main className="stage">
-            <Canvas />
+            <Canvas onOpenVariables={() => setVariablesOpen(true)} />
           </main>
           <PropertiesPanel />
         </div>
@@ -213,6 +216,7 @@ export function App() {
           }}
         />
       </div>
+      </ContextMenuProvider>
     </EditorContext.Provider>
   );
 }

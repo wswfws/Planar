@@ -1,8 +1,10 @@
-import { useState, type DragEvent, type MouseEvent } from 'react';
+import { useEffect, useState, type DragEvent, type MouseEvent } from 'react';
 import { getAncestors } from '../core/document';
 import { isAutoLayout } from '../core/layout';
 import { isContainer } from '../core/types';
 import { AssetsPanel } from './AssetsPanel';
+import { useContextMenu } from './ContextMenu';
+import { selectionMenu } from './menus';
 import { useEditorState } from './EditorContext';
 import { IconButton } from './controls';
 import { Icon, NODE_ICONS } from './icons';
@@ -84,6 +86,17 @@ export function LayersPanel() {
   const [dragIds, setDragIds] = useState<string[]>([]);
   const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null);
   const [tab, setTab] = useState<'layers' | 'assets'>('layers');
+  const openMenu = useContextMenu();
+
+  // Rename requests come from the canvas context menu and Ctrl/Cmd+R.
+  useEffect(() => {
+    const id = editor.renameRequest;
+    if (!id) return;
+    editor.renameRequest = null;
+    setTab('layers');
+    // Wait a frame so a closing menu cannot steal focus from the input.
+    setTimeout(() => setRenaming(id), 0);
+  }, [editor, editor.version]);
   const { doc } = editor;
 
   // Ancestors of the selection are always expanded.
@@ -131,6 +144,11 @@ export function LayersPanel() {
           draggable={renaming !== id}
           onClick={(e) => onRowClick(id, e)}
           onDoubleClick={() => setRenaming(id)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            if (!editor.selection.includes(id)) editor.select([id]);
+            openMenu(e.clientX, e.clientY, selectionMenu(editor));
+          }}
           onMouseEnter={() => {
             editor.hoverId = id;
             editor.emit();

@@ -27,6 +27,9 @@ shapes, text, layers, properties, undo and export — and was built with a
   and strokes, image fills, text settings, alignment
 - Numeric fields accept arithmetic (`120/3+8`) and can be scrubbed by dragging the label
 - Copy / paste (also between tabs), duplicate, group / ungroup, frame selection, z-order
+- Right-click context menus on the canvas and layer tree: contextual actions with
+  their shortcuts, *Select layer* (everything under the pointer), *Order*, paste
+  at the pointer, copy as SVG, rename
 - Paste or drop images
 - Undo / redo, autosave to browser storage
 - Save / open `.planar.json` files ([format](docs/FILE_FORMAT.md))
@@ -76,6 +79,8 @@ GitHub Actions* once).
 | Enter, Shift+Enter, Esc | Select children, select parent |
 | Arrows (+Shift) | Nudge 1 px (10 px) |
 | Ctrl/⌘+S, Ctrl/⌘+O | Save, open |
+| Ctrl/⌘+R | Rename layer |
+| Right-click | Context menu |
 
 ## Architecture
 
