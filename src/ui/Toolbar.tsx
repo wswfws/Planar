@@ -94,7 +94,7 @@ export function Toolbar({ onOpen }: { onOpen: () => void }) {
             '-',
             {
               label: 'About Planar',
-              action: () => window.open('https://github.com/wswfws/planar', '_blank', 'noopener'),
+              action: () => window.open('https://github.com/wswfws/Planar', '_blank', 'noopener'),
             },
           ]}
         />
