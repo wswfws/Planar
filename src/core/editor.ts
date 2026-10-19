@@ -605,7 +605,7 @@ export class Editor {
         if (unbind.length) node.bindings = Object.fromEntries(Object.entries(node.bindings).filter(([k]) => !unbind.includes(k as keyof SceneNode)));
         if (tracksOverrides(node)) {
           // Text sizes follow from content, so they are not overrides themselves.
-          const derived = node.type === 'text' ? ['height', ...(node.autoWidth ? ['width'] : [])] : [];
+          const derived = node.type === 'text' ? [...(node.autoWidth || node.autoHeight ? ['height'] : []), ...(node.autoWidth ? ['width'] : [])] : [];
           markOverrides(node, changed.filter((k) => !derived.includes(k) || (patch as Partial<SceneNode>)[k] !== undefined));
         }
       }

@@ -3,7 +3,7 @@ import { worldMatrix } from '../core/geometry';
 import { Interaction, type PointerInput } from '../core/interaction';
 import { drawOverlay } from '../core/overlay';
 import { drawPage, setImageLoadListener } from '../core/render';
-import { lineHeightPx } from '../core/text';
+import { lineHeightPx, verticalOffset } from '../core/text';
 import { COMPONENT_DRAG_TYPE } from './AssetsPanel';
 import { useEditor, useEditorState } from './EditorContext';
 
@@ -203,6 +203,7 @@ function TextEditor() {
         transform,
         width: (node.autoWidth ? node.width + node.fontSize : node.width) + 'px',
         height: node.height + 'px',
+        paddingTop: Math.max(0, verticalOffset(node)) + 'px',
         font: `${node.fontWeight} ${node.fontSize}px ${node.fontFamily}`,
         lineHeight: `${lineHeightPx(node)}px`,
         textAlign: node.textAlign,

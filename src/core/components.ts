@@ -21,7 +21,7 @@ const ROOT_OWN = new Set<keyof SceneNode>([
 ]);
 
 /** Properties that make an instance's text need re-measuring. */
-const TEXT_FIELDS = ['characters', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'autoWidth', 'bindings'];
+const TEXT_FIELDS = ['characters', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'autoWidth', 'autoHeight', 'bindings'];
 
 /** True when the node sits inside an instance (not the instance itself). */
 export function isInInstance(doc: PlanarDocument, id: string): boolean {

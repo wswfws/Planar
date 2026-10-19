@@ -75,10 +75,12 @@ interface NumberFieldProps {
   disabled?: boolean;
   /** Optional variable binding for this field. */
   bind?: BindProps;
+  /** Shown when the value is null (default "Mixed"). */
+  placeholder?: string;
 }
 
 /** Numeric input with arithmetic support and a draggable (scrub) label. */
-export function NumberField({ label, value, onChange, min = -Infinity, max = Infinity, step = 1, precision = 2, suffix, title, disabled, bind }: NumberFieldProps) {
+export function NumberField({ label, value, onChange, min = -Infinity, max = Infinity, step = 1, precision = 2, suffix, title, disabled, bind, placeholder }: NumberFieldProps) {
   // Text being typed while the field is focused; otherwise the live value is shown.
   const [draft, setDraft] = useState<string | null>(null);
   const skipCommit = useRef(false);
@@ -124,7 +126,7 @@ export function NumberField({ label, value, onChange, min = -Infinity, max = Inf
         value={draft ?? boundName ?? format(value, precision)}
         disabled={disabled}
         readOnly={!!boundName}
-        placeholder={value === null ? 'Mixed' : undefined}
+        placeholder={value === null ? placeholder ?? 'Mixed' : undefined}
         onFocus={(e) => {
           setDraft(format(value, precision));
           e.target.select();

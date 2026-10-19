@@ -42,7 +42,7 @@ function outerSize(n: SceneNode): { w: number; h: number } {
 export function effectiveSizing(doc: PlanarDocument, node: SceneNode, axis: 'h' | 'v'): Sizing {
   const raw = axis === 'h' ? node.sizingH : node.sizingV;
   if (raw === 'fill') return isLaidOut(doc, node) ? 'fill' : 'fixed';
-  if (node.type === 'text') return axis === 'h' ? (node.autoWidth ? 'hug' : 'fixed') : 'hug';
+  if (node.type === 'text') return axis === 'h' ? (node.autoWidth ? 'hug' : 'fixed') : node.autoWidth || node.autoHeight ? 'hug' : 'fixed';
   if (raw === 'hug') return isAutoLayout(node) ? 'hug' : 'fixed';
   return 'fixed';
 }
@@ -51,7 +51,9 @@ function setSize(doc: PlanarDocument, node: SceneNode, axis: Axis, value: number
   const v = Math.max(0, value);
   if (Math.abs(node[axis.size] - v) < 1e-9) return;
   node[axis.size] = v;
-  if (node.type === 'text' && axis === H) {
+  if (node.type === 'text') {
+    if (axis === H) node.autoHeight = node.autoWidth || node.autoHeight;
+    else node.autoHeight = false;
     node.autoWidth = false;
     node.height = measureTextNode(node).height;
   }

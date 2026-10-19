@@ -18,7 +18,7 @@ export const BINDABLE: Record<string, VariableType> = {
   visible: 'boolean',
 };
 
-const TEXT_LAYOUT = new Set(['width', 'fontSize', 'lineHeight', 'characters']);
+const TEXT_LAYOUT = new Set(['width', 'height', 'fontSize', 'lineHeight', 'characters']);
 
 export function defaultValue(type: VariableType): VariableValue {
   return type === 'color' ? '#7B7BF0' : type === 'number' ? 0 : type === 'string' ? 'Text' : true;
@@ -62,8 +62,15 @@ export function resolveVariables(doc: PlanarDocument): void {
       const value = variableValue(doc, v, mode);
       const rec = node as unknown as Record<string, unknown>;
       if (rec[field] !== value) {
-        rec[field] = field === 'fontSize' || field === 'lineHeight' ? Math.max(Number(value), field === 'fontSize' ? 1 : 0.1) : value;
-        if (field === 'width' && node.type === 'text') node.autoWidth = false;
+        rec[field] = field === 'fontSize' ? Math.max(Number(value), 1) : field === 'lineHeight' ? Math.max(Number(value), 0) : value;
+        if (field === 'width' && node.type === 'text') {
+          node.autoHeight = node.autoWidth || node.autoHeight;
+          node.autoWidth = false;
+        }
+        if (field === 'height' && node.type === 'text') {
+          node.autoWidth = false;
+          node.autoHeight = false;
+        }
         if (TEXT_LAYOUT.has(field)) textChanged = true;
       }
     }

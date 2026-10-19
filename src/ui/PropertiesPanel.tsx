@@ -4,7 +4,7 @@ import type { AlignKind, Editor } from '../core/editor';
 import { hasOverrides, isInInstance, owningInstance } from '../core/components';
 import { scaleChildren } from '../core/geometry';
 import { effectiveSizing, isAutoLayout, isLaidOut } from '../core/layout';
-import { isFrameLike, type CounterAlign, type Paint, type PrimaryAlign, type SceneNode, type Sizing, type TextAlign } from '../core/types';
+import { isFrameLike, type CounterAlign, type Paint, type PrimaryAlign, type SceneNode, type Sizing, type TextAlign, type TextAlignVertical } from '../core/types';
 import { BINDABLE } from '../core/variables';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
@@ -250,13 +250,24 @@ function BindVisible({ editor, nodes }: { editor: Editor; nodes: SceneNode[] }) 
   return <BindRow label="Visible" bind={bindFor(editor, nodes, 'visible')} />;
 }
 
+type TextSizing = 'width' | 'height' | 'fixed';
+
+function textSizing(n: SceneNode): TextSizing {
+  return n.autoWidth ? 'width' : n.autoHeight ? 'height' : 'fixed';
+}
+
+const TEXT_SIZING: { mode: TextSizing; label: string; title: string; patch: Partial<SceneNode> }[] = [
+  { mode: 'width', label: 'Auto W', title: 'Auto width: grows with the text', patch: { autoWidth: true, autoHeight: true } },
+  { mode: 'height', label: 'Auto H', title: 'Auto height: fixed width, wraps', patch: { autoWidth: false, autoHeight: true } },
+  { mode: 'fixed', label: 'Fixed', title: 'Fixed size', patch: { autoWidth: false, autoHeight: false } },
+];
+
 const SIZING_LABEL: Record<Sizing, string> = { fixed: 'Fixed', hug: 'Hug', fill: 'Fill' };
 
 function SizingRow({ editor, node }: { editor: Editor; node: SceneNode }) {
   const { doc } = editor;
   const laidOut = isLaidOut(doc, node);
-  const options = (axis: 'h' | 'v'): Sizing[] => {
-    if (node.type === 'text' && axis === 'v') return [];
+  const options = (): Sizing[] => {
     const out: Sizing[] = ['fixed'];
     if (isAutoLayout(node) || node.type === 'text') out.push('hug');
     if (laidOut) out.push('fill');
@@ -264,13 +275,29 @@ function SizingRow({ editor, node }: { editor: Editor; node: SceneNode }) {
   };
   const apply = (axis: 'h' | 'v', v: Sizing) => {
     if (node.type === 'text' && axis === 'h') {
-      editor.updateNodes([node.id], v === 'fill' ? { sizingH: 'fill' } : { sizingH: 'fixed', autoWidth: v === 'hug' });
+      editor.updateNodes(
+        [node.id],
+        v === 'fill'
+          ? { sizingH: 'fill' }
+          : v === 'hug'
+            ? { sizingH: 'fixed', autoWidth: true }
+            : { sizingH: 'fixed', autoWidth: false, autoHeight: node.autoWidth || node.autoHeight },
+      );
+    } else if (node.type === 'text') {
+      editor.updateNodes(
+        [node.id],
+        v === 'fill'
+          ? { sizingV: 'fill' }
+          : v === 'hug'
+            ? { sizingV: 'fixed', autoHeight: true }
+            : { sizingV: 'fixed', autoWidth: false, autoHeight: false },
+      );
     } else {
       editor.updateNodes([node.id], axis === 'h' ? { sizingH: v } : { sizingV: v });
     }
   };
-  const h = options('h');
-  const v = options('v');
+  const h = options();
+  const v = options();
   if (h.length < 2 && v.length < 2) return null;
   const select = (axis: 'h' | 'v', opts: Sizing[], label: string) =>
     opts.length > 1 ? (
@@ -435,7 +462,14 @@ export function PropertiesPanel() {
       n[key] = Math.max(0, v);
       if (key === 'width') n.sizingH = 'fixed';
       else n.sizingV = 'fixed';
-      if (n.type === 'text' && key === 'width') n.autoWidth = false;
+      if (n.type === 'text' && key === 'width') {
+        n.autoHeight = n.autoWidth || n.autoHeight;
+        n.autoWidth = false;
+      }
+      if (n.type === 'text' && key === 'height') {
+        n.autoWidth = false;
+        n.autoHeight = false;
+      }
       if (n.type === 'group' && old > 0) {
         scaleChildren(editor.doc, n.id, key === 'width' ? v / old : 1, key === 'height' ? v / old : 1);
       }
@@ -563,10 +597,11 @@ export function PropertiesPanel() {
             />
             <NumberField
               label="↕"
-              title="Line height (× font size)"
+              title="Line height (× font size, 0 = auto)"
               step={0.1}
-              value={common(texts, (n) => n.lineHeight)}
-              min={0.5}
+              value={common(texts, (n) => n.lineHeight || null)}
+              placeholder={texts.every((n) => !n.lineHeight) ? 'Auto' : 'Mixed'}
+              min={0}
               onChange={(v) => editor.updateNodes(textIds, { lineHeight: v })}
               bind={bindFor(editor, texts, 'lineHeight')}
             />
@@ -582,14 +617,30 @@ export function PropertiesPanel() {
               ))}
             </div>
           </div>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={texts.every((t) => t.autoWidth)}
-              onChange={(e) => editor.updateNodes(textIds, { autoWidth: e.target.checked })}
-            />
-            Auto width
-          </label>
+          <div className="segmented" role="group" aria-label="Text sizing">
+            {TEXT_SIZING.map((m) => (
+              <button
+                key={m.mode}
+                type="button"
+                className={common(texts, textSizing) === m.mode ? 'active' : ''}
+                title={m.title}
+                onClick={() => editor.updateNodes(textIds, m.patch)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <div className="align-row">
+            {(['top', 'middle', 'bottom'] as TextAlignVertical[]).map((a) => (
+              <IconButton
+                key={a}
+                icon={a === 'top' ? 'alignTop' : a === 'middle' ? 'alignVCenter' : 'alignBottom'}
+                title={`Align text ${a}${common(texts, textSizing) === 'fixed' ? '' : ' (fixed size only)'}`}
+                active={common(texts, (n) => n.textAlignVertical) === a}
+                onClick={() => editor.updateNodes(textIds, { textAlignVertical: a })}
+              />
+            ))}
+          </div>
           <BindRow label="Content" bind={bindFor(editor, texts, 'characters')} />
         </Section>
       )}

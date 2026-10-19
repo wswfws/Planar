@@ -22,6 +22,7 @@ export interface ImagePaint {
 export type Paint = SolidPaint | ImagePaint;
 
 export type TextAlign = 'left' | 'center' | 'right';
+export type TextAlignVertical = 'top' | 'middle' | 'bottom';
 
 export type LayoutMode = 'none' | 'horizontal' | 'vertical';
 export type PrimaryAlign = 'start' | 'center' | 'end' | 'space-between';
@@ -62,6 +63,9 @@ export interface SceneNode {
   lineHeight: number;
   textAlign: TextAlign;
   autoWidth: boolean;
+  /** Height follows content (when not autoWidth); false = fixed size. */
+  autoHeight: boolean;
+  textAlignVertical: TextAlignVertical;
 
   points: Vec[];
   closed: boolean;

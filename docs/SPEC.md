@@ -15,9 +15,19 @@ observable behaviour only. See [`../CLEAN_ROOM.md`](../CLEAN_ROOM.md).
     children. A group with no children is removed.
   - **Rectangle** (with corner radius), **Ellipse**.
   - **Vector**: a polyline or polygon (open or closed), also used for lines.
-  - **Text**: a block of text with font family, size, weight, alignment and
-    line height. It is either *auto width* (grows with content) or *fixed
-    width* (wraps).
+  - **Text**: a block of text with font family, size, weight, horizontal and
+    vertical alignment and line height. Its box has one of three sizing
+    modes:
+    - *auto width* — width and height grow with the content (no wrapping);
+    - *auto height* — fixed width, lines wrap, height grows with the content;
+    - *fixed size* — width and height are set by the user; lines wrap and
+      the content is placed at the top, middle or bottom of the box and may
+      overflow it.
+    Each line is as tall as font size × line height — or, with line height
+    *Auto* (the default), as tall as the font's own ascent + descent — with
+    the glyphs centred
+    in the line the same way the browser lays out text, so the text looks
+    the same while editing and on the canvas.
 - Every layer has: name, position (x, y) relative to its parent container,
   width, height, rotation in degrees around its centre, opacity, visible flag,
   locked flag, a list of fills, a list of strokes and a stroke width.
@@ -68,7 +78,8 @@ under the starting point.
   the page (layers inside groups stay in their group).
 - Eight resize handles. Shift keeps aspect ratio, Alt resizes from centre.
   Resizing a group scales its children; resizing a frame does not. Resizing
-  a text layer makes it fixed width.
+  a text layer horizontally switches it to *auto height*; resizing it
+  vertically (or typing a height) switches it to *fixed size*.
 - Just outside each corner the pointer rotates the selection; Shift snaps to
   15° steps.
 - Arrow keys nudge by 1 px, Shift+arrow by 10 px.
@@ -111,7 +122,8 @@ A frame can arrange its children automatically in a row or a column.
 - **Sizing** (per layer, per axis):
   - *Fixed* — the size does not change by itself;
   - *Hug* — an auto-layout frame shrinks or grows to fit its content plus
-    padding; for text, hug width means auto width;
+    padding; for text, hug width means auto width and hug height means
+    auto height;
   - *Fill* — a child of an auto-layout frame stretches to take the remaining
     space on the main axis (shared equally between fill items) or the full
     content box on the cross axis.
@@ -193,7 +205,8 @@ A frame can arrange its children automatically in a row or a column.
   - X, Y, W, H, rotation, corner radius, clip content;
   - opacity;
   - fills and strokes (add, remove, hide, colour, opacity, stroke width);
-  - text settings (family, size, weight, line height, alignment, auto width);
+  - text settings (family, size, weight, line height, horizontal and
+    vertical alignment, sizing mode: auto width / auto height / fixed size);
   - export (PNG at 1×/2×/3× or SVG) for the selection, or for the whole page
     when nothing is selected.
 - Numeric fields accept arithmetic (`100+20`, `50*2`) and can be scrubbed by

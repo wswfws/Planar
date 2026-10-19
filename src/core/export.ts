@@ -1,7 +1,7 @@
 import { localMatrix, parentWorldMatrix, selectionBounds, vectorPoints } from './geometry';
 import { clean, type Mat, type Rect } from './math';
 import { drawNode } from './render';
-import { layoutLines, lineHeightPx } from './text';
+import { baselineInLine, lineHeightPx, nodeLines, verticalOffset } from './text';
 import { isFrameLike, type PlanarDocument, type SceneNode } from './types';
 
 function esc(s: string): string {
@@ -47,12 +47,13 @@ function nodeToSvg(doc: PlanarDocument, id: string): string {
     const lh = lineHeightPx(node);
     const anchor = node.textAlign === 'center' ? 'middle' : node.textAlign === 'right' ? 'end' : 'start';
     const x = node.textAlign === 'center' ? node.width / 2 : node.textAlign === 'right' ? node.width : 0;
-    const lines = layoutLines(node, node.autoWidth ? null : node.width);
+    const lines = nodeLines(node);
+    const top = verticalOffset(node) + baselineInLine(node);
     for (const f of node.fills) {
       if (!f.visible || f.type !== 'solid') continue;
       parts.push(
-        `<text font-family="${esc(node.fontFamily)}" font-size="${node.fontSize}" font-weight="${node.fontWeight}" text-anchor="${anchor}" dominant-baseline="central" fill="${f.color}"${f.opacity < 1 ? ` fill-opacity="${f.opacity}"` : ''}>` +
-          lines.map((l, i) => `<tspan x="${clean(x)}" y="${clean(i * lh + lh / 2)}">${esc(l)}</tspan>`).join('') +
+        `<text font-family="${esc(node.fontFamily)}" font-size="${node.fontSize}" font-weight="${node.fontWeight}" text-anchor="${anchor}" fill="${f.color}"${f.opacity < 1 ? ` fill-opacity="${f.opacity}"` : ''}>` +
+          lines.map((l, i) => `<tspan x="${clean(x)}" y="${clean(top + i * lh)}">${esc(l)}</tspan>`).join('') +
           `</text>`,
       );
     }

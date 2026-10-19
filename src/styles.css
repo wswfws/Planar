@@ -990,3 +990,30 @@ select:focus {
     display: none;
   }
 }
+
+.segmented {
+  display: flex;
+  padding: 2px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.segmented button {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 2px;
+  white-space: nowrap;
+  font-size: 11px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border);
+}

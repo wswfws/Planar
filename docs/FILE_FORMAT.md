@@ -49,9 +49,11 @@ their default value.
 | `fontFamily` | string | CSS font family |
 | `fontSize` | number | px |
 | `fontWeight` | number | 100–900 |
-| `lineHeight` | number | Multiplier of font size |
+| `lineHeight` | number | Multiplier of font size; `0` = auto (font ascent + descent) |
 | `textAlign` | `left` \| `center` \| `right` | |
 | `autoWidth` | boolean | Text grows horizontally instead of wrapping |
+| `autoHeight` | boolean | Text height follows its content (ignored when `autoWidth`) |
+| `textAlignVertical` | `top` \| `middle` \| `bottom` | Placement of text in a taller box |
 | `points` | {x, y}[] | Vector points, normalised to 0–1 of the box |
 | `closed` | boolean | Vector is a closed polygon |
 | `layoutMode` | `none` \| `horizontal` \| `vertical` | Frame auto layout direction |
@@ -69,7 +71,7 @@ their default value.
 
 Older files simply lack newer fields; readers fill in the defaults
 (`none`, `10`, `0`, `start`, `start`, `fixed`, `false`, `""`, `""`, `[]`,
-`{}`, `""`), an empty variable list and a single mode.
+`{}`, `""`, `autoHeight: true`, `textAlignVertical: "top"`), an empty variable list and a single mode.
 
 ## Components and instances
 

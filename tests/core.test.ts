@@ -174,3 +174,45 @@ describe('controls', () => {
     expect(normalizeHex('zz')).toBe(null);
   });
 });
+
+describe('text sizing', () => {
+  const setupText = () => {
+    const editor = new Editor(createDocument(), { autosave: false });
+    const t = createNode('text', { characters: 'one two three four five', fontSize: 20, lineHeight: 1.2 });
+    editor.change((doc) => insertNode(doc, t, editor.pageId));
+    editor.updateNodes([t.id], { characters: t.characters });
+    return { editor, id: t.id };
+  };
+
+  it('auto width hugs content on both axes', () => {
+    const { editor, id } = setupText();
+    const n = editor.doc.nodes[id];
+    expect(n.autoWidth).toBe(true);
+    expect(n.height).toBe(24);
+    expect(n.width).toBeGreaterThan(100);
+  });
+
+  it('auto height wraps to the width and grows downwards', () => {
+    const { editor, id } = setupText();
+    editor.updateNodes([id], { autoWidth: false, autoHeight: true, width: 60 });
+    expect(editor.doc.nodes[id].height).toBeGreaterThan(24);
+  });
+
+  it('fixed size keeps a typed height and aligns vertically', async () => {
+    const { verticalOffset } = await import('../src/core/text');
+    const { editor, id } = setupText();
+    editor.updateNodes([id], { autoWidth: false, autoHeight: false, height: 200, textAlignVertical: 'bottom' });
+    const n = editor.doc.nodes[id];
+    expect(n.height).toBe(200);
+    expect(verticalOffset(n)).toBe(200 - 24);
+    editor.updateNodes([id], { fontSize: 30 });
+    expect(editor.doc.nodes[id].height).toBe(200);
+  });
+
+  it('uses the font height for auto line height', () => {
+    const { editor, id } = setupText();
+    editor.updateNodes([id], { lineHeight: 0 });
+    // Headless metrics fall back to ascent 0.8em + descent 0.2em.
+    expect(editor.doc.nodes[id].height).toBe(20);
+  });
+});

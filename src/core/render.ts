@@ -1,5 +1,5 @@
 import { localMatrix, vectorPoints } from './geometry';
-import { fontString, layoutLines, lineHeightPx } from './text';
+import { baselineInLine, fontString, lineHeightPx, nodeLines, verticalOffset } from './text';
 import { isFrameLike, type ImagePaint, type Paint, type PlanarDocument, type SceneNode } from './types';
 
 const images = new Map<string, HTMLImageElement>();
@@ -68,12 +68,13 @@ function drawText(ctx: CanvasRenderingContext2D, node: SceneNode, paint: Paint):
   if (paint.type !== 'solid') return;
   ctx.fillStyle = hexToRgba(paint.color, paint.opacity);
   ctx.font = fontString(node);
-  ctx.textBaseline = 'middle';
+  ctx.textBaseline = 'alphabetic';
   ctx.textAlign = node.textAlign;
   const lh = lineHeightPx(node);
+  const top = verticalOffset(node) + baselineInLine(node);
   const x = node.textAlign === 'center' ? node.width / 2 : node.textAlign === 'right' ? node.width : 0;
-  layoutLines(node, node.autoWidth ? null : node.width).forEach((line, i) => {
-    ctx.fillText(line, x, i * lh + lh / 2);
+  nodeLines(node).forEach((line, i) => {
+    ctx.fillText(line, x, top + i * lh);
   });
 }
 

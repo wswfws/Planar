@@ -587,6 +587,7 @@ export class Interaction {
           rotation: orig.rotation,
           fontSize: orig.fontSize,
           autoWidth: orig.autoWidth,
+          autoHeight: orig.autoHeight,
           points: orig.points,
         });
       }
@@ -598,10 +599,7 @@ export class Interaction {
         if (frame.single) {
           node.width = W;
           node.height = H;
-          if (node.type === 'text') {
-            node.autoWidth = false;
-            this.editor.syncTextSize(node);
-          }
+          if (node.type === 'text') this.resizeText(node, orig, hx !== 0, hy !== 0);
           center = apply(frame.matrix, { x: l + node.width / 2, y: t + node.height / 2 });
         } else {
           const q = apply(invert(frame.matrix), c0.center);
@@ -615,10 +613,7 @@ export class Interaction {
           node.points = orig.points.map((pt) => ({ x: flipX ? 1 - pt.x : pt.x, y: flipY ? 1 - pt.y : pt.y }));
         }
         if (node.type === 'group') scaleChildren(doc, id, node.width / (orig.width || 1), node.height / (orig.height || 1));
-        if (node.type === 'text') {
-          node.autoWidth = false;
-          this.editor.syncTextSize(node);
-        }
+        if (node.type === 'text') this.resizeText(node, orig, sx !== 1, sy !== 1);
         placeNode(doc, id, center, c0.rotation);
         if (hx) node.sizingH = 'fixed';
         if (hy) node.sizingV = 'fixed';
@@ -629,6 +624,17 @@ export class Interaction {
         markOverrides(node, touched);
       }
     });
+  }
+
+  /**
+   * Horizontal resizing makes text wrap with an auto height; vertical
+   * resizing fixes the box size.
+   */
+  private resizeText(node: SceneNode, orig: SceneNode, horizontal: boolean, vertical: boolean): void {
+    if (!horizontal && !vertical) return;
+    node.autoWidth = false;
+    node.autoHeight = vertical ? false : orig.autoWidth || orig.autoHeight;
+    this.editor.syncTextSize(node);
   }
 
   // ------------------------------------------------------------- rotate
