@@ -5,6 +5,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { parseDocument } from '../src/core/document';
 import { META_KEYS, type Op } from '../src/core/ops';
+import { initCanvas } from '../src/agent/raster';
+import { createMcpHandler } from './mcp-http';
 import { ROOM_ID, RoomStore, type Room } from './rooms';
 
 export interface ServerOptions {
@@ -92,10 +94,21 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
     createReadStream(file).on('error', () => res.end()).pipe(res);
   };
 
+  await initCanvas();
+  let boundPort = opts.port;
+  const mcp = createMcpHandler({ token: opts.token, localServer: () => `http://127.0.0.1:${boundPort}` });
+
   const http = createServer((req, res) => {
+    if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
+      mcp.handle(req, res).catch((e) => {
+        console.error('[planar] mcp error:', e);
+        if (!res.headersSent) res.writeHead(500).end('MCP error');
+      });
+      return;
+    }
     if (req.url?.startsWith('/api/info')) {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-      res.end(JSON.stringify({ planar: true, protocol: 1, auth: !!opts.token }));
+      res.end(JSON.stringify({ planar: true, protocol: 1, auth: !!opts.token, mcp: '/mcp' }));
       return;
     }
     if (req.url === '/healthz') {
@@ -209,11 +222,13 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
   await new Promise<void>((resolve) => http.listen(opts.port, opts.host ?? '0.0.0.0', resolve));
   const address = http.address();
   const port = typeof address === 'object' && address ? address.port : opts.port;
+  boundPort = port;
 
   return {
     port,
     close: async () => {
       clearInterval(heartbeat);
+      mcp.close();
       for (const s of wss.clients) s.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => http.close(() => resolve()));

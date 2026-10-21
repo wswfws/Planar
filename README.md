@@ -53,6 +53,22 @@ undo, reconnection with offline edits. See
 DOMAIN=planar.example.com PLANAR_TOKEN=$(openssl rand -hex 16) docker compose up -d --build
 ```
 
+## AI agents (MCP)
+
+Planar has its own [MCP server](docs/MCP.md) for coding and design agents —
+built for agents: one `create` call builds a whole nested layout, `inspect`
+returns layers in the same vocabulary `update` accepts, outlines are compact,
+`screenshot` lets the agent see its work, and `code` / `tokens` produce React
+(typed props, variants), HTML/CSS (auto layout → flexbox) and CSS variables.
+In a shared room the agent works live next to people.
+
+```bash
+# Remote, on your Planar server
+claude mcp add --transport http planar https://planar.example.com/mcp --header "Authorization: Bearer <token>"
+# Local, on a file
+claude mcp add planar -- node /path/to/Planar/dist-mcp/index.js --file ./design.planar.json
+```
+
 ## Getting started
 
 Requires Node.js 18 or newer.
@@ -70,6 +86,7 @@ Then open http://localhost:5173.
 | `npm test` | Run unit tests (Vitest) |
 | `npm run build` | Type-check and build to `dist/` |
 | `npm run preview` | Serve the production build |
+| `npm run mcp` | Build and run the MCP server over stdio |
 | `npm run server` | Build and run the collaboration server (port 8080; the dev server proxies to it) |
 
 The production build is a static site; `.github/workflows/pages.yml` deploys

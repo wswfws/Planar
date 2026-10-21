@@ -7,17 +7,21 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build && npm run build:server",
+    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build && npm run build:server && npm run build:mcp",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json",
     "build:server": "esbuild server/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist-server/index.js --packages=external --log-level=warning",
-    "server": "npm run build:server && node dist-server/index.js"
+    "server": "npm run build:server && node dist-server/index.js",
+    "build:mcp": "esbuild mcp/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist-mcp/index.js --packages=external --log-level=warning --banner:js=\"#!/usr/bin/env node\"",
+    "mcp": "npm run build:mcp && node dist-mcp/index.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "ws": "8.18.0"
+    "ws": "8.18.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
@@ -32,5 +36,11 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas": "^1.0.10"
+  },
+  "bin": {
+    "planar-mcp": "dist-mcp/index.js"
   }
 }

@@ -349,7 +349,20 @@ Planar server (see [SELF_HOSTING.md](SELF_HOSTING.md); wire protocol in
 - **Access.** Room ids are unguessable. A server can additionally require
   an access token. There are no per-user accounts or permissions yet.
 
-## 12. Out of scope (roadmap)
+## 12. AI agents (MCP) and code
+
+- Planar provides an MCP server for AI agents, locally over stdio (on a
+  file or a room) and remotely at `/mcp` on a Planar server (rooms only, no
+  file access). Tools and vocabulary are specified in [MCP.md](MCP.md).
+- Agent edits are ordinary edits: in a room the agent is a participant
+  named *Agent* with its own pointer and selection, and its changes are
+  undoable by the agent.
+- The properties panel has a **Code** section (collapsed by default) that
+  shows React + CSS, HTML + CSS, CSS, or the CSS design tokens for the
+  selected layer, with a copy button. It uses the same generator as the
+  agent `code` tool.
+
+## 13. Out of scope (roadmap)
 
 Comments, accounts and permissions,
 variable collections and aliases, wrapping auto layout,

@@ -1,9 +1,21 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2022"],
-    "types": ["node"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
     "noEmit": true
   },
-  "include": ["server", "src/core/ops.ts", "src/core/document.ts", "src/core/types.ts", "src/core/math.ts"]
+  "include": [
+    "server",
+    "mcp",
+    "src/core",
+    "src/agent",
+    "src/collab",
+    "src/codegen"
+  ]
 }

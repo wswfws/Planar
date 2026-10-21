@@ -52,6 +52,15 @@ are random and long), leave `PLANAR_TOKEN` empty.
 Make sure ports 80 and 443 are open in the server's firewall
 (`ufw allow 80,443/tcp`).
 
+## AI agents
+
+The server also hosts the Planar MCP endpoint at `https://planar.example.com/mcp`
+(same token, sent as `Authorization: Bearer <token>`). See [MCP.md](MCP.md):
+
+```bash
+claude mcp add --transport http planar https://planar.example.com/mcp --header "Authorization: Bearer <token>"
+```
+
 ## Updating
 
 ```bash

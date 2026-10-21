@@ -8,6 +8,8 @@ RUN npm run build
 
 FROM node:22-alpine
 WORKDIR /app
+# Fonts for agent screenshots (MCP).
+RUN apk add --no-cache fontconfig font-dejavu
 ENV NODE_ENV=production PORT=8080 DATA_DIR=/data
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

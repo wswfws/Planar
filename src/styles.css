@@ -1358,3 +1358,16 @@ select:focus {
 .dialog-footer a.hint {
   margin-left: auto;
 }
+
+.code-view {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0 12px;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font: 11px/1.5 ui-monospace, 'Cascadia Code', Consolas, monospace;
+  white-space: pre;
+  user-select: text;
+}

@@ -9,7 +9,16 @@ export function setImageLoadListener(fn: (() => void) | null): void {
   onImageLoad = fn;
 }
 
-function getImage(src: string): HTMLImageElement | null {
+let imageProvider: ((src: string) => CanvasImageSource | null) | null = null;
+
+/** Lets non-browser hosts supply decoded images (e.g. for agent screenshots). */
+export function setImageProvider(fn: ((src: string) => CanvasImageSource | null) | null): void {
+  imageProvider = fn;
+}
+
+function getImage(src: string): CanvasImageSource | null {
+  if (imageProvider) return imageProvider(src);
+  if (typeof Image === 'undefined') return null;
   let img = images.get(src);
   if (!img) {
     img = new Image();
@@ -52,12 +61,12 @@ function drawImagePaint(ctx: CanvasRenderingContext2D, node: SceneNode, paint: I
   const img = getImage(paint.src);
   if (!img) return;
   const { width: w, height: h } = node;
-  const scale =
-    paint.scaleMode === 'fit'
-      ? Math.min(w / img.naturalWidth, h / img.naturalHeight)
-      : Math.max(w / img.naturalWidth, h / img.naturalHeight);
-  const iw = img.naturalWidth * scale;
-  const ih = img.naturalHeight * scale;
+  const size = img as unknown as { naturalWidth?: number; naturalHeight?: number; width: number; height: number };
+  const nw = size.naturalWidth || size.width;
+  const nh = size.naturalHeight || size.height;
+  const scale = paint.scaleMode === 'fit' ? Math.min(w / nw, h / nh) : Math.max(w / nw, h / nh);
+  const iw = nw * scale;
+  const ih = nh * scale;
   ctx.save();
   ctx.clip();
   ctx.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);

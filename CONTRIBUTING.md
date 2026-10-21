@@ -30,6 +30,9 @@ src/core/      editor engine, no React
   export.ts      PNG and SVG export
   ops.ts         document diffs/ops, tree repair (undo + collaboration)
 src/collab/    collaboration client and session helpers
+src/codegen/   React / HTML / CSS / token generation
+src/agent/     MCP tools: vocabulary, outlines, sessions, screenshots
+mcp/           MCP server entry (stdio)
 server/        collaboration server (Node.js + ws)
 src/ui/        React panels and canvas host
 tests/         Vitest unit tests

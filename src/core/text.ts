@@ -4,6 +4,12 @@ type Measurer = (text: string, font: string, fontSize: number) => number;
 
 let ctx: CanvasRenderingContext2D | null | undefined;
 
+/** Lets non-browser hosts (the agent server) provide a canvas for measuring. */
+export function setMeasureContext(context: CanvasRenderingContext2D | null): void {
+  ctx = context;
+  metricsCache.clear();
+}
+
 const measureWidth: Measurer = (text, font, fontSize) => {
   if (ctx === undefined) {
     ctx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
