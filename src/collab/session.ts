@@ -11,6 +11,8 @@ export interface Me {
   username: string;
   displayName: string;
   color: string;
+  /** May open /admin. */
+  admin?: boolean;
 }
 
 export type LinkAccess = 'none' | 'view' | 'edit';
@@ -94,6 +96,83 @@ export const files = {
   transfer: (id: string, username: string) => api<{ file: FileInfo }>('POST', `/api/files/${id}/transfer`, { username }).then((r) => r.file),
   downloadUrl: (id: string) => `/api/files/${id}/download`,
   thumbnailUrl: (id: string, version: number) => `/api/files/${id}/thumbnail.png?v=${version}`,
+};
+
+// ---- admin --------------------------------------------------------------------
+
+export interface AdminSettings {
+  registrationOpen: boolean;
+  maxFilesPerUser: number;
+  maxFileBytes: number;
+}
+
+export interface AdminOverview {
+  now: number;
+  gauges: {
+    users: number;
+    blockedUsers: number;
+    usersOnline: number;
+    sockets: number;
+    openFiles: number;
+    files: number;
+    trashedFiles: number;
+    apiKeys: number;
+    sessions: number;
+    mcpSessions: number;
+    dataBytes: number;
+    disk: { free: number; total: number } | null;
+    rss: number;
+    heapUsed: number;
+    memTotal: number;
+    memFree: number;
+    load: number[];
+    cpus: number;
+    uptime: number;
+    node: string;
+  };
+  counters: Record<string, number>;
+  series: { t: number; online: number; ops: number; requests: number; errors: number; rss: number }[];
+  days: { day: string; registrations: number; active: number; edits: number; requests: number; errors: number }[];
+  events: { t: number; kind: string; text: string }[];
+  alerts: { configured: boolean };
+  settings: AdminSettings;
+}
+
+export interface AdminUser extends Me {
+  createdAt: number;
+  lastSeenAt: number | null;
+  blocked: boolean;
+  admin: boolean;
+  online: boolean;
+  files: number;
+  bytes: number;
+  keys: number;
+}
+
+export interface AdminFile {
+  id: string;
+  name: string;
+  owner: Me | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+  linkAccess: LinkAccess;
+  members: number;
+  online: number;
+  bytes: number;
+}
+
+export const admin = {
+  overview: () => api<AdminOverview>('GET', '/api/admin/overview'),
+  users: (q = '') => api<{ users: AdminUser[] }>('GET', `/api/admin/users?q=${encodeURIComponent(q)}`).then((r) => r.users),
+  setBlocked: (id: string, blocked: boolean) => api('POST', `/api/admin/users/${id}`, { blocked }),
+  signOut: (id: string) => api('POST', `/api/admin/users/${id}/logout`, {}),
+  deleteUser: (id: string, files: 'delete' | `transfer:${string}`) => api('DELETE', `/api/admin/users/${id}?files=${encodeURIComponent(files)}`),
+  files: (q = '') => api<{ files: AdminFile[] }>('GET', `/api/admin/files?q=${encodeURIComponent(q)}`).then((r) => r.files),
+  updateFile: (id: string, patch: { linkAccess?: LinkAccess; ownerUsername?: string }) => api('POST', `/api/admin/files/${id}`, patch),
+  deleteFile: (id: string) => api('DELETE', `/api/admin/files/${id}`),
+  saveSettings: (s: Partial<AdminSettings>) => api<{ settings: AdminSettings }>('POST', '/api/admin/settings', s).then((r) => r.settings),
+  testAlert: () => api('POST', '/api/admin/alerts/test', {}),
 };
 
 /** True when this page is served by a Planar server (so accounts and files are available). */

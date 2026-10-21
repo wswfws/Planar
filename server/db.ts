@@ -11,7 +11,21 @@ export interface User {
   passHash: string;
   salt: string;
   createdAt: number;
+  /** Last sign-in, request or opened file (updated at most once a minute). */
+  lastSeenAt?: number;
+  /** Blocked by an admin: cannot sign in, sessions and keys stop working. */
+  blocked?: boolean;
 }
+
+/** Server-wide settings an admin can change. */
+export interface Settings {
+  registrationOpen: boolean;
+  maxFilesPerUser: number;
+  /** Largest document accepted on create/import/duplicate, in bytes. */
+  maxFileBytes: number;
+}
+
+export const DEFAULT_SETTINGS: Settings = { registrationOpen: true, maxFilesPerUser: 500, maxFileBytes: 50 * 1024 * 1024 };
 
 export interface FileRecord {
   id: string;
@@ -62,6 +76,9 @@ export class Db {
   sessions = new Map<string, Session>();
   /** Sign-in attempts per address (see api.ts). */
   attempts = new Map<string, { n: number; reset: number }>();
+  settings: Settings = { ...DEFAULT_SETTINGS };
+  /** Usage statistics kept by metrics.ts; stored as stats.json. */
+  stats: Record<string, unknown> = {};
   private timers = new Map<string, NodeJS.Timeout>();
   private writing: Promise<void> = Promise.resolve();
 
@@ -75,6 +92,8 @@ export class Db {
     for (const k of await this.load<ApiKey>('keys')) this.keys.set(k.id, k);
     const now = Date.now();
     for (const [hash, s] of Object.entries(await this.loadObject<Session>('sessions'))) if (s.expires > now) this.sessions.set(hash, s);
+    this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadObject<unknown>('settings')) };
+    this.stats = await this.loadObject<unknown>('stats');
   }
 
   private async read(name: string): Promise<unknown> {
@@ -95,7 +114,7 @@ export class Db {
   }
 
   /** Schedules a write of one collection. */
-  touch(name: 'users' | 'files' | 'keys' | 'sessions'): void {
+  touch(name: 'users' | 'files' | 'keys' | 'sessions' | 'settings' | 'stats'): void {
     if (!this.dir || this.timers.has(name)) return;
     this.timers.set(
       name,
@@ -114,7 +133,11 @@ export class Db {
           ? [...this.files.values()]
           : name === 'keys'
             ? [...this.keys.values()]
-            : Object.fromEntries(this.sessions);
+            : name === 'settings'
+              ? this.settings
+              : name === 'stats'
+                ? this.stats
+                : Object.fromEntries(this.sessions);
     const file = path.join(this.dir!, `${name}.json`);
     const json = JSON.stringify(data);
     this.writing = this.writing.then(async () => {
@@ -192,7 +215,17 @@ export class Db {
       this.sessions.delete(hash);
       return null;
     }
-    return this.users.get(s.userId) ?? null;
+    const user = this.users.get(s.userId);
+    return user && !user.blocked ? user : null;
+  }
+
+  /** Notes that someone is active (throttled to one write a minute). */
+  seen(user: User): void {
+    const now = Date.now();
+    if (!user.lastSeenAt || now - user.lastSeenAt > 60_000) {
+      user.lastSeenAt = now;
+      this.touch('users');
+    }
   }
 
   dropSession(token: string): void {
@@ -222,7 +255,8 @@ export class Db {
           k.lastUsed = Date.now();
           this.touch('keys');
         }
-        return this.users.get(k.userId) ?? null;
+        const user = this.users.get(k.userId);
+        return user && !user.blocked ? user : null;
       }
     }
     return null;

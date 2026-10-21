@@ -7,6 +7,10 @@ services:
     restart: unless-stopped
     environment:
       LEGACY_OWNER: ${LEGACY_OWNER:-}
+      ADMIN_USERS: ${ADMIN_USERS:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     volumes:
       - planar-data:/data
 

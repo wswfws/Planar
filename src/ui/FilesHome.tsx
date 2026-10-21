@@ -209,6 +209,11 @@ export function FilesHome() {
               Upload local draft
             </button>
           )}
+          {me.admin && (
+            <button type="button" className="small-button" onClick={() => navigate('/admin')}>
+              Admin
+            </button>
+          )}
           <button type="button" className="avatar-chip" onClick={() => setAccount(true)} title="Account and API keys">
             <span className="avatar" style={{ background: me.color }}>
               {me.displayName.slice(0, 1).toUpperCase()}

@@ -6,7 +6,11 @@ import { parseDocument } from '../src/core/document';
 import { META_KEYS, type Op } from '../src/core/ops';
 import { initCanvas } from '../src/agent/raster';
 import { can, roleFor, type Role } from './access';
+import os from 'node:os';
+import { disk, type LiveState } from './admin';
+import { Alerts, type AlertOptions } from './alerts';
 import { adoptLegacy, authenticate, handleApi } from './api';
+import { Metrics } from './metrics';
 import { Db, type FileRecord, type User } from './db';
 import { createMcpHandler } from './mcp-http';
 import { ROOM_ID, RoomStore, type Room } from './rooms';
@@ -24,6 +28,12 @@ export interface ServerOptions {
   authLimit?: number;
   /** Largest accepted message in bytes (documents can embed images). */
   maxMessageBytes?: number;
+  /** Usernames that may open /admin. */
+  admins?: string[];
+  /** Telegram notifications for the admin. */
+  telegram?: AlertOptions;
+  /** Bearer token for /api/metrics (Prometheus); off when empty. */
+  metricsToken?: string;
 }
 
 interface Presence {
@@ -93,7 +103,9 @@ async function migrateLegacy(dataDir: string, db: Db): Promise<void> {
   }
 }
 
-export async function startServer(opts: ServerOptions): Promise<{ port: number; close: () => Promise<void>; db: Db }> {
+export async function startServer(
+  opts: ServerOptions,
+): Promise<{ port: number; close: () => Promise<void>; db: Db; alerts: Alerts; metrics: Metrics }> {
   const db = new Db(opts.dataDir);
   await db.init();
   const store = new RoomStore(opts.dataDir ? path.join(opts.dataDir, 'files') : null);
@@ -104,6 +116,8 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
     if (owner) adoptLegacy({ db, legacyOwner: opts.legacyOwner }, owner);
   }
   const members = new Map<string, Set<Client>>();
+  const metrics = new Metrics(db);
+  const alerts = new Alerts(opts.telegram ?? {});
   let nextId = 1;
   let guests = 0;
 
@@ -155,11 +169,39 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
   const roleOf = (rec: FileRecord | undefined, userId: string | null): Role | null =>
     rec && !rec.deletedAt ? roleFor(rec, userId) : null;
 
+  const live = (): LiveState => {
+    const files = new Map<string, number>();
+    const users = new Set<string>();
+    let sockets = 0;
+    for (const [id, set] of members) {
+      files.set(id, set.size);
+      sockets += set.size;
+      for (const c of set) if (c.user) users.add(c.user.id);
+    }
+    return { sockets, files, users, mcpSessions: mcp.count() };
+  };
+
   const api = {
     db,
     store,
     legacyOwner: opts.legacyOwner,
     authLimit: opts.authLimit,
+    metrics,
+    alerts,
+    admins: new Set((opts.admins ?? []).map((a) => a.trim().toLowerCase()).filter(Boolean)),
+    live,
+    dataDir: opts.dataDir,
+    metricsToken: opts.metricsToken || undefined,
+    kickUser: (userId: string, reason: string) => {
+      for (const set of members.values()) {
+        for (const c of [...set]) {
+          if (c.user?.id === userId) {
+            send(c, { t: 'error', message: reason, fatal: true });
+            c.socket.close(4003, reason.slice(0, 120));
+          }
+        }
+      }
+    },
     accessChanged: (fileId: string) => {
       const rec = db.files.get(fileId);
       for (const c of [...(members.get(fileId) ?? [])]) {
@@ -182,6 +224,8 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
   };
 
   const http = createServer((req, res) => {
+    const group = req.url?.startsWith('/mcp') ? 'mcp' : req.url?.startsWith('/api/') ? 'api' : 'static';
+    if (req.url !== '/healthz') res.on('finish', () => metrics.request(group, res.statusCode));
     if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
       mcp.handle(req, res).catch((e) => {
         console.error('[planar] mcp error:', e);
@@ -260,6 +304,11 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
           client.color = /^#[0-9a-f]{6}$/i.test(String(msg.color)) ? String(msg.color) : '#7b7bf0';
         }
         client.room = room;
+        metrics.inc('ws_joins');
+        if (client.user) {
+          db.seen(client.user);
+          metrics.active(client.user.id);
+        }
         const set = members.get(room.id) ?? new Set();
         members.set(room.id, set);
         const peers = [...set].map(peerInfo);
@@ -297,6 +346,7 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
         const version = ops.length ? room.apply(ops) : room.version;
         send(client, { t: 'ack', seq: msg.seq, version });
         if (ops.length) {
+          metrics.ops(ops.length);
           broadcast(room, { t: 'ops', from: client.id, version, ops }, client);
           db.fileEdited(room.id, ops.some((o) => o.o === 'meta' && o.key === 'name') ? room.doc.name : undefined);
         }
@@ -341,7 +391,41 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
     }
   }, 30_000);
 
+  // Every minute: record history, check alert thresholds, send the daily summary.
+  let lastSummary = String((db.stats as { lastSummary?: string }).lastSummary ?? '');
+  const minuteTick = async () => {
+    const m = metrics.tick(live().sockets);
+    if (m.errors > 5) void alerts.send('5xx', `${m.errors} server errors in the last minute. Check: docker compose logs planar`);
+    if (m.failedLogins5m > 30) void alerts.send('logins', `${m.failedLogins5m} failed sign-ins in 5 minutes — someone may be guessing passwords`);
+    const d = await disk(opts.dataDir);
+    if (d && (d.free < 1024 ** 3 || d.free / d.total < 0.1)) {
+      void alerts.send('disk', `Low disk space: ${(d.free / 1024 ** 3).toFixed(1)} GB free of ${(d.total / 1024 ** 3).toFixed(0)} GB`);
+    }
+    if (os.freemem() / os.totalmem() < 0.05 || m.rss > os.totalmem() * 0.8) {
+      void alerts.send('memory', `Memory is running out: Planar uses ${Math.round(m.rss / 1048576)} MB, ${Math.round(os.freemem() / 1048576)} MB free`);
+    }
+    const now = new Date();
+    const day = now.toISOString().slice(0, 10);
+    if (now.getHours() >= 9 && lastSummary !== day) {
+      lastSummary = day;
+      (db.stats as Record<string, unknown>).lastSummary = day;
+      db.touch('stats');
+      const y = metrics.days.find((x) => x.day === new Date(Date.now() - 86_400_000).toISOString().slice(0, 10));
+      const files = [...db.files.values()].filter((f) => !f.deletedAt).length;
+      void alerts.send(
+        'summary',
+        `Yesterday: ${y?.registrations ?? 0} new users, ${y?.active ?? 0} active, ${y?.edits ?? 0} edit batches, ${y?.errors ?? 0} errors.\n` +
+          `Total: ${db.users.size} users, ${files} files${d ? `, ${(d.free / 1024 ** 3).toFixed(1)} GB disk free` : ''}.`,
+        true,
+      );
+    }
+  };
+  const ticker = setInterval(() => void minuteTick().catch((e) => console.error('[planar] metrics tick failed:', e)), 60_000);
+  ticker.unref();
+
   await new Promise<void>((resolve) => http.listen(opts.port, opts.host ?? '0.0.0.0', resolve));
+  metrics.event('info', 'Server started');
+  void alerts.send('start', `Server started (${db.users.size} users, ${db.files.size} files)`, true);
   const address = http.address();
   const port = typeof address === 'object' && address ? address.port : opts.port;
   boundPort = port;
@@ -349,8 +433,11 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
   return {
     port,
     db,
+    alerts,
+    metrics,
     close: async () => {
       clearInterval(heartbeat);
+      clearInterval(ticker);
       mcp.close();
       for (const s of wss.clients) s.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));

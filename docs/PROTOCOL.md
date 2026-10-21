@@ -91,4 +91,23 @@ server's own origin.
 
 Files that someone cannot see look the same as files that do not exist.
 
+### Admin
+
+Only for usernames in `ADMIN_USERS`, signed in with a cookie; everyone else
+gets 404.
+
+| Endpoint | Meaning |
+| --- | --- |
+| `GET /api/admin/overview` | Gauges, counters, per-minute history (24 h), daily totals (30 days), recent events, settings |
+| `GET /api/admin/users?q=` | Users with activity, file counts and sizes |
+| `POST /api/admin/users/:id` `{ blocked }` | Block or unblock (signs them out and closes their files) |
+| `POST /api/admin/users/:id/logout` | Sign out everywhere |
+| `DELETE /api/admin/users/:id?files=delete\|transfer:<username>` | Delete an account |
+| `GET /api/admin/files?q=` | File metadata (never contents) |
+| `POST /api/admin/files/:id` `{ linkAccess?, ownerUsername? }` | Close a link or change the owner |
+| `DELETE /api/admin/files/:id` | Delete for good |
+| `GET/POST /api/admin/settings` | `registrationOpen`, `maxFilesPerUser`, `maxFileBytes` |
+| `POST /api/admin/alerts/test` | Send a Telegram test message |
+| `GET /api/metrics` | Prometheus text format; needs `Authorization: Bearer <METRICS_TOKEN>` |
+
 `/mcp` is the Model Context Protocol endpoint for agents (see [MCP.md](MCP.md)).

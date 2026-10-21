@@ -111,6 +111,7 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string }) {
 
   return {
     handle,
+    count: () => sessions.size,
     close: () => {
       clearInterval(sweep);
       for (const e of sessions.values()) {

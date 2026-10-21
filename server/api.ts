@@ -4,6 +4,9 @@ import { canRender, renderPng } from '../src/agent/raster';
 import type { PlanarDocument } from '../src/core/types';
 import { can, roleFor, type LinkAccess, type MemberRole, type Role } from './access';
 import { Db, SESSION_DAYS, USERNAME, type FileRecord, type User } from './db';
+import { handleAdmin, handleMetrics, type LiveState } from './admin';
+import type { Alerts } from './alerts';
+import type { Metrics } from './metrics';
 import type { Room, RoomStore } from './rooms';
 
 const COOKIE = 'planar_session';
@@ -21,6 +24,17 @@ export interface ApiContext {
   accessChanged: (fileId: string) => void;
   /** Renames a file everywhere, including open editors. */
   rename: (room: Room, name: string) => void;
+  metrics: Metrics;
+  alerts: Alerts;
+  /** Usernames allowed into /admin. */
+  admins: Set<string>;
+  /** Who is connected right now. */
+  live: () => LiveState;
+  /** Closes every open connection of a user (after blocking or deleting). */
+  kickUser: (userId: string, reason: string) => void;
+  dataDir: string | null;
+  /** Bearer token for /api/metrics (Prometheus); the endpoint is off without it. */
+  metricsToken?: string;
 }
 
 export class HttpError extends Error {
@@ -67,7 +81,7 @@ function clientIp(req: IncomingMessage): string {
   return fwd || req.socket.remoteAddress || '?';
 }
 
-function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+export function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -92,7 +106,7 @@ function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   });
 }
 
-function str(v: unknown, max: number): string {
+export function str(v: unknown, max: number): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
 }
 
@@ -128,8 +142,13 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
       res.end(JSON.stringify({ planar: true, protocol: 2, accounts: true, mcp: '/mcp' }));
       return true;
     }
+    if (url.pathname === '/api/metrics') return handleMetrics(req, res, ctx);
 
     const { user, viaKey, session } = authenticate(req, db);
+    if (user) {
+      db.seen(user);
+      ctx.metrics.active(user.id);
+    }
 
     // Cookie-authenticated writes must come from our own pages.
     if (method !== 'GET' && method !== 'HEAD' && !viaKey) {
@@ -145,11 +164,14 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
       }
     }
 
+    const meView = (u: User) => ({ ...publicUser(u), admin: ctx.admins.has(u.username) });
     const need = (): User => {
       if (!user) throw new HttpError(401, 'Sign in first');
       return user;
     };
     const parts = url.pathname.split('/').slice(2).map(decodeURIComponent); // after /api
+
+    if (parts[0] === 'admin') return await handleAdmin(req, res, parts, url, ctx, viaKey ? null : user);
 
     // ---- auth ----------------------------------------------------------
     if (parts[0] === 'auth') {
@@ -165,20 +187,31 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
         const password = typeof body.password === 'string' ? body.password : '';
         let account: User | null;
         if (parts[1] === 'register') {
+          if (!db.settings.registrationOpen) throw new HttpError(403, 'Registration is closed on this server');
           if (!USERNAME.test(username)) throw new HttpError(400, 'Username: 3–32 characters, letters, digits, . _ -');
           if (password.length < 8 || password.length > 200) throw new HttpError(400, 'Password must be at least 8 characters');
           if (db.userByName(username)) throw new HttpError(409, 'This username is taken');
           account = await db.createUser(username, password, str(body.displayName, 40));
+          ctx.metrics.registration();
+          ctx.metrics.event('signup', `@${username} registered`);
+          void ctx.alerts.send(`signup:${username}`, `New user @${username} (${db.users.size} in total)`);
         } else {
           account = db.userByName(username);
           // Hash even for unknown users so the timing does not reveal which usernames exist.
           const ok = account ? await db.checkPassword(account, password) : (await db.dummyHash(password), false);
-          if (!account || !ok) throw new HttpError(401, 'Wrong username or password');
+          if (!account || !ok) {
+            ctx.metrics.failedLogin();
+            throw new HttpError(401, 'Wrong username or password');
+          }
+          if (account.blocked) throw new HttpError(403, 'This account is blocked');
+          ctx.metrics.inc('logins');
         }
+        db.seen(account);
+        ctx.metrics.active(account.id);
         adoptLegacy(ctx, account);
         const token = db.createSession(account.id);
         const cookie = `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}${isHttps(req) ? '; Secure' : ''}`;
-        return json(200, { user: publicUser(account) }, { 'Set-Cookie': cookie });
+        return json(200, { user: meView(account) }, { 'Set-Cookie': cookie });
       }
       throw new HttpError(404, 'Not found');
     }
@@ -186,7 +219,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
     // ---- account -------------------------------------------------------
     if (parts[0] === 'me') {
       if (!parts[1]) {
-        if (method === 'GET') return json(200, { user: user ? publicUser(user) : null });
+        if (method === 'GET') return json(200, { user: user ? (viaKey ? publicUser(user) : meView(user)) : null });
         if (method === 'PATCH') {
           const me = need();
           const body = await readJson(req);
@@ -200,7 +233,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
             db.dropUserSessions(me.id, session ?? undefined);
           }
           db.touch('users');
-          return json(200, { user: publicUser(me) });
+          return json(200, { user: meView(me) });
         }
       }
       if (parts[1] === 'keys') {
@@ -287,6 +320,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           }
           const name = str(body.name, 120) || doc.name || 'Untitled';
           doc.name = name;
+          checkLimits(db, me, doc);
           const rec = db.createFile(me.id, name);
           await store.create(rec.id, doc);
           return json(200, { file: view(rec, 'owner', true) });
@@ -361,6 +395,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
         const copy = structuredClone(room.doc);
         const name = str(body.name, 120) || `${rec.name} (copy)`;
         copy.name = name;
+        checkLimits(db, me, copy);
         const created = db.createFile(me.id, name);
         await store.create(created.id, copy);
         return json(200, { file: view(created, 'owner', true) });
@@ -422,13 +457,25 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
 
     throw new HttpError(404, 'Not found');
   } catch (e) {
-    if (e instanceof HttpError) json(e.status, { error: e.message });
-    else {
+    if (e instanceof HttpError) {
+      if (e.status === 429) ctx.metrics.inc('rate_limited');
+      json(e.status, { error: e.message });
+    } else {
       console.error('[planar] api error:', e);
+      ctx.metrics.inc('server_errors');
+      ctx.metrics.event('error', `${method} ${url.pathname}: ${(e as Error).message}`);
       if (!res.headersSent) json(500, { error: 'Server error' });
     }
     return true;
   }
+}
+
+/** Per-user limits set by the admin. */
+function checkLimits(db: Db, user: User, doc: PlanarDocument): void {
+  let owned = 0;
+  for (const f of db.files.values()) if (f.ownerId === user.id && !f.deletedAt) owned++;
+  if (owned >= db.settings.maxFilesPerUser) throw new HttpError(403, `File limit reached (${db.settings.maxFilesPerUser}); delete some files first`);
+  if (JSON.stringify(doc).length > db.settings.maxFileBytes) throw new HttpError(413, 'The document is larger than this server allows');
 }
 
 /** Gives documents from before accounts existed to their configured owner. */

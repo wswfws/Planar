@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { accounts, detectServer, type Me } from '../collab/session';
+import { AdminPage } from './AdminPage';
 import { App } from './App';
 import { AuthScreen } from './AuthScreen';
 import { FilesHome } from './FilesHome';
@@ -49,6 +50,9 @@ export function Root() {
         <App key={file} fileId={file} />
       </ServerContext.Provider>
     );
+  }
+  if (path === '/admin') {
+    return <ServerContext.Provider value={session}>{me ? <AdminPage /> : <AuthScreen next="/admin" />}</ServerContext.Provider>;
   }
   return (
     <ServerContext.Provider value={session}>
