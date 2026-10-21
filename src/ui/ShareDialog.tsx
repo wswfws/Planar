@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { detectServer, loadSettings, PEER_COLORS, randomRoomId, saveSettings, startSession } from '../collab/session';
+import { detectServer, loadSettings, PEER_COLORS, randomRoomId, saveSettings, serverInfo, startSession } from '../collab/session';
 import { IconButton } from './controls';
 import { useEditorState } from './EditorContext';
 
@@ -16,6 +16,7 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState(loadSettings);
   const [detected, setDetected] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [needsToken, setNeedsToken] = useState(false);
 
   useEffect(() => {
     void detectServer().then((origin) => {
@@ -24,6 +25,13 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
     });
   }, []);
 
+  // Ask the server whether it requires a token (debounced while typing).
+  useEffect(() => {
+    const url = collab?.serverUrl ?? settings.serverUrl;
+    const timer = setTimeout(() => void serverInfo(url).then((info) => setNeedsToken(!!info?.auth)), 300);
+    return () => clearTimeout(timer);
+  }, [settings.serverUrl, collab?.serverUrl]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -31,11 +39,36 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const insecure = location.protocol === 'https:' && /^(ws|http):\/\//i.test(settings.serverUrl);
+  const tokenMissing = needsToken && !settings.token.trim();
+  const clean = () => ({ ...settings, serverUrl: settings.serverUrl.trim(), name: settings.name.trim() || 'Guest', token: settings.token.trim() });
   const start = () => {
-    const s = { ...settings, serverUrl: settings.serverUrl.trim(), name: settings.name.trim() || 'Guest' };
+    const s = clean();
     saveSettings(s);
     startSession(editor, { ...s, roomId: randomRoomId(), create: true });
   };
+  // After an error (e.g. a wrong token), reconnect to the same room with new details.
+  const retry = () => {
+    if (!collab) return;
+    const s = clean();
+    saveSettings(s);
+    const { roomId, serverUrl } = collab;
+    collab.leave();
+    startSession(editor, { ...s, serverUrl, roomId, create: true });
+  };
+
+  const tokenField = (
+    <label className="stacked-field">
+      <span>Access token{needsToken ? ' (required by this server)' : ' (if required)'}</span>
+      <input
+        className="text-field"
+        type="password"
+        value={settings.token}
+        placeholder={needsToken ? 'Paste the server token' : ''}
+        onChange={(e) => setSettings({ ...settings, token: e.target.value })}
+        onKeyDown={(e) => e.stopPropagation()}
+      />
+    </label>
+  );
 
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -51,6 +84,12 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
                 <span className={`status-dot ${collab.status}`} /> {STATUS_LABEL[collab.status]}
                 {collab.error && <span className="share-error"> — {collab.error}</span>}
               </p>
+              {collab.status === 'error' && (
+                <>
+                  {tokenField}
+                  <p className="hint">Check the token (the server owner can see it with docker compose exec planar printenv PLANAR_TOKEN), then try again.</p>
+                </>
+              )}
               <label className="stacked-field">
                 <span>Link to this document</span>
                 <span className="link-row">
@@ -104,6 +143,7 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
               </label>
               {detected && settings.serverUrl === detected && <p className="hint">This editor is served by a Planar server — it will be used.</p>}
               {insecure && <p className="share-error">This page uses HTTPS, so the server must use HTTPS (https:// or wss://) too.</p>}
+              {tokenMissing && <p className="share-error">This server requires an access token.</p>}
               <div className="grid-2">
                 <label className="stacked-field">
                   <span>Your name</span>
@@ -116,16 +156,7 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
                     onKeyDown={(e) => e.stopPropagation()}
                   />
                 </label>
-                <label className="stacked-field">
-                  <span>Access token (if required)</span>
-                  <input
-                    className="text-field"
-                    type="password"
-                    value={settings.token}
-                    onChange={(e) => setSettings({ ...settings, token: e.target.value })}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  />
-                </label>
+                {tokenField}
               </div>
               <div className="stacked-field">
                 <span>Your colour</span>
@@ -147,12 +178,19 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
         </div>
         <footer className="dialog-footer">
           {collab ? (
-            <button type="button" className="small-button" onClick={() => collab.leave()}>
-              Leave (keep a local copy)
-            </button>
+            <>
+              {collab.status === 'error' && (
+                <button type="button" className="primary-button" disabled={tokenMissing} onClick={retry}>
+                  Try again
+                </button>
+              )}
+              <button type="button" className="small-button" onClick={() => collab.leave()}>
+                Leave (keep a local copy)
+              </button>
+            </>
           ) : (
             <>
-              <button type="button" className="primary-button" disabled={!settings.serverUrl.trim() || insecure} onClick={start}>
+              <button type="button" className="primary-button" disabled={!settings.serverUrl.trim() || insecure || tokenMissing} onClick={start}>
                 Start collaborating
               </button>
               <a className="hint" href="https://github.com/wswfws/Planar/blob/main/docs/SELF_HOSTING.md" target="_blank" rel="noopener">

@@ -45,6 +45,21 @@ export async function detectServer(): Promise<string | null> {
   }
 }
 
+/** What a Planar server says about itself, or null if it is not one / unreachable. */
+export async function serverInfo(serverUrl: string): Promise<{ auth: boolean } | null> {
+  let base = serverUrl.trim().replace(/\/+$/, '').replace(/\/ws$/, '');
+  if (!base) return null;
+  if (!/^[a-z]+:\/\//i.test(base)) base = `https://${base}`;
+  base = base.replace(/^ws(s?):/i, 'http$1:');
+  try {
+    const res = await fetch(`${base}/api/info`, { cache: 'no-store' });
+    const info = res.ok ? await res.json() : null;
+    return info?.planar ? { auth: !!info.auth } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function randomRoomId(): string {
   const bytes = new Uint8Array(12);
   crypto.getRandomValues(bytes);
@@ -76,7 +91,7 @@ export function parseJoinLink(): { roomId: string; serverUrl: string | null; tok
   const roomId = params.get('room');
   if (!roomId) return null;
   const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
-  return { roomId, serverUrl: params.get('server'), token: hash.get('t') ?? '' };
+  return { roomId, serverUrl: params.get('server'), token: (hash.get('t') ?? '').trim() };
 }
 
 let current: CollabClient | null = null;
@@ -93,13 +108,13 @@ export interface SessionOptions {
 
 export function startSession(editor: Editor, opts: SessionOptions): void {
   current?.stop();
-  const link = shareLink(opts.serverUrl, opts.roomId, opts.token);
+  const link = shareLink(opts.serverUrl, opts.roomId, opts.token.trim());
   const client = new CollabClient(editor, {
     serverUrl: opts.serverUrl,
     roomId: opts.roomId,
     name: opts.name || 'Guest',
     color: opts.color,
-    token: opts.token || undefined,
+    token: opts.token.trim() || undefined,
     createWith: opts.create ? editor.doc : undefined,
     shareUrl: link,
   });

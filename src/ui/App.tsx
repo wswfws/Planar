@@ -230,6 +230,16 @@ export function App() {
 
   useEffect(() => watchFonts(editor), [editor]);
 
+  // Open the sharing dialog when a session fails (e.g. a wrong token), once.
+  useEffect(() => {
+    let last = editor.collab?.status;
+    return editor.subscribe(() => {
+      const status = editor.collab?.status;
+      if (status === 'error' && last !== 'error') setShareOpen(true);
+      last = status;
+    });
+  }, [editor]);
+
   return (
     <EditorContext.Provider value={editor}>
       <ContextMenuProvider>
