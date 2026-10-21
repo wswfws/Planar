@@ -29,5 +29,5 @@ jobs:
           docker run -d --name planar -p 8080:8080 planar:ci
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/api/info && break; sleep 1; done
           curl -fsS http://127.0.0.1:8080/ | grep -q '<div id="root">'
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8080/mcp)" = 400
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8080/mcp)" = 401
           docker logs planar

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Tool } from '../core/editor';
+import { files } from '../collab/session';
 import { useEditorState } from './EditorContext';
 import { Icon, type IconName } from './icons';
+import { navigate, useServer } from './router';
 
 const TOOLS: { tool: Tool; icon: IconName; label: string; key: string }[] = [
   { tool: 'select', icon: 'select', label: 'Move', key: 'V' },
@@ -106,10 +108,35 @@ function Collaborators({ onShare }: { onShare: () => void }) {
   );
 }
 
-export function Toolbar({ onOpen, onVariables, onShare }: { onOpen: () => void; onVariables: () => void; onShare: () => void }) {
+export function Toolbar({ onOpen, onVariables, onShare, onAccount }: { onOpen: () => void; onVariables: () => void; onShare: () => void; onAccount: () => void }) {
   const editor = useEditorState();
+  const server = useServer();
   const [name, setName] = useState(editor.doc.name);
   useEffect(() => setName(editor.doc.name), [editor.doc.name]);
+  const fileId = editor.collab?.fileId;
+  const duplicate = () =>
+    fileId && server?.me
+      ? files.duplicate(fileId).then((f) => navigate(`/file/${f.id}`), (e: Error) => editor.notify(e.message))
+      : editor.notify('Sign in to copy this file to your files');
+  const newServerFile = () => files.create({}).then((f) => navigate(`/file/${f.id}`), (e: Error) => editor.notify(e.message));
+
+  const fileItems: (MenuItem | '-')[] = server
+    ? [
+        { label: 'Back to files', action: () => navigate('/') },
+        { label: 'New file', action: () => void newServerFile(), disabled: !server.me },
+        { label: server.me ? 'Duplicate (copy to my files)' : 'Sign in to copy…', action: () => void duplicate() },
+        { label: 'Download .planar.json', shortcut: `${MOD}S`, action: () => fileId && (location.href = files.downloadUrl(fileId)) },
+      ]
+    : [
+        {
+          label: 'New file',
+          action: () => {
+            if (confirm('Discard the current document and start a new one?')) editor.newDocument();
+          },
+        },
+        { label: 'Open…', shortcut: `${MOD}O`, action: onOpen },
+        { label: 'Save as .planar.json', shortcut: `${MOD}S`, action: () => editor.saveFile() },
+      ];
 
   return (
     <header className="toolbar">
@@ -117,21 +144,14 @@ export function Toolbar({ onOpen, onVariables, onShare }: { onOpen: () => void; 
         <Dropdown
           button={<Icon name="menu" />}
           items={[
-            {
-              label: 'New file',
-              action: () => {
-                if (confirm('Discard the current document and start a new one?')) editor.newDocument();
-              },
-            },
-            { label: 'Open…', shortcut: `${MOD}O`, action: onOpen },
-            { label: 'Save as .planar.json', shortcut: `${MOD}S`, action: () => editor.saveFile() },
+            ...fileItems,
             '-',
             { label: 'Export PNG', shortcut: `${MOD}Shift+E`, action: () => editor.exportAs('png', 2) },
             { label: 'Export SVG', action: () => editor.exportAs('svg') },
             '-',
             { label: 'Variables…', action: onVariables },
-            { label: editor.collab ? 'Collaboration…' : 'Share / collaborate…', action: onShare },
-            { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: !editor.selection.length },
+            ...(server ? [{ label: 'Share…', action: onShare }] : []),
+            { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: !editor.selection.length || editor.readOnly },
             '-',
             { label: 'Undo', shortcut: `${MOD}Z`, action: () => editor.undo(), disabled: !editor.canUndo },
             { label: 'Redo', shortcut: `${MOD}Shift+Z`, action: () => editor.redo(), disabled: !editor.canRedo },
@@ -162,6 +182,7 @@ export function Toolbar({ onOpen, onVariables, onShare }: { onOpen: () => void; 
           className="doc-name"
           value={name}
           aria-label="Document name"
+          readOnly={editor.readOnly}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => {
             editor.renameDocument(name);
@@ -174,12 +195,23 @@ export function Toolbar({ onOpen, onVariables, onShare }: { onOpen: () => void; 
         />
       </div>
       <div className="toolbar-right">
+        {editor.readOnly && <span className="badge" title="You can look at this file but not change it">View only</span>}
         <Collaborators onShare={onShare} />
-        {!editor.collab && (
-          <button type="button" className="share-button" title="Edit together in real time" onClick={onShare}>
+        {server && (
+          <button type="button" className="share-button" title="Invite people and set link access" onClick={onShare}>
             Share
           </button>
         )}
+        {server &&
+          (server.me ? (
+            <button type="button" className="avatar toolbar-avatar" style={{ background: server.me.color }} title={`@${server.me.username} — account and API keys`} onClick={onAccount}>
+              {server.me.displayName.slice(0, 1).toUpperCase()}
+            </button>
+          ) : (
+            <button type="button" className="small-button" onClick={() => navigate(`/login?next=${encodeURIComponent(location.pathname)}`)}>
+              Sign in
+            </button>
+          ))}
         <button type="button" className="toolbar-button" title="Variables" onClick={onVariables}>
           <Icon name="variable" />
           <span className="toolbar-label">Variables</span>

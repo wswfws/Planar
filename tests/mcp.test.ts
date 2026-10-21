@@ -13,6 +13,7 @@ import { INSTRUCTIONS, registerTools } from '../src/agent/tools';
 import { CollabClient } from '../src/collab/client';
 import { createDocument } from '../src/core/document';
 import { Editor } from '../src/core/editor';
+import { signUp, type Account } from './helpers';
 
 type ToolResult = { content: { type: string; text?: string; data?: string }[]; isError?: boolean };
 
@@ -48,7 +49,7 @@ describe('MCP tools (file mode)', () => {
   it('lists tools and opens a new file', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['code', 'components', 'create', 'delete', 'export', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables'].sort(),
+      ['code', 'components', 'create', 'delete', 'export', 'files', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables'].sort(),
     );
     const r = await call('overview');
     expect(r.isError).toBe(true);
@@ -189,22 +190,28 @@ describe('MCP tools (file mode)', () => {
   });
 });
 
-describe('remote MCP endpoint (live room)', () => {
+describe('remote MCP endpoint (live file)', () => {
   let server: Awaited<ReturnType<typeof startServer>>;
+  let url = '';
+  let ann: Account;
+  let ben: Account;
   let human: Editor;
   let humanClient: CollabClient;
   let remote: Client;
-  const roomId = `mcp-room-${Date.now()}`;
+  let fileId = '';
 
   beforeAll(async () => {
-    server = await startServer({ port: 0, host: '127.0.0.1', dataDir: null, staticDir: null, token: 'tok' });
-    const url = `http://127.0.0.1:${server.port}`;
+    server = await startServer({ port: 0, host: '127.0.0.1', dataDir: null, staticDir: null });
+    url = `http://127.0.0.1:${server.port}`;
+    ann = await signUp(url, 'ann');
+    ben = await signUp(url, 'ben');
     human = new Editor(createDocument('Team file'), { autosave: false });
-    humanClient = new CollabClient(human, { serverUrl: url, roomId, name: 'Ann', color: '#e5484d', token: 'tok', createWith: human.doc, shareUrl: '' });
+    fileId = (await ann.call('POST', '/api/files', { doc: human.doc })).body.file.id;
+    humanClient = new CollabClient(human, { serverUrl: url, fileId, key: ann.key, guestName: 'Ann', shareUrl: '' });
     humanClient.start();
     while (humanClient.status !== 'connected') await new Promise((r) => setTimeout(r, 10));
     remote = new Client({ name: 'remote-test', version: '1' });
-    await remote.connect(new StreamableHTTPClientTransport(new URL(`${url}/mcp`), { requestInit: { headers: { Authorization: 'Bearer tok' } } }));
+    await remote.connect(new StreamableHTTPClientTransport(new URL(`${url}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${ann.key}` } } }));
   });
 
   afterAll(async () => {
@@ -213,14 +220,41 @@ describe('remote MCP endpoint (live room)', () => {
     await server.close();
   });
 
-  it('rejects requests without the token', async () => {
-    const res = await fetch(`http://127.0.0.1:${server.port}/mcp`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } });
-    expect(res.status).toBe(401);
+  it('rejects requests without a valid API key', async () => {
+    const post = (headers: Record<string, string>) => fetch(`${url}/mcp`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json', ...headers } });
+    expect((await post({})).status).toBe(401);
+    expect((await post({ Authorization: 'Bearer plk_nonsense' })).status).toBe(401);
+    expect((await post({ Authorization: 'Bearer tok' })).status).toBe(401);
   });
 
-  it('joins the room by link and edits live for everyone', async () => {
-    const open = (await remote.callTool({ name: 'open', arguments: { link: `https://planar.example.com/?room=${roomId}` } })) as ToolResult;
-    expect(textOf(open)).toMatch(/Joined live room/);
+  it('lists, creates and opens files with the key owner rights', async () => {
+    const list = textOf((await remote.callTool({ name: 'files', arguments: { action: 'list' } })) as ToolResult);
+    expect(list).toContain(fileId);
+    const made = textOf((await remote.callTool({ name: 'files', arguments: { action: 'create', name: 'From agent' } })) as ToolResult);
+    expect(made).toMatch(/From agent/);
+    const newId = /id (\S+)\./.exec(made)![1];
+    expect((await ann.call('GET', `/api/files/${newId}`)).body.file.name).toBe('From agent');
+  });
+
+  it('is read-only on a file that was only shared for viewing, and can duplicate it', async () => {
+    const benRemote = new Client({ name: 'ben-agent', version: '1' });
+    await benRemote.connect(new StreamableHTTPClientTransport(new URL(`${url}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${ben.key}` } } }));
+    expect(textOf((await benRemote.callTool({ name: 'open', arguments: { fileId } })) as ToolResult)).toMatch(/Could not open/);
+    await ann.call('PUT', `/api/files/${fileId}/members`, { username: ben.username, role: 'viewer' });
+    const opened = textOf((await benRemote.callTool({ name: 'open', arguments: { fileId } })) as ToolResult);
+    expect(opened).toMatch(/view-only/);
+    const blocked = (await benRemote.callTool({ name: 'create', arguments: { layers: [{ type: 'rectangle' }] } })) as ToolResult;
+    expect(blocked.isError).toBe(true);
+    expect(textOf(blocked)).toMatch(/view-only/);
+    const copy = textOf((await benRemote.callTool({ name: 'files', arguments: { action: 'duplicate', fileId } })) as ToolResult);
+    expect(copy).toMatch(/Copied/);
+    await ann.call('PUT', `/api/files/${fileId}/members`, { username: ben.username, role: null });
+    await benRemote.close();
+  });
+
+  it('joins the file by link and edits live for everyone', async () => {
+    const open = (await remote.callTool({ name: 'open', arguments: { link: `https://planar.example.com/file/${fileId}` } })) as ToolResult;
+    expect(textOf(open)).toMatch(/Opened live file/);
     expect(textOf(open)).toMatch(/Ann/);
     const created = (await remote.callTool({ name: 'create', arguments: { layers: [{ type: 'text', text: 'Hello from the agent', size: 32 }] } })) as ToolResult;
     expect(created.isError).toBeFalsy();

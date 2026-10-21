@@ -158,7 +158,7 @@ export function overview(editor: Editor): string {
   out.push(editor.selection.length ? `Selection: ${editor.selection.map((id) => summary(doc, doc.nodes[id])).join('\n  ')}` : 'Selection: none');
   if (editor.collab) {
     out.push('');
-    out.push(`Live room ${editor.collab.roomId} (${editor.collab.status}). People here:`);
+    out.push(`Live room ${editor.collab.fileId} (${editor.collab.status}). People here:`);
     if (!editor.collab.peers.length) out.push('- nobody else');
     for (const p of editor.collab.peers) {
       const sel = p.presence?.selection.filter((id) => doc.nodes[id]) ?? [];

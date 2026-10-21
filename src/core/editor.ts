@@ -101,6 +101,8 @@ interface ClipboardData {
   roots: { id: string; center: Vec; rotation: number }[];
 }
 
+export type FileRole = 'owner' | 'editor' | 'viewer';
+
 /** Someone else in a shared document. */
 export interface RemotePeer {
   id: string;
@@ -112,9 +114,11 @@ export interface RemotePeer {
 /** State of the collaboration session, if any (set by the collab client). */
 export interface CollabInfo {
   status: 'connecting' | 'connected' | 'reconnecting' | 'error';
-  roomId: string;
+  fileId: string;
   shareUrl: string;
   serverUrl: string;
+  /** What this person may do in the file; null until the server answers. */
+  role: FileRole | null;
   peers: RemotePeer[];
   error: string | null;
   leave: () => void;
@@ -149,6 +153,8 @@ export class Editor {
   spaceDown = false;
   /** Shared-document session, when collaborating. */
   collab: CollabInfo | null = null;
+  /** True when the document may only be looked at (view access to a shared file). */
+  readOnly = false;
   /** Pointer position in world space (for presence). */
   pointer: Vec | null = null;
   private redrawListeners = new Set<() => void>();
@@ -257,6 +263,12 @@ export class Editor {
     if (!base) return;
     this.normalize();
     const redo = diffDocs(base.doc, this.doc);
+    if (redo.length && this.readOnly) {
+      // Safety net: some direct edit slipped past change(). Undo it.
+      this.applyAndNormalize(diffDocs(this.doc, base.doc));
+      this.emit();
+      return;
+    }
     if (redo.length) {
       this.undoStack.push({ undo: diffDocs(this.doc, base.doc), redo, selection: base.selection, pageId: base.pageId });
       if (this.undoStack.length > 200) this.undoStack.shift();
@@ -310,6 +322,10 @@ export class Editor {
 
   /** Runs a document mutation. Outside a transaction it is one undo step. */
   change(fn: (doc: PlanarDocument) => void): void {
+    if (this.readOnly) {
+      this.notify('View-only: you cannot edit this file');
+      return;
+    }
     const own = !this.txBase;
     if (own) this.begin();
     fn(this.doc);
@@ -496,6 +512,7 @@ export class Editor {
   renameRequest: string | null = null;
 
   requestRename(id: string): void {
+    if (this.readOnly) return;
     this.renameRequest = id;
     this.emit();
   }
@@ -816,7 +833,7 @@ export class Editor {
 
   startTextEditing(id: string): void {
     const node = this.doc.nodes[id];
-    if (!node || node.type !== 'text' || node.locked) return;
+    if (!node || node.type !== 'text' || node.locked || this.readOnly) return;
     this.begin();
     this.editingTextId = id;
     this.selection = [id];
@@ -851,6 +868,7 @@ export class Editor {
   // ------------------------------------------------------------- tools
 
   setTool(tool: Tool): void {
+    if (this.readOnly && tool !== 'select' && tool !== 'hand') return;
     if (this.tool === 'pen' && tool !== 'pen') this.finishPen(false);
     this.finishTextEditing();
     this.tool = tool;

@@ -1,11 +1,12 @@
 # Planar + Caddy (automatic HTTPS). Usage:
-#   DOMAIN=planar.example.com PLANAR_TOKEN=change-me docker compose up -d --build
+#   DOMAIN=planar.example.com docker compose up -d --build
+#   Optional: LEGACY_OWNER=<username> hands documents saved before accounts existed to that account.
 services:
   planar:
     build: .
     restart: unless-stopped
     environment:
-      PLANAR_TOKEN: ${PLANAR_TOKEN:-}
+      LEGACY_OWNER: ${LEGACY_OWNER:-}
     volumes:
       - planar-data:/data
 

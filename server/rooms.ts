@@ -90,6 +90,15 @@ export class RoomStore {
     return room;
   }
 
+  /** Forgets a document and removes its file. */
+  async remove(id: string): Promise<void> {
+    const room = this.rooms.get(id);
+    this.rooms.delete(id);
+    await room?.save();
+    const file = this.fileFor(id);
+    if (file) await fs.rm(file, { force: true });
+  }
+
   async saveAll(): Promise<void> {
     await Promise.all([...this.rooms.values()].map((r) => r.save()));
   }

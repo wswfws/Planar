@@ -31,13 +31,18 @@ A self-hosted Planar server (see [SELF_HOSTING.md](SELF_HOSTING.md))
 exposes the MCP endpoint at `https://<your-server>/mcp`. Nothing has to be
 installed on the agent's machine.
 
+Create a personal API key in Planar (account menu → **API keys**). The agent
+acts with your rights: it sees your files and those shared with you, and is
+read-only on files you can only view.
+
 ```bash
 claude mcp add --transport http planar https://planar.example.com/mcp \
-  --header "Authorization: Bearer <PLANAR_TOKEN>"
+  --header "Authorization: Bearer plk_…"
 ```
 
-Then ask the agent to open a document by its share link:
-*"Open https://planar.example.com/?room=abc123 and …"*.
+Then ask the agent to work on a file: *"Create a file called Landing and design
+a hero section"* (it uses `files` and `open`), or give it a link:
+*"Open https://planar.example.com/file/abc123 and …"*.
 
 ### Local (stdio)
 
@@ -47,8 +52,10 @@ From a clone of the repository (`npm ci && npm run build` once):
 # Work on a file (created if missing; changes are saved to it):
 claude mcp add planar -- node /path/to/Planar/dist-mcp/index.js --file ./design.planar.json
 
-# Or join a shared room as a live participant:
-claude mcp add planar -- node /path/to/Planar/dist-mcp/index.js --link "https://planar.example.com/?room=abc123#t=TOKEN"
+# Or work on files on a Planar server (key from the account menu):
+claude mcp add planar -e PLANAR_KEY=plk_… -- node /path/to/Planar/dist-mcp/index.js --server https://planar.example.com
+# Or open one file straight away:
+claude mcp add planar -e PLANAR_KEY=plk_… -- node /path/to/Planar/dist-mcp/index.js --link "https://planar.example.com/file/abc123"
 ```
 
 Other clients use the same command in their MCP configuration, e.g.
@@ -62,13 +69,15 @@ Other clients use the same command in their MCP configuration, e.g.
 ```
 
 Without `--file` or `--link`, the agent opens a document with the `open`
-tool.
+tool. `--key` (or `PLANAR_KEY`) is the API key and `--server` (or
+`PLANAR_SERVER`) the server for the `files` tool.
 
 ## Tools
 
 | Tool | For | What it does |
 | --- | --- | --- |
-| `open` | all | Open a `.planar.json` file or join a room by share link |
+| `files` | all | List your files (and those shared with you), create one, or duplicate a file you can view |
+| `open` | all | Open a Planar file by id or link, or a local `.planar.json` |
 | `overview` | all | Pages, top-level frames, components, variables, selection, people |
 | `tree` | all | Outline of a page or layer (depth-limited) |
 | `find` | all | Find layers by name, text content or type |
@@ -156,7 +165,8 @@ Example — a card in one call:
 
 ## Safety
 
-- Room access uses the same token as people (`PLANAR_TOKEN`).
+- An API key gives an agent exactly its owner's rights (owner, editor or
+  viewer per file) and can be revoked at any time in the account menu.
 - The remote endpoint never reads or writes files on the server.
 - Every change an agent makes is a normal edit: it can be undone with
   `undo`, and in a room it is visible to everyone immediately.

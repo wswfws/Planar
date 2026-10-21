@@ -5,9 +5,9 @@ import { startServer } from './server';
 // Planar collaboration server. Configuration comes from the environment:
 //   PORT          HTTP/WebSocket port (default 8080)
 //   HOST          interface to bind (default 0.0.0.0)
-//   DATA_DIR      where shared documents are stored (default ./data)
+//   DATA_DIR      where accounts and documents are stored (default ./data)
 //   STATIC_DIR    built editor to serve (default ./dist next to this file)
-//   PLANAR_TOKEN  optional access token clients must provide
+//   LEGACY_OWNER  username that takes over documents saved before accounts existed
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -16,7 +16,7 @@ const server = await startServer({
   host: process.env.HOST,
   dataDir: path.resolve(process.env.DATA_DIR ?? 'data'),
   staticDir: path.resolve(process.env.STATIC_DIR ?? path.join(here, '..', 'dist')),
-  token: process.env.PLANAR_TOKEN || undefined,
+  legacyOwner: process.env.LEGACY_OWNER || undefined,
 });
 
 console.log(`[planar] collaboration server listening on port ${server.port}`);

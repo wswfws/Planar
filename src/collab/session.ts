@@ -1,134 +1,148 @@
-import type { Editor } from '../core/editor';
+import type { Editor, FileRole } from '../core/editor';
+import type { PlanarDocument } from '../core/types';
 import { CollabClient } from './client';
-
-const SETTINGS_KEY = 'planar:collab';
 
 export const PEER_COLORS = ['#e5484d', '#f2a65a', '#4cc38a', '#3e9bf0', '#8e6cf0', '#d65cb7', '#12a594', '#ffb224'];
 
-export interface CollabSettings {
-  serverUrl: string;
-  name: string;
+// ---- account and file API (same origin as the editor) -----------------------
+
+export interface Me {
+  id: string;
+  username: string;
+  displayName: string;
   color: string;
-  token: string;
 }
 
-export function loadSettings(): CollabSettings {
-  const fallback: CollabSettings = {
-    serverUrl: '',
-    name: '',
-    color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)],
-    token: '',
-  };
-  try {
-    return { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') };
-  } catch {
-    return fallback;
+export type LinkAccess = 'none' | 'view' | 'edit';
+
+export interface Member extends Me {
+  role: 'editor' | 'viewer';
+}
+
+export interface FileInfo {
+  id: string;
+  name: string;
+  role: FileRole | null;
+  owner: Me | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+  linkAccess: LinkAccess;
+  members?: Member[];
+}
+
+export interface ApiKeyInfo {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: number;
+  lastUsed: number | null;
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
   }
 }
 
-export function saveSettings(s: CollabSettings): void {
+export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
+  let res: Response;
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    res = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
   } catch {
-    // Settings are a convenience only.
+    throw new ApiError('Cannot reach the server', 0);
   }
+  const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `Request failed (${res.status})`, res.status);
+  return data as T;
 }
 
-/** True when this page is served by a Planar collaboration server. */
-export async function detectServer(): Promise<string | null> {
+export const accounts = {
+  me: () => api<{ user: Me | null }>('GET', '/api/me').then((r) => r.user),
+  register: (username: string, password: string, displayName: string) => api<{ user: Me }>('POST', '/api/auth/register', { username, password, displayName }).then((r) => r.user),
+  login: (username: string, password: string) => api<{ user: Me }>('POST', '/api/auth/login', { username, password }).then((r) => r.user),
+  logout: () => api('POST', '/api/auth/logout', {}),
+  update: (patch: { displayName?: string; color?: string; oldPassword?: string; newPassword?: string }) => api<{ user: Me }>('PATCH', '/api/me', patch).then((r) => r.user),
+  keys: () => api<{ keys: ApiKeyInfo[] }>('GET', '/api/me/keys').then((r) => r.keys),
+  createKey: (name: string) => api<{ key: ApiKeyInfo; secret: string }>('POST', '/api/me/keys', { name }),
+  deleteKey: (id: string) => api('DELETE', `/api/me/keys/${encodeURIComponent(id)}`),
+  findUsers: (q: string) => api<{ users: Omit<Me, 'id'>[] }>('GET', `/api/users?q=${encodeURIComponent(q)}`).then((r) => r.users),
+};
+
+export type FileScope = 'mine' | 'shared' | 'trash';
+
+export const files = {
+  list: (scope: FileScope) => api<{ files: FileInfo[] }>('GET', `/api/files?scope=${scope}`).then((r) => r.files),
+  create: (body: { name?: string; doc?: PlanarDocument } = {}) => api<{ file: FileInfo }>('POST', '/api/files', body).then((r) => r.file),
+  get: (id: string) => api<{ file: FileInfo }>('GET', `/api/files/${id}`).then((r) => r.file),
+  rename: (id: string, name: string) => api<{ file: FileInfo }>('PATCH', `/api/files/${id}`, { name }).then((r) => r.file),
+  setLinkAccess: (id: string, linkAccess: LinkAccess) => api<{ file: FileInfo }>('PATCH', `/api/files/${id}`, { linkAccess }).then((r) => r.file),
+  duplicate: (id: string) => api<{ file: FileInfo }>('POST', `/api/files/${id}/duplicate`, {}).then((r) => r.file),
+  trash: (id: string) => api('DELETE', `/api/files/${id}`),
+  restore: (id: string) => api('POST', `/api/files/${id}/restore`, {}),
+  deleteForever: (id: string) => api('DELETE', `/api/files/${id}?forever=1`),
+  setMember: (id: string, username: string, role: 'editor' | 'viewer' | null) =>
+    api<{ file: FileInfo }>('PUT', `/api/files/${id}/members`, { username, role }).then((r) => r.file),
+  transfer: (id: string, username: string) => api<{ file: FileInfo }>('POST', `/api/files/${id}/transfer`, { username }).then((r) => r.file),
+  downloadUrl: (id: string) => `/api/files/${id}/download`,
+  thumbnailUrl: (id: string, version: number) => `/api/files/${id}/thumbnail.png?v=${version}`,
+};
+
+/** True when this page is served by a Planar server (so accounts and files are available). */
+export async function detectServer(): Promise<boolean> {
   try {
-    const res = await fetch(new URL('api/info', location.href), { cache: 'no-store' });
+    const res = await fetch(new URL('api/info', location.origin), { cache: 'no-store' });
     const info = res.ok ? await res.json() : null;
-    return info?.planar ? location.origin : null;
-  } catch {
-    return null;
-  }
-}
-
-/** What a Planar server says about itself, or null if it is not one / unreachable. */
-export async function serverInfo(serverUrl: string): Promise<{ auth: boolean } | null> {
-  let base = serverUrl.trim().replace(/\/+$/, '').replace(/\/ws$/, '');
-  if (!base) return null;
-  if (!/^[a-z]+:\/\//i.test(base)) base = `https://${base}`;
-  base = base.replace(/^ws(s?):/i, 'http$1:');
-  try {
-    const res = await fetch(`${base}/api/info`, { cache: 'no-store' });
-    const info = res.ok ? await res.json() : null;
-    return info?.planar ? { auth: !!info.auth } : null;
-  } catch {
-    return null;
-  }
-}
-
-export function randomRoomId(): string {
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => 'abcdefghijkmnopqrstuvwxyz23456789'[b % 33]).join('');
-}
-
-function sameOrigin(serverUrl: string): boolean {
-  try {
-    return new URL(/^[a-z]+:\/\//i.test(serverUrl) ? serverUrl.replace(/^ws/i, 'http') : `https://${serverUrl}`).origin === location.origin;
+    return !!info?.planar && !!info.accounts;
   } catch {
     return false;
   }
 }
 
-/** Link that opens this editor and joins the room. The token stays in the hash. */
-export function shareLink(serverUrl: string, roomId: string, token: string): string {
-  const url = new URL(location.href);
-  url.search = '';
-  url.hash = '';
-  url.searchParams.set('room', roomId);
-  if (!sameOrigin(serverUrl)) url.searchParams.set('server', serverUrl);
-  if (token) url.hash = `t=${encodeURIComponent(token)}`;
-  return url.toString();
-}
+export const fileLink = (id: string): string => `${location.origin}/file/${id}`;
 
-/** Room details from the current address, if it is a join link. */
-export function parseJoinLink(): { roomId: string; serverUrl: string | null; token: string } | null {
-  const params = new URLSearchParams(location.search);
-  const roomId = params.get('room');
-  if (!roomId) return null;
-  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
-  return { roomId, serverUrl: params.get('server'), token: (hash.get('t') ?? '').trim() };
+// ---- live session ---------------------------------------------------------
+
+const GUEST_KEY = 'planar:guest';
+
+/** Name shown for people who open a file without signing in. */
+export function guestName(): string {
+  try {
+    let name = localStorage.getItem(GUEST_KEY);
+    if (!name) {
+      name = `Guest ${100 + Math.floor(Math.random() * 900)}`;
+      localStorage.setItem(GUEST_KEY, name);
+    }
+    return name;
+  } catch {
+    return 'Guest';
+  }
 }
 
 let current: CollabClient | null = null;
 
-export interface SessionOptions {
-  serverUrl: string;
-  roomId: string;
-  name: string;
-  color: string;
-  token: string;
-  /** Upload the current document as a new room. */
-  create: boolean;
-}
-
-export function startSession(editor: Editor, opts: SessionOptions): void {
+/** Opens a server file in the editor and keeps it live. Returns a function that disconnects. */
+export function openServerFile(editor: Editor, fileId: string): () => void {
   current?.stop();
-  const link = shareLink(opts.serverUrl, opts.roomId, opts.token.trim());
   const client = new CollabClient(editor, {
-    serverUrl: opts.serverUrl,
-    roomId: opts.roomId,
-    name: opts.name || 'Guest',
-    color: opts.color,
-    token: opts.token.trim() || undefined,
-    createWith: opts.create ? editor.doc : undefined,
-    shareUrl: link,
+    serverUrl: location.origin,
+    fileId,
+    guestName: guestName(),
+    color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)],
+    shareUrl: fileLink(fileId),
   });
   current = client;
   client.start();
-  // Leaving also removes the room from the address bar.
-  const info = editor.collab!;
-  info.leave = () => {
+  return () => {
     client.stop();
     if (current === client) current = null;
-    const url = new URL(location.href);
-    url.search = '';
-    url.hash = '';
-    history.replaceState(null, '', url);
   };
-  history.replaceState(null, '', link);
 }

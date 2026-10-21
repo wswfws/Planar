@@ -4,41 +4,34 @@ import { CollabClient } from '../src/collab/client';
 import { createDocument, createNode, insertNode } from '../src/core/document';
 import { Editor } from '../src/core/editor';
 import { applyOps, repairTree } from '../src/core/ops';
+import { signUp, until, wait, type Account, type TestServer } from './helpers';
 
-let server: Awaited<ReturnType<typeof startServer>>;
+let server: TestServer;
 let url = '';
+let ann: Account;
 
 beforeAll(async () => {
-  server = await startServer({ port: 0, host: '127.0.0.1', dataDir: null, staticDir: null, token: 'secret' });
+  server = await startServer({ port: 0, host: '127.0.0.1', dataDir: null, staticDir: null });
   url = `http://127.0.0.1:${server.port}`;
+  ann = await signUp(url, 'ann');
 });
 
 afterAll(async () => {
   await server.close();
 });
 
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function until(check: () => boolean, ms = 2000): Promise<void> {
-  const start = Date.now();
-  while (!check()) {
-    if (Date.now() - start > ms) throw new Error('timed out');
-    await wait(10);
-  }
-}
-
-let roomCounter = 0;
-
+/** Ann (signed in) and Ben (a guest through an edit link) open the same file. */
 async function pair() {
-  const roomId = `test-room-${++roomCounter}-${Date.now()}`;
   const a = new Editor(createDocument('Shared'), { autosave: false });
   const rect = createNode('rectangle', { name: 'Box', x: 0, y: 0 });
   a.change((doc) => insertNode(doc, rect, a.pageId));
-  const ca = new CollabClient(a, { serverUrl: url, roomId, name: 'Ann', color: '#ff0000', token: 'secret', createWith: a.doc, shareUrl: '' });
+  const fileId = (await ann.call('POST', '/api/files', { doc: a.doc })).body.file.id as string;
+  await ann.call('PATCH', `/api/files/${fileId}`, { linkAccess: 'edit' });
+  const ca = new CollabClient(a, { serverUrl: url, fileId, key: ann.key, shareUrl: '' });
   ca.start();
   await until(() => ca.status === 'connected');
   const b = new Editor(createDocument(), { autosave: false });
-  const cb = new CollabClient(b, { serverUrl: url, roomId, name: 'Ben', color: '#0000ff', token: 'secret', shareUrl: '' });
+  const cb = new CollabClient(b, { serverUrl: url, fileId, guestName: 'Ben', shareUrl: '' });
   cb.start();
   await until(() => cb.status === 'connected');
   return { a, b, ca, cb, rect: rect.id };
@@ -63,12 +56,12 @@ describe('tree repair', () => {
 });
 
 describe('collaboration', () => {
-  it('rejects a wrong token', async () => {
+  it('rejects a file that does not exist or a revoked key', async () => {
     const e = new Editor(createDocument(), { autosave: false });
-    const c = new CollabClient(e, { serverUrl: url, roomId: 'nope-room-1', name: 'X', color: '#000000', token: 'bad', shareUrl: '' });
+    const c = new CollabClient(e, { serverUrl: url, fileId: 'nope-file-1', key: 'plk_wrong', shareUrl: '' });
     c.start();
     await until(() => c.status === 'error');
-    expect(e.collab?.error).toMatch(/token/i);
+    expect(e.collab?.error).toMatch(/key/i);
     c.stop();
   });
 

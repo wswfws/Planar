@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createDocument } from '../core/document';
 import { Editor, type Tool } from '../core/editor';
 import { Canvas, readImageFile } from './Canvas';
 import { ContextMenuProvider } from './ContextMenu';
@@ -10,7 +11,9 @@ import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
 import { watchFonts } from './fontLoader';
 import { looksLikeSvg } from '../core/svg';
-import { detectServer, loadSettings, parseJoinLink, startSession } from '../collab/session';
+import { openServerFile } from '../collab/session';
+import { AccountDialog } from './AccountDialog';
+import { navigate, useServer } from './router';
 
 const TOOL_KEYS: Record<string, Tool> = {
   v: 'select',
@@ -193,35 +196,44 @@ function Toast() {
   ) : null;
 }
 
-export function App() {
-  const editor = useMemo(() => new Editor(), []);
+/** Shown over the editor while a server file loads, or when it cannot be opened. */
+function ConnectionOverlay() {
+  const editor = useEditorState();
+  const server = useServer();
+  const collab = editor.collab;
+  if (collab?.status === 'connected' || collab?.status === 'reconnecting') return null;
+  if (collab?.status === 'error') {
+    const needsLogin = !server?.me && /sign in/i.test(collab.error ?? '');
+    return (
+      <div className="overlay-page">
+        <div className="auth-card">
+          <h2>Cannot open this file</h2>
+          <p className="share-error">{collab.error}</p>
+          {needsLogin && (
+            <button type="button" className="primary-button" onClick={() => navigate(`/login?next=${encodeURIComponent(location.pathname)}`)}>
+              Sign in
+            </button>
+          )}
+          <button type="button" className="small-button" onClick={() => navigate('/')}>
+            Back to files
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return <div className="overlay-page">Opening…</div>;
+}
+
+export function App({ fileId }: { fileId?: string }) {
+  const editor = useMemo(() => (fileId ? new Editor(createDocument('Loading…'), { autosave: false }) : new Editor()), [fileId]);
   const fileInput = useRef<HTMLInputElement>(null);
   const openFile = useMemo(() => () => fileInput.current?.click(), []);
   const [variablesOpen, setVariablesOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
 
-  // Opening a share link joins its room.
-  useEffect(() => {
-    const join = parseJoinLink();
-    if (!join) return;
-    void (async () => {
-      const settings = loadSettings();
-      const serverUrl = join.serverUrl ?? (await detectServer()) ?? settings.serverUrl;
-      if (!serverUrl) {
-        editor.notify('This link has no collaboration server address');
-        return;
-      }
-      startSession(editor, {
-        serverUrl,
-        roomId: join.roomId,
-        name: settings.name || 'Guest',
-        color: settings.color,
-        token: join.token || settings.token,
-        create: false,
-      });
-      if (!settings.name) setShareOpen(true);
-    })();
-  }, [editor]);
+  // A file on the server is edited live.
+  useEffect(() => (fileId ? openServerFile(editor, fileId) : undefined), [editor, fileId]);
   useShortcuts(editor, openFile);
 
   useEffect(() => {
@@ -230,21 +242,11 @@ export function App() {
 
   useEffect(() => watchFonts(editor), [editor]);
 
-  // Open the sharing dialog when a session fails (e.g. a wrong token), once.
-  useEffect(() => {
-    let last = editor.collab?.status;
-    return editor.subscribe(() => {
-      const status = editor.collab?.status;
-      if (status === 'error' && last !== 'error') setShareOpen(true);
-      last = status;
-    });
-  }, [editor]);
-
   return (
     <EditorContext.Provider value={editor}>
       <ContextMenuProvider>
-      <div className="app">
-        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} />
+      <div className={`app${editor.readOnly ? ' read-only' : ''}`}>
+        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} onAccount={() => setAccountOpen(true)} />
         <div className="workspace">
           <LayersPanel />
           <main className="stage">
@@ -253,8 +255,10 @@ export function App() {
           <PropertiesPanel />
         </div>
         <Toast />
+        {fileId && <ConnectionOverlay />}
+        {accountOpen && <AccountDialog onClose={() => setAccountOpen(false)} />}
         {variablesOpen && <VariablesDialog onClose={() => setVariablesOpen(false)} />}
-        {shareOpen && <ShareDialog onClose={() => setShareOpen(false)} />}
+        {shareOpen && fileId && <ShareDialog onClose={() => setShareOpen(false)} />}
         <input
           ref={fileInput}
           type="file"

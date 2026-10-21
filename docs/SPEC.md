@@ -335,12 +335,27 @@ Several people can edit the same document at once through a self-hosted
 Planar server (see [SELF_HOSTING.md](SELF_HOSTING.md); wire protocol in
 [PROTOCOL.md](PROTOCOL.md)).
 
-- **Rooms.** A shared document lives in a *room* on the server, named by a
-  random id. *Share* in the toolbar asks for the server address (filled in
-  automatically when the editor itself is served by a Planar server), your
-  name and an optional access token, then uploads the current document into
-  a new room and shows a link to it. Opening the link joins the room. *Leave*
-  disconnects and keeps a local copy.
+- **Accounts and files.** When the editor is served by a Planar server it
+  shows a sign-in screen (open registration: username, display name,
+  password) and then a file list with *My files*, *Shared with me* and
+  *Trash*. A file has a name, a thumbnail, an owner and a last-edited time.
+  Files can be created, imported from `.planar.json`, renamed, duplicated,
+  downloaded, shared, moved to the trash, restored and deleted for good.
+  Every file opens at its own address (`/file/<id>`). Without a server the
+  editor works on a local draft as before.
+- **Roles.** The *owner* can do everything, including trashing, deleting and
+  handing the file to someone else. An *editor* edits, renames and shares
+  (invites, changes roles, sets link access) but cannot delete or take over.
+  A *viewer* can look, select, inspect, copy code and export, and copy the
+  file into their own files; every attempt to change it is refused and the
+  toolbar says "View only".
+- **Sharing.** *Share* opens a dialog: invite by username (with suggestions)
+  as editor or viewer, change or remove people, choose link access — only
+  invited people, anyone with the link can view, or anyone with the link can
+  edit — and copy the link. People without an account can open link-shared
+  files as guests ("Guest N"). Changes to access apply immediately to people
+  who have the file open (a role change updates their editor; removing access
+  closes it).
 - **Live editing.** Every change — including moves and resizes while they
   are being dragged — appears for everyone within a fraction of a second.
   Changes are exchanged per layer (and per document-level list: pages,
@@ -359,17 +374,18 @@ Planar server (see [SELF_HOSTING.md](SELF_HOSTING.md); wire protocol in
 - **Connection loss.** Editing continues offline; on reconnection the
   latest server version is loaded and changes made in the meantime are
   re-applied on top of it and sent.
-- **Persistence.** The server keeps rooms on disk and restores them after a
-  restart. In a room the server copy is the source of truth; local
+- **Persistence.** The server keeps files on disk and restores them after a
+  restart. In a server file the server copy is the source of truth; local
   autosave is not used.
-- **Access.** Room ids are unguessable. A server can additionally require
-  an access token. There are no per-user accounts or permissions yet.
+- **Access.** File ids are unguessable, and access is decided by roles and
+  link access, never by a shared secret. There is no server-wide token.
 
 ## 12. AI agents (MCP) and code
 
 - Planar provides an MCP server for AI agents, locally over stdio (on a
-  file or a room) and remotely at `/mcp` on a Planar server (rooms only, no
-  file access). Tools and vocabulary are specified in [MCP.md](MCP.md).
+  file or on server files) and remotely at `/mcp` on a Planar server (server
+  files only, no local file access). Agents authenticate with a personal API
+  key and have their owner's rights. Tools and vocabulary are specified in [MCP.md](MCP.md).
 - Agents can create, rename, delete and switch pages, import SVG markup as
   vector layers, and render pages or layers with the document's web fonts.
 - Agent edits are ordinary edits: in a room the agent is a participant

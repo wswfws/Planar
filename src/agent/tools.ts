@@ -25,7 +25,7 @@ const MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg'
 export const INSTRUCTIONS = `Planar is an open-source design editor. These tools read and edit a Planar document (a file or a live shared room).
 
 Workflow:
-1. If nothing is open, call open (file path or share link).
+1. If nothing is open, call files to see your Planar files (or create one), then open it by id; or open a file link / local path.
 2. overview first: pages, top-level frames, components (with props/variants), variables, the current selection and, in a live room, what people are looking at.
 3. tree / find to locate layers; inspect for details. inspect returns the same vocabulary that create and update accept, so read → tweak → write back.
 4. Design: create builds whole nested layouts in one call (frames with layout/gap/padding, text, shapes, component instances). update restyles or moves many layers in one call. Prefer auto layout ("layout": "column"/"row") over absolute x/y.
@@ -47,6 +47,7 @@ function guard<A>(fn: (args: A) => Promise<Result> | Result): (args: A) => Promi
 /** Runs edits as one undo step; on failure everything is rolled back. */
 async function edit<T>(session: AgentSession, fn: (editor: Editor) => T): Promise<T> {
   const editor = await session.ready();
+  if (editor.readOnly) throw new PropError('This file is view-only for you, so it cannot be changed. Ask the owner for edit access, or duplicate it with files.');
   editor.begin();
   try {
     const result = fn(editor);
@@ -75,18 +76,49 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     {
       title: 'Open document',
       description:
-        'Open a .planar.json file (created if missing) or join a live shared room by its share link (https://host/?room=…#t=token). In a room you appear as "Agent" and people see your edits live.',
+        'Open a Planar file by id (from files) or by its link (https://host/file/<id>), or a local .planar.json path (created if missing). In a Planar file you appear as "Agent" and people see your edits live, with the rights of the API key owner.',
       inputSchema: {
-        file: z.string().optional().describe('Path to a .planar.json file'),
-        link: z.string().optional().describe('Planar share link'),
+        fileId: z.string().optional().describe('File id from the files tool'),
+        link: z.string().optional().describe('Planar file link'),
+        file: z.string().optional().describe('Path to a local .planar.json file'),
       },
     },
-    guard(async ({ file, link }) => {
+    guard(async ({ fileId, link, file }) => {
       let msg: string;
-      if (file) msg = await session.openFile(file);
+      if (fileId) msg = await session.openFileId(fileId);
       else if (link) msg = await session.openRoom(parseLink(link));
-      else return text(`Currently: ${session.describe()}. Pass file or link to open something.`);
+      else if (file) msg = await session.openFile(file);
+      else return text(`Currently: ${session.describe()}. Pass fileId, link or file to open something.`);
       return text(`${msg}\n\n${overview(await session.ready())}`);
+    }),
+  );
+
+  server.registerTool(
+    'files',
+    {
+      title: 'Planar files',
+      description:
+        'Your files on the Planar server (needs an API key). list: files you own (scope mine) or that others shared with you (scope shared), with your role. create: a new empty file (then open it). duplicate: copy any file you can view into your own files, e.g. to work on a view-only file.',
+      inputSchema: {
+        action: z.enum(['list', 'create', 'duplicate']),
+        scope: z.enum(['mine', 'shared']).optional().describe('list: which files (default mine)'),
+        name: z.string().optional().describe('create: file name'),
+        fileId: z.string().optional().describe('duplicate: the file to copy'),
+      },
+    },
+    guard(async ({ action, scope, name, fileId }) => {
+      if (action === 'list') {
+        const list = await session.listFiles(scope ?? 'mine');
+        if (!list.length) return text(scope === 'shared' ? 'Nothing is shared with you yet.' : 'No files yet. Use files create.');
+        return text(list.map((f) => `${f.id}  "${f.name}"  ${f.role ?? ''}${f.owner ? ` (owner ${f.owner.username})` : ''}  ${f.link}`).join('\n'));
+      }
+      if (action === 'create') {
+        const f = await session.createFile(name);
+        return text(`Created "${f.name}" — id ${f.id}. Open it with open fileId=${f.id}.\n${f.link}`);
+      }
+      if (!fileId) throw new PropError('duplicate needs fileId');
+      const f = await session.duplicateFile(fileId);
+      return text(`Copied to "${f.name}" — id ${f.id}. Open it with open fileId=${f.id}.\n${f.link}`);
     }),
   );
 

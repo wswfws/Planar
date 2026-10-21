@@ -29,7 +29,7 @@ curl -fsSL https://get.docker.com | sh
 ```bash
 git clone https://github.com/wswfws/Planar.git
 cd Planar
-DOMAIN=planar.example.com PLANAR_TOKEN=$(openssl rand -hex 16) docker compose up -d --build
+DOMAIN=planar.example.com docker compose up -d --build
 ```
 
 This starts two containers:
@@ -40,14 +40,28 @@ This starts two containers:
   for `DOMAIN` automatically and forwards traffic (including WebSockets) to
   Planar.
 
-Open `https://planar.example.com`. Click **Share**, enter your name and the
-access token, then **Start collaborating** and send the link to your team.
-The token is included in the link (after `#`, so it is never sent to the
-server in logs or referrers).
+Open `https://planar.example.com` and create an account — registration is
+open, so anyone who can reach the server can register. Accounts, file
+metadata and documents live in the data volume.
 
-To see the token later: `docker compose exec planar printenv PLANAR_TOKEN`.
-To run without a token (anyone who can guess a room link may join — room ids
-are random and long), leave `PLANAR_TOKEN` empty.
+### Accounts, files and sharing
+
+- Every file belongs to an **owner**. The owner can also give it to someone
+  else, move it to the trash and restore or delete it for good.
+- **Editors** edit, rename and share the file; **viewers** can open it, copy
+  from it and export it, but not change it.
+- Share a file by username (the box suggests matching users) or with a link
+  that gives *view* or *edit* access. People without an account can open such
+  a link; they appear as "Guest N".
+- Any file you can view can be copied into your own files.
+
+### Documents saved before accounts existed
+
+Older versions stored shared rooms without owners. On start they are moved
+into the new file store and stay reachable through their old links (edit
+access). Set `LEGACY_OWNER=<username>` and register that username to take
+them over: they then appear in that account's files, still with link access
+until the owner changes it.
 
 Make sure ports 80 and 443 are open in the server's firewall
 (`ufw allow 80,443/tcp`).
@@ -55,10 +69,11 @@ Make sure ports 80 and 443 are open in the server's firewall
 ## AI agents
 
 The server also hosts the Planar MCP endpoint at `https://planar.example.com/mcp`
-(same token, sent as `Authorization: Bearer <token>`). See [MCP.md](MCP.md):
+(a personal API key, sent as `Authorization: Bearer plk_…`; create one in the
+account menu). See [MCP.md](MCP.md):
 
 ```bash
-claude mcp add --transport http planar https://planar.example.com/mcp --header "Authorization: Bearer <token>"
+claude mcp add --transport http planar https://planar.example.com/mcp --header "Authorization: Bearer plk_…"
 ```
 
 ## Updating
@@ -66,16 +81,18 @@ claude mcp add --transport http planar https://planar.example.com/mcp --header "
 ```bash
 cd Planar
 git pull
-DOMAIN=planar.example.com PLANAR_TOKEN=<your token> docker compose up -d --build
+DOMAIN=planar.example.com docker compose up -d --build
 ```
 
-Put `DOMAIN` and `PLANAR_TOKEN` into a `.env` file next to
+Put `DOMAIN` (and optionally `LEGACY_OWNER`) into a `.env` file next to
 `docker-compose.yml` to avoid typing them each time:
 
 ```
 DOMAIN=planar.example.com
-PLANAR_TOKEN=your-token
+LEGACY_OWNER=your-username
 ```
+
+`PLANAR_TOKEN` from earlier versions is no longer used: remove it from `.env`.
 
 ## Backups
 
@@ -92,7 +109,7 @@ Requires Node.js 20 or newer.
 ```bash
 npm ci
 npm run build
-PORT=8080 DATA_DIR=/var/lib/planar PLANAR_TOKEN=... node dist-server/index.js
+PORT=8080 DATA_DIR=/var/lib/planar node dist-server/index.js
 ```
 
 Put a reverse proxy with TLS (Caddy, nginx, Traefik) in front of it and make
@@ -118,26 +135,25 @@ connect to a plain-HTTP server.
 
 ## Using the public editor with your server
 
-You can also keep using `https://wswfws.github.io/Planar/`: in **Share**,
-enter `https://planar.example.com` as the server address. Share links then
-point at the public editor and carry your server address.
-
 ## Configuration
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `PORT` | `8080` | HTTP and WebSocket port |
 | `HOST` | `0.0.0.0` | Interface to listen on |
-| `DATA_DIR` | `./data` (`/data` in Docker) | Where rooms are stored |
+| `DATA_DIR` | `./data` (`/data` in Docker) | Accounts, sessions, API keys and documents (`files/`) |
 | `STATIC_DIR` | `dist` next to the server | Built editor to serve |
-| `PLANAR_TOKEN` | empty | Access token required from clients |
+| `LEGACY_OWNER` | empty | Username that takes over documents saved before accounts existed |
 
 Health check: `GET /healthz`. Server info: `GET /api/info`.
 
 ## Limits and notes
 
-- There are no user accounts yet: everyone with the link (and the token)
-  can edit.
-- A room is one document. Leaving a room keeps a local copy in that browser.
+- Sign-ups are open. The editor must be served by the Planar server itself
+  (same address as the API) for accounts to work; the GitHub Pages build is
+  a local-only editor.
+- Passwords are stored as scrypt hashes; sessions are cookies (`HttpOnly`,
+  `SameSite=Lax`, `Secure` over HTTPS); sign-in attempts are rate limited per
+  address. Back up the whole `DATA_DIR` — it contains accounts and documents.
 - Images are embedded in documents; messages up to 50 MB are accepted.
 - The wire protocol is documented in [PROTOCOL.md](PROTOCOL.md).

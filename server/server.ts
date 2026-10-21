@@ -1,23 +1,27 @@
 import { createReadStream, promises as fs } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
-import { timingSafeEqual } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { parseDocument } from '../src/core/document';
 import { META_KEYS, type Op } from '../src/core/ops';
 import { initCanvas } from '../src/agent/raster';
+import { can, roleFor, type Role } from './access';
+import { adoptLegacy, authenticate, handleApi } from './api';
+import { Db, type FileRecord, type User } from './db';
 import { createMcpHandler } from './mcp-http';
 import { ROOM_ID, RoomStore, type Room } from './rooms';
 
 export interface ServerOptions {
   port: number;
   host?: string;
-  /** Where rooms are stored; null keeps them in memory only (tests). */
+  /** Where accounts and documents are stored; null keeps everything in memory (tests). */
   dataDir: string | null;
   /** Built editor to serve over HTTP; null serves only the API. */
   staticDir: string | null;
-  /** If set, clients must send this token. */
-  token?: string;
+  /** Username that takes over documents created before accounts existed. */
+  legacyOwner?: string;
+  /** Sign-in attempts per IP per five minutes (default 10). */
+  authLimit?: number;
   /** Largest accepted message in bytes (documents can embed images). */
   maxMessageBytes?: number;
 }
@@ -32,6 +36,8 @@ interface Client {
   id: string;
   socket: WebSocket;
   room: Room | null;
+  user: User | null;
+  role: Role | null;
   name: string;
   color: string;
   presence: Presence | null;
@@ -48,12 +54,6 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
-function safeEqual(a: string, b: string): boolean {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
-}
-
 function clean(s: unknown, max: number, fallback: string): string {
   return typeof s === 'string' && s.trim() ? s.trim().slice(0, max) : fallback;
 }
@@ -66,11 +66,46 @@ function isOp(op: unknown): op is Op {
   return false;
 }
 
-export async function startServer(opts: ServerOptions): Promise<{ port: number; close: () => Promise<void> }> {
-  const store = new RoomStore(opts.dataDir);
+/** Moves documents saved by earlier versions (one file per room, no owner) into the file store. */
+async function migrateLegacy(dataDir: string, db: Db): Promise<void> {
+  let names: string[];
+  try {
+    names = await fs.readdir(dataDir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const m = /^(.+)\.planar\.json$/.exec(name);
+    if (!m || !ROOM_ID.test(m[1])) continue;
+    const id = m[1];
+    const from = path.join(dataDir, name);
+    try {
+      const doc = parseDocument(JSON.parse(await fs.readFile(from, 'utf8')));
+      if (!db.files.has(id)) {
+        // Nobody owns these yet, so the old links keep working until an owner claims them.
+        const rec = db.createFile(null, doc.name || 'Untitled', id);
+        rec.linkAccess = 'edit';
+      }
+      await fs.rename(from, path.join(dataDir, 'files', name));
+    } catch (e) {
+      console.error(`[planar] could not migrate ${name}:`, e);
+    }
+  }
+}
+
+export async function startServer(opts: ServerOptions): Promise<{ port: number; close: () => Promise<void>; db: Db }> {
+  const db = new Db(opts.dataDir);
+  await db.init();
+  const store = new RoomStore(opts.dataDir ? path.join(opts.dataDir, 'files') : null);
   await store.init();
+  if (opts.dataDir) await migrateLegacy(opts.dataDir, db);
+  if (opts.legacyOwner) {
+    const owner = db.userByName(opts.legacyOwner);
+    if (owner) adoptLegacy({ db, legacyOwner: opts.legacyOwner }, owner);
+  }
   const members = new Map<string, Set<Client>>();
   let nextId = 1;
+  let guests = 0;
 
   const serveStatic = async (req: IncomingMessage, res: ServerResponse) => {
     if (!opts.staticDir) {
@@ -85,7 +120,18 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
       return;
     }
     const stat = await fs.stat(file).catch(() => null);
-    if (!stat || stat.isDirectory()) file = path.join(root, 'index.html');
+    if (!stat || stat.isDirectory()) {
+      // Pages such as /file/<id> are client routes: serve the editor, with a base so assets still resolve.
+      const index = path.join(root, 'index.html');
+      const html = await fs.readFile(index, 'utf8').catch(() => null);
+      if (html === null) {
+        res.writeHead(404).end('Not found');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+      res.end(html.replace('<head>', '<head><base href="/">'));
+      return;
+    }
     const type = MIME[path.extname(file)] ?? 'application/octet-stream';
     res.writeHead(200, {
       'Content-Type': type,
@@ -96,29 +142,7 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
 
   await initCanvas();
   let boundPort = opts.port;
-  const mcp = createMcpHandler({ token: opts.token, localServer: () => `http://127.0.0.1:${boundPort}` });
-
-  const http = createServer((req, res) => {
-    if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
-      mcp.handle(req, res).catch((e) => {
-        console.error('[planar] mcp error:', e);
-        if (!res.headersSent) res.writeHead(500).end('MCP error');
-      });
-      return;
-    }
-    if (req.url?.startsWith('/api/info')) {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-      res.end(JSON.stringify({ planar: true, protocol: 1, auth: !!opts.token, mcp: '/mcp' }));
-      return;
-    }
-    if (req.url === '/healthz') {
-      res.writeHead(200).end('ok');
-      return;
-    }
-    void serveStatic(req, res);
-  });
-
-  const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: opts.maxMessageBytes ?? 50 * 1024 * 1024 });
+  const mcp = createMcpHandler({ db, localServer: () => `http://127.0.0.1:${boundPort}` });
 
   const send = (c: Client, msg: unknown) => {
     if (c.socket.readyState === c.socket.OPEN) c.socket.send(JSON.stringify(msg));
@@ -128,13 +152,77 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
     for (const c of members.get(room.id) ?? []) if (c !== except && c.socket.readyState === c.socket.OPEN) c.socket.send(json);
   };
   const peerInfo = (c: Client) => ({ id: c.id, name: c.name, color: c.color, presence: c.presence });
+  const roleOf = (rec: FileRecord | undefined, userId: string | null): Role | null =>
+    rec && !rec.deletedAt ? roleFor(rec, userId) : null;
 
-  wss.on('connection', (socket) => {
-    const client: Client = { id: String(nextId++), socket, room: null, name: 'Guest', color: '#7b7bf0', presence: null };
+  const api = {
+    db,
+    store,
+    legacyOwner: opts.legacyOwner,
+    authLimit: opts.authLimit,
+    accessChanged: (fileId: string) => {
+      const rec = db.files.get(fileId);
+      for (const c of [...(members.get(fileId) ?? [])]) {
+        const role = roleOf(rec, c.user?.id ?? null);
+        if (!can(role, 'view')) {
+          send(c, { t: 'error', message: 'Access to this file was closed', fatal: true });
+          c.socket.close(4003, 'Access closed');
+        } else if (role !== c.role) {
+          c.role = role;
+          send(c, { t: 'role', role });
+        }
+      }
+    },
+    rename: (room: Room, name: string) => {
+      const ops: Op[] = [{ o: 'meta', key: 'name', value: name }];
+      const version = room.apply(ops);
+      db.fileEdited(room.id, name);
+      broadcast(room, { t: 'ops', from: 'server', version, ops });
+    },
+  };
+
+  const http = createServer((req, res) => {
+    if (req.url === '/mcp' || req.url?.startsWith('/mcp?')) {
+      mcp.handle(req, res).catch((e) => {
+        console.error('[planar] mcp error:', e);
+        if (!res.headersSent) res.writeHead(500).end('MCP error');
+      });
+      return;
+    }
+    if (req.url === '/healthz') {
+      res.writeHead(200).end('ok');
+      return;
+    }
+    void handleApi(req, res, api).then((handled) => {
+      if (!handled) void serveStatic(req, res);
+    });
+  });
+
+  const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: opts.maxMessageBytes ?? 50 * 1024 * 1024 });
+
+  wss.on('connection', (socket, req) => {
+    const client: Client = { id: String(nextId++), socket, room: null, user: null, role: null, name: 'Guest', color: '#7b7bf0', presence: null };
     const fail = (message: string) => {
       send(client, { t: 'error', message, fatal: true });
       socket.close(4000, message.slice(0, 120));
     };
+
+    // Browsers send an Origin; refuse pages from other sites so cookies cannot be borrowed.
+    const origin = req.headers.origin;
+    if (origin) {
+      let host = '';
+      try {
+        host = new URL(origin).host;
+      } catch {
+        // rejected below
+      }
+      if (host !== req.headers.host) {
+        socket.close(4003, 'Cross-origin connection refused');
+        return;
+      }
+    }
+    const auth = authenticate(req, db);
+    client.user = auth.user;
 
     socket.on('message', async (raw) => {
       let msg: Record<string, unknown>;
@@ -146,26 +234,45 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
 
       if (msg.t === 'hello') {
         if (client.room) return;
-        if (opts.token && !safeEqual(String(msg.token ?? ''), opts.token)) return fail('Wrong or missing access token');
-        const roomId = String(msg.room ?? '');
-        if (!ROOM_ID.test(roomId)) return fail('Invalid room id');
-        client.name = clean(msg.name, 40, 'Guest');
-        client.color = /^#[0-9a-f]{6}$/i.test(String(msg.color)) ? String(msg.color) : '#7b7bf0';
-        let room = await store.get(roomId);
-        if (!room && msg.doc) {
-          try {
-            room = await store.create(roomId, parseDocument(msg.doc));
-          } catch (e) {
-            return fail(`Invalid document: ${(e as Error).message}`);
-          }
+        let viaKey = false;
+        if (typeof msg.key === 'string' && msg.key) {
+          const keyUser = db.keyUser(msg.key);
+          if (!keyUser) return fail('Unknown or revoked API key');
+          client.user = keyUser;
+          viaKey = true;
         }
-        if (!room) return fail('This shared document does not exist on the server');
+        const fileId = String(msg.file ?? '');
+        if (!ROOM_ID.test(fileId)) return fail('Invalid file id');
+        const rec = db.files.get(fileId);
+        const role = roleOf(rec, client.user?.id ?? null);
+        if (!rec || !can(role, 'view')) {
+          return fail(client.user ? 'This file does not exist or is not shared with you' : 'Sign in to open this file');
+        }
+        const room = await store.get(fileId);
+        if (!room) return fail('The document is missing on the server');
+        client.role = role;
+        if (client.user && !viaKey) {
+          client.name = client.user.displayName;
+          client.color = client.user.color;
+        } else {
+          // Guests and agents (API keys) choose what others see; permissions still come from the account.
+          client.name = clean(msg.guestName, 40, viaKey ? 'Agent' : `Guest ${++guests}`);
+          client.color = /^#[0-9a-f]{6}$/i.test(String(msg.color)) ? String(msg.color) : '#7b7bf0';
+        }
         client.room = room;
         const set = members.get(room.id) ?? new Set();
         members.set(room.id, set);
         const peers = [...set].map(peerInfo);
         set.add(client);
-        send(client, { t: 'welcome', clientId: client.id, doc: room.doc, version: room.version, peers });
+        send(client, {
+          t: 'welcome',
+          clientId: client.id,
+          doc: room.doc,
+          version: room.version,
+          peers,
+          role,
+          you: { userId: client.user?.id ?? null, name: client.name, color: client.color },
+        });
         broadcast(room, { t: 'join', peer: peerInfo(client) }, client);
         return;
       }
@@ -174,10 +281,25 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
       if (!room) return fail('Say hello first');
 
       if (msg.t === 'ops') {
+        const rec = db.files.get(room.id);
+        const role = roleOf(rec, client.user?.id ?? null);
+        if (role !== client.role) {
+          if (!can(role, 'view')) return fail('Access to this file was closed');
+          client.role = role;
+          send(client, { t: 'role', role });
+        }
+        if (!can(client.role, 'edit')) {
+          send(client, { t: 'error', message: 'This file is view-only for you', fatal: false });
+          send(client, { t: 'ack', seq: msg.seq, version: room.version });
+          return;
+        }
         const ops = Array.isArray(msg.ops) ? msg.ops.filter(isOp) : [];
         const version = ops.length ? room.apply(ops) : room.version;
         send(client, { t: 'ack', seq: msg.seq, version });
-        if (ops.length) broadcast(room, { t: 'ops', from: client.id, version, ops }, client);
+        if (ops.length) {
+          broadcast(room, { t: 'ops', from: client.id, version, ops }, client);
+          db.fileEdited(room.id, ops.some((o) => o.o === 'meta' && o.key === 'name') ? room.doc.name : undefined);
+        }
       } else if (msg.t === 'presence') {
         const cursor = msg.cursor as Presence['cursor'];
         client.presence = {
@@ -226,6 +348,7 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
 
   return {
     port,
+    db,
     close: async () => {
       clearInterval(heartbeat);
       mcp.close();
@@ -233,6 +356,7 @@ export async function startServer(opts: ServerOptions): Promise<{ port: number; 
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => http.close(() => resolve()));
       await store.saveAll();
+      await db.flush();
     },
   };
 }

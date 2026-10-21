@@ -1,6 +1,7 @@
 // Planar MCP server over stdio.
 //
-//   node dist-mcp/index.js [--file design.planar.json] [--link <share link>] [--token T] [--name Agent]
+//   node dist-mcp/index.js [--file design.planar.json] [--link <file link>] [--server https://host] [--key plk_…] [--name Agent]
+//   The key can also come from PLANAR_KEY, the server from PLANAR_SERVER.
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -17,12 +18,17 @@ const log = (msg: string) => process.stderr.write(`[planar-mcp] ${msg}\n`);
 
 await initCanvas();
 
-const session = new AgentSession({ allowFiles: true, token: arg('token') ?? process.env.PLANAR_TOKEN, name: arg('name') ?? 'Agent' });
+const session = new AgentSession({
+  allowFiles: true,
+  key: arg('key') ?? process.env.PLANAR_KEY,
+  server: arg('server') ?? process.env.PLANAR_SERVER,
+  name: arg('name') ?? 'Agent',
+});
 try {
   const file = arg('file');
   const link = arg('link');
   if (file) log(await session.openFile(file));
-  else if (link) log(await session.openRoom({ ...parseLink(link), token: parseLink(link).token || (arg('token') ?? '') }));
+  else if (link) log(await session.openRoom(parseLink(link)));
 } catch (e) {
   log(`Could not open on start: ${(e as Error).message}`);
 }

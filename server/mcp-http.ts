@@ -1,13 +1,14 @@
 // Remote MCP endpoint (/mcp) on the collaboration server: agents connect over
 // Streamable HTTP and join rooms on this same server as live participants.
 
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { AgentSession } from '../src/agent/session';
 import { INSTRUCTIONS, registerTools } from '../src/agent/tools';
+import type { Db } from './db';
 
 interface Entry {
   transport: StreamableHTTPServerTransport;
@@ -40,17 +41,14 @@ function readBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-function authorized(req: IncomingMessage, token: string | undefined): boolean {
-  if (!token) return true;
+/** The personal API key (`plk_…`) of a request: Bearer header, or `?key=` for clients that cannot set headers. */
+function apiKey(req: IncomingMessage): string {
   const header = req.headers.authorization ?? '';
-  const url = new URL(req.url ?? '/', 'http://localhost');
-  const given = header.startsWith('Bearer ') ? header.slice(7) : url.searchParams.get('token') ?? '';
-  const a = Buffer.from(given);
-  const b = Buffer.from(token);
-  return a.length === b.length && timingSafeEqual(a, b);
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  return new URL(req.url ?? '/', 'http://localhost').searchParams.get('key') ?? '';
 }
 
-export function createMcpHandler(opts: { token?: string; localServer: () => string }) {
+export function createMcpHandler(opts: { db: Db; localServer: () => string }) {
   const sessions = new Map<string, Entry>();
 
   const sweep = setInterval(() => {
@@ -66,9 +64,10 @@ export function createMcpHandler(opts: { token?: string; localServer: () => stri
   sweep.unref();
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    if (!authorized(req, opts.token)) {
+    const key = apiKey(req);
+    if (!opts.db.keyUser(key)) {
       res.writeHead(401, { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Bearer' });
-      res.end(JSON.stringify({ error: 'Missing or wrong token. Send Authorization: Bearer <PLANAR_TOKEN>.' }));
+      res.end(JSON.stringify({ error: 'Missing or revoked API key. Create one in Planar (account menu → API keys) and send Authorization: Bearer plk_…' }));
       return;
     }
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
@@ -89,7 +88,7 @@ export function createMcpHandler(opts: { token?: string; localServer: () => stri
         res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: sessionId ? 'Unknown session' : 'Start with an initialize request' }, id: null }));
         return;
       }
-      const session = new AgentSession({ allowFiles: false, localServer: opts.localServer(), token: opts.token, name: 'Agent' });
+      const session = new AgentSession({ allowFiles: false, localServer: opts.localServer(), key, name: 'Agent' });
       const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {

@@ -12,21 +12,22 @@ import { ensureDocumentFonts } from './fonts';
 export interface SessionOptions {
   /** Whether tools may read and write local files (false on the remote endpoint). */
   allowFiles: boolean;
-  /** Remote endpoint: connect rooms to this server instead of the link's host. */
+  /** Remote endpoint: this very server (files are opened without going through the network name). */
   localServer?: string;
-  /** Token to use for rooms when none is given. */
-  token?: string;
+  /** Server for the files tool when no link was given (https://planar.example.com). */
+  server?: string;
+  /** Personal API key (`plk_…`): the agent acts with this person's rights. */
+  key?: string;
   name?: string;
 }
 
 export interface RoomTarget {
   serverUrl: string;
-  roomId: string;
-  token: string;
+  fileId: string;
   link: string;
 }
 
-/** Reads a share link like https://host/?room=ID#t=TOKEN (or ?server=…). */
+/** Reads a file link like https://host/file/ID (older ?room=ID links work too). */
 export function parseLink(link: string): RoomTarget {
   let url: URL;
   try {
@@ -34,10 +35,21 @@ export function parseLink(link: string): RoomTarget {
   } catch {
     throw new Error(`Not a link: ${link}`);
   }
-  const roomId = url.searchParams.get('room');
-  if (!roomId) throw new Error('The link has no ?room= — copy it from Share in Planar.');
-  const hash = new URLSearchParams(url.hash.replace(/^#/, ''));
-  return { serverUrl: url.searchParams.get('server') ?? url.origin, roomId, token: hash.get('t') ?? '', link };
+  const fileId = /^\/file\/([A-Za-z0-9_-]+)\/?$/.exec(url.pathname)?.[1] ?? url.searchParams.get('room');
+  if (!fileId) throw new Error('The link is not a Planar file link (expected https://host/file/<id>) — copy it from Share in Planar.');
+  return { serverUrl: url.origin, fileId, link };
+}
+
+interface FileRow {
+  id: string;
+  name: string;
+  role: string | null;
+  owner: { username: string } | null;
+  updatedAt: number;
+}
+
+export interface RemoteFile extends FileRow {
+  link: string;
 }
 
 export class AgentSession {
@@ -51,7 +63,7 @@ export class AgentSession {
 
   describe(): string {
     if (this.mode === 'file') return `file ${this.file}`;
-    if (this.mode === 'room' && this.editor?.collab) return `live room ${this.editor.collab.roomId} on ${this.editor.collab.serverUrl} (${this.editor.collab.status})`;
+    if (this.mode === 'room' && this.editor?.collab) return `live file ${this.editor.collab.fileId} on ${this.editor.collab.serverUrl} (${this.editor.collab.status})`;
     return 'nothing open';
   }
 
@@ -84,16 +96,58 @@ export class AgentSession {
     return created ? `Created ${full}` : `Opened ${full}`;
   }
 
+  private base(): string {
+    const base = this.opts.localServer ?? this.opts.server;
+    if (!base) throw new Error('No Planar server is set. Start the MCP server with --server https://your-planar-host (or open a file link first).');
+    return base.replace(/\/+$/, '');
+  }
+
+  private async request<T>(method: string, route: string, body?: unknown): Promise<T> {
+    if (!this.opts.key) throw new Error('No API key. Create one in Planar (account menu → API keys) and pass it as --key or PLANAR_KEY.');
+    const res = await fetch(`${this.base()}${route}`, {
+      method,
+      headers: { Authorization: `Bearer ${this.opts.key}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string } & T;
+    if (!res.ok) throw new Error(data.error ?? `Server answered ${res.status}`);
+    return data;
+  }
+
+  private remoteFile(f: FileRow): RemoteFile {
+    return { id: f.id, name: f.name, role: f.role, owner: f.owner, updatedAt: f.updatedAt, link: `${this.base()}/file/${f.id}` };
+  }
+
+  /** Files of the key's owner: their own, or those shared with them. */
+  async listFiles(scope: 'mine' | 'shared' = 'mine'): Promise<RemoteFile[]> {
+    const { files } = await this.request<{ files: FileRow[] }>('GET', `/api/files?scope=${scope}`);
+    return files.map((f) => this.remoteFile(f));
+  }
+
+  async createFile(name?: string): Promise<RemoteFile> {
+    const { file } = await this.request<{ file: FileRow }>('POST', '/api/files', { name });
+    return this.remoteFile(file);
+  }
+
+  async duplicateFile(id: string): Promise<RemoteFile> {
+    const { file } = await this.request<{ file: FileRow }>('POST', `/api/files/${encodeURIComponent(id)}/duplicate`, {});
+    return this.remoteFile(file);
+  }
+
+  async openFileId(id: string): Promise<string> {
+    return this.openRoom({ serverUrl: this.base(), fileId: id, link: `${this.base()}/file/${id}` });
+  }
+
   async openRoom(target: RoomTarget): Promise<string> {
     this.close();
     const editor = new Editor(createDocument(), { autosave: false });
     const serverUrl = this.opts.localServer ?? target.serverUrl;
     const client = new CollabClient(editor, {
       serverUrl,
-      roomId: target.roomId,
-      name: this.opts.name ?? 'Agent',
+      fileId: target.fileId,
+      guestName: this.opts.name ?? 'Agent',
       color: '#8e6cf0',
-      token: target.token || this.opts.token,
+      key: this.opts.key,
       shareUrl: target.link,
       WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
     });
@@ -103,19 +157,20 @@ export class AgentSession {
       if (client.status === 'error' || Date.now() - started > 10_000) {
         const reason = editor.collab?.error ?? 'timed out';
         client.stop();
-        throw new Error(`Could not join room ${target.roomId}: ${reason}`);
+        throw new Error(`Could not open file ${target.fileId}: ${reason}`);
       }
       await new Promise((r) => setTimeout(r, 25));
     }
     this.editor = editor;
     this.client = client;
     this.mode = 'room';
-    return `Joined live room ${target.roomId} as "${this.opts.name ?? 'Agent'}" — people in the room see your changes immediately.`;
+    const view = editor.readOnly ? ' (view-only: you cannot edit this file)' : '';
+    return `Opened live file ${target.fileId}${view} — people in the file see your changes immediately.`;
   }
 
   /** The open editor, reloading the file first if it changed on disk. */
   async ready(): Promise<Editor> {
-    if (!this.editor) throw new Error('No document is open. Call open with a file path or a Planar share link first.');
+    if (!this.editor) throw new Error('No document is open. Call files to list your Planar files, then open one (or open a file link or local path).');
     if (this.mode === 'file' && this.file) {
       const stat = await fs.stat(this.file).catch(() => null);
       if (stat && stat.mtimeMs !== this.mtime) {

@@ -45,13 +45,16 @@ keyboard shortcuts.
 
 ## Real-time collaboration
 
-Run your own Planar server (Docker + automatic HTTPS) and edit documents
-together: live changes, other people's pointers and selections, per-person
-undo, reconnection with offline edits. See
+Run your own Planar server (Docker + automatic HTTPS). People register
+accounts (open registration), keep their files on the server, duplicate and
+copy them, and share each file like in Figma: **owner**, **editor** and
+**viewer** roles, invites by username, and a link that gives view or edit
+access (even without an account). Editing is live: other people's pointers
+and selections, per-person undo, reconnection with offline edits. See
 [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md):
 
 ```bash
-DOMAIN=planar.example.com PLANAR_TOKEN=$(openssl rand -hex 16) docker compose up -d --build
+DOMAIN=planar.example.com docker compose up -d --build
 ```
 
 ## AI agents (MCP)
@@ -61,11 +64,12 @@ built for agents: one `create` call builds a whole nested layout, `inspect`
 returns layers in the same vocabulary `update` accepts, outlines are compact,
 `screenshot` lets the agent see its work, and `code` / `tokens` produce React
 (typed props, variants), HTML/CSS (auto layout → flexbox) and CSS variables.
-In a shared room the agent works live next to people.
+Agents sign in with a personal API key (account menu → API keys), see the
+same files as their owner and work live next to people.
 
 ```bash
 # Remote, on your Planar server
-claude mcp add --transport http planar https://planar.example.com/mcp --header "Authorization: Bearer <token>"
+claude mcp add --transport http planar https://planar.example.com/mcp --header "Authorization: Bearer plk_…"
 # Local, on a file
 claude mcp add planar -- node /path/to/Planar/dist-mcp/index.js --file ./design.planar.json
 ```

@@ -1,36 +1,33 @@
-import { useEffect, useState } from 'react';
-import { detectServer, loadSettings, PEER_COLORS, randomRoomId, saveSettings, serverInfo, startSession } from '../collab/session';
+import { useCallback, useEffect, useState } from 'react';
+import { accounts, fileLink, files, type FileInfo, type LinkAccess, type Me } from '../collab/session';
 import { IconButton } from './controls';
 import { useEditorState } from './EditorContext';
+import { navigate, useServer } from './router';
 
-const STATUS_LABEL = {
-  connecting: 'Connecting…',
-  connected: 'Live',
-  reconnecting: 'Reconnecting…',
-  error: 'Not connected',
-} as const;
+type Suggestion = Omit<Me, 'id'>;
+
+const LINK_LABEL: Record<LinkAccess, string> = {
+  none: 'Only people invited',
+  view: 'Anyone with the link can view',
+  edit: 'Anyone with the link can edit',
+};
 
 export function ShareDialog({ onClose }: { onClose: () => void }) {
   const editor = useEditorState();
-  const collab = editor.collab;
-  const [settings, setSettings] = useState(loadSettings);
-  const [detected, setDetected] = useState<string | null>(null);
+  const server = useServer()!;
+  const me = server.me;
+  const fileId = editor.collab!.fileId;
+  const [file, setFile] = useState<FileInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [needsToken, setNeedsToken] = useState(false);
+  const [username, setUsername] = useState('');
+  const [role, setRole] = useState<'editor' | 'viewer'>('editor');
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
-  useEffect(() => {
-    void detectServer().then((origin) => {
-      setDetected(origin);
-      if (origin) setSettings((s) => ({ ...s, serverUrl: s.serverUrl || origin }));
-    });
-  }, []);
-
-  // Ask the server whether it requires a token (debounced while typing).
-  useEffect(() => {
-    const url = collab?.serverUrl ?? settings.serverUrl;
-    const timer = setTimeout(() => void serverInfo(url).then((info) => setNeedsToken(!!info?.auth)), 300);
-    return () => clearTimeout(timer);
-  }, [settings.serverUrl, collab?.serverUrl]);
+  const load = useCallback(() => {
+    files.get(fileId).then(setFile, (e: Error) => setError(e.message));
+  }, [fileId]);
+  useEffect(load, [load, editor.collab?.role]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -38,166 +35,194 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const insecure = location.protocol === 'https:' && /^(ws|http):\/\//i.test(settings.serverUrl);
-  const tokenMissing = needsToken && !settings.token.trim();
-  const clean = () => ({ ...settings, serverUrl: settings.serverUrl.trim(), name: settings.name.trim() || 'Guest', token: settings.token.trim() });
-  const start = () => {
-    const s = clean();
-    saveSettings(s);
-    startSession(editor, { ...s, roomId: randomRoomId(), create: true });
-  };
-  // After an error (e.g. a wrong token), reconnect to the same room with new details.
-  const retry = () => {
-    if (!collab) return;
-    const s = clean();
-    saveSettings(s);
-    const { roomId, serverUrl } = collab;
-    collab.leave();
-    startSession(editor, { ...s, serverUrl, roomId, create: true });
+  // Username suggestions while typing.
+  useEffect(() => {
+    const q = username.trim().replace(/^@/, '');
+    if (!me || !q) return setSuggestions([]);
+    const timer = setTimeout(() => void accounts.findUsers(q).then(setSuggestions, () => setSuggestions([])), 150);
+    return () => clearTimeout(timer);
+  }, [username, me]);
+
+  const act = async (fn: () => Promise<FileInfo | void>) => {
+    setError(null);
+    try {
+      const next = await fn();
+      if (next) setFile(next);
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
-  const tokenField = (
-    <label className="stacked-field">
-      <span>Access token{needsToken ? ' (required by this server)' : ' (if required)'}</span>
-      <input
-        className="text-field"
-        type="password"
-        value={settings.token}
-        placeholder={needsToken ? 'Paste the server token' : ''}
-        onChange={(e) => setSettings({ ...settings, token: e.target.value })}
-        onKeyDown={(e) => e.stopPropagation()}
-      />
-    </label>
-  );
+  const invite = (name = username) =>
+    act(async () => {
+      const next = await files.setMember(fileId, name.trim().replace(/^@/, ''), role);
+      setUsername('');
+      setSuggestions([]);
+      return next;
+    });
+
+  const role_ = file?.role ?? editor.collab?.role ?? null;
+  const canShare = !!me && (role_ === 'owner' || role_ === 'editor');
+  const link = fileLink(fileId);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      editor.notify('Copy the link from the field');
+    }
+  };
 
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog share-dialog" role="dialog" aria-label="Share">
         <header className="dialog-header">
-          <h2>Collaborate</h2>
+          <h2>Share “{file?.name ?? editor.doc.name}”</h2>
           <IconButton icon="close" title="Close (Esc)" onClick={onClose} />
         </header>
         <div className="dialog-body share-body">
-          {collab ? (
-            <>
-              <p className="share-status">
-                <span className={`status-dot ${collab.status}`} /> {STATUS_LABEL[collab.status]}
-                {collab.error && <span className="share-error"> — {collab.error}</span>}
-              </p>
-              {collab.status === 'error' && (
-                <>
-                  {tokenField}
-                  <p className="hint">Check the token (the server owner can see it with docker compose exec planar printenv PLANAR_TOKEN), then try again.</p>
-                </>
-              )}
-              <label className="stacked-field">
-                <span>Link to this document</span>
-                <span className="link-row">
-                  <input readOnly value={collab.shareUrl} onFocus={(e) => e.target.select()} />
-                  <button
-                    type="button"
-                    className="small-button"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(collab.shareUrl);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 1500);
-                      } catch {
-                        editor.notify('Copy the link from the field');
-                      }
-                    }}
-                  >
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
-                </span>
-              </label>
-              <p className="hint">Anyone with this link can view and edit. The access token, if any, is part of the link.</p>
-              <div className="peer-list">
-                <span className="peer-chip" style={{ borderColor: settings.color }}>
-                  <span className="peer-dot" style={{ background: settings.color }} />
-                  {settings.name || 'You'} (you)
-                </span>
-                {collab.peers.map((p) => (
-                  <span key={p.id} className="peer-chip" style={{ borderColor: p.color }}>
-                    <span className="peer-dot" style={{ background: p.color }} />
-                    {p.name}
-                  </span>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="hint">
-                Edit this document together in real time through your own Planar server. The document is uploaded to the server and a link
-                is created for others to join.
-              </p>
-              <label className="stacked-field">
-                <span>Server address</span>
-                <input
-                  className="text-field"
-                  placeholder="https://planar.example.com"
-                  value={settings.serverUrl}
-                  onChange={(e) => setSettings({ ...settings, serverUrl: e.target.value })}
-                  onKeyDown={(e) => e.stopPropagation()}
-                />
-              </label>
-              {detected && settings.serverUrl === detected && <p className="hint">This editor is served by a Planar server — it will be used.</p>}
-              {insecure && <p className="share-error">This page uses HTTPS, so the server must use HTTPS (https:// or wss://) too.</p>}
-              {tokenMissing && <p className="share-error">This server requires an access token.</p>}
-              <div className="grid-2">
-                <label className="stacked-field">
-                  <span>Your name</span>
+          {canShare && (
+            <div className="stacked-field">
+              <span>Invite by username</span>
+              <div className="link-row invite-row">
+                <div className="suggest">
                   <input
-                    className="text-field"
-                    placeholder="Guest"
-                    value={settings.name}
-                    maxLength={40}
-                    onChange={(e) => setSettings({ ...settings, name: e.target.value })}
-                    onKeyDown={(e) => e.stopPropagation()}
+                    placeholder="@username"
+                    value={username}
+                    autoComplete="off"
+                    onChange={(e) => setUsername(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter' && username.trim()) void invite();
+                    }}
                   />
-                </label>
-                {tokenField}
-              </div>
-              <div className="stacked-field">
-                <span>Your colour</span>
-                <div className="color-swatches">
-                  {PEER_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={settings.color === c ? 'active' : ''}
-                      style={{ background: c }}
-                      aria-label={`Colour ${c}`}
-                      onClick={() => setSettings({ ...settings, color: c })}
-                    />
-                  ))}
+                  {suggestions.length > 0 && (
+                    <div className="menu suggest-list" role="listbox">
+                      {suggestions.map((s) => (
+                        <button key={s.username} type="button" onClick={() => setUsername(s.username)}>
+                          <span>
+                            <span className="peer-dot" style={{ background: s.color }} /> {s.displayName}
+                          </span>
+                          <span className="hint">@{s.username}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+                <select value={role} onChange={(e) => setRole(e.target.value as 'editor' | 'viewer')} aria-label="Role">
+                  <option value="editor">Can edit</option>
+                  <option value="viewer">Can view</option>
+                </select>
+                <button type="button" className="primary-button" disabled={!username.trim()} onClick={() => invite()}>
+                  Invite
+                </button>
               </div>
-            </>
+            </div>
           )}
+          {!me && (
+            <p className="hint">
+              <button type="button" className="link-button" onClick={() => navigate(`/login?next=${encodeURIComponent(`/file/${fileId}`)}`)}>
+                Sign in
+              </button>{' '}
+              to invite people or copy this file to your own files.
+            </p>
+          )}
+
+          {file && (
+            <div className="people">
+              {file.owner && (
+                <div className="person">
+                  <span className="peer-dot" style={{ background: file.owner.color }} />
+                  <span className="person-name">
+                    {file.owner.displayName} <span className="hint">@{file.owner.username}</span>
+                  </span>
+                  <span className="hint">Owner</span>
+                </div>
+              )}
+              {file.members?.map((m) => (
+                <div className="person" key={m.id}>
+                  <span className="peer-dot" style={{ background: m.color }} />
+                  <span className="person-name">
+                    {m.displayName} <span className="hint">@{m.username}</span>
+                  </span>
+                  {canShare ? (
+                    <>
+                      <select value={m.role} onChange={(e) => act(() => files.setMember(fileId, m.username, e.target.value as 'editor' | 'viewer'))} aria-label={`Role of ${m.username}`}>
+                        <option value="editor">Can edit</option>
+                        <option value="viewer">Can view</option>
+                      </select>
+                      <button type="button" className="link-button" onClick={() => act(() => files.setMember(fileId, m.username, null))}>
+                        Remove
+                      </button>
+                    </>
+                  ) : (
+                    <span className="hint">{m.role === 'editor' ? 'Can edit' : 'Can view'}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <label className="stacked-field">
+            <span>Link access</span>
+            {canShare ? (
+              <select value={file?.linkAccess ?? 'none'} onChange={(e) => act(() => files.setLinkAccess(fileId, e.target.value as LinkAccess))}>
+                {(Object.keys(LINK_LABEL) as LinkAccess[]).map((k) => (
+                  <option key={k} value={k}>
+                    {LINK_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span>{LINK_LABEL[file?.linkAccess ?? 'none']}</span>
+            )}
+          </label>
+          <span className="link-row">
+            <input readOnly value={link} onFocus={(e) => e.target.select()} aria-label="Link to this file" />
+            <button type="button" className="small-button" onClick={copyLink}>
+              {copied ? 'Copied' : 'Copy link'}
+            </button>
+          </span>
+          {file?.linkAccess === 'none' && <p className="hint">This link only works for people you invited.</p>}
+
+          {role_ === 'viewer' && <p className="hint">You can view this file but not change it.</p>}
+          {error && <p className="share-error">{error}</p>}
         </div>
         <footer className="dialog-footer">
-          {collab ? (
-            <>
-              {collab.status === 'error' && (
-                <button type="button" className="primary-button" disabled={tokenMissing} onClick={retry}>
-                  Try again
-                </button>
-              )}
-              <button type="button" className="small-button" onClick={() => collab.leave()}>
-                Leave (keep a local copy)
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" className="primary-button" disabled={!settings.serverUrl.trim() || insecure || tokenMissing} onClick={start}>
-                Start collaborating
-              </button>
-              <a className="hint" href="https://github.com/wswfws/Planar/blob/main/docs/SELF_HOSTING.md" target="_blank" rel="noopener">
-                How to run a server
-              </a>
-            </>
+          {me && role_ !== 'owner' && (
+            <button
+              type="button"
+              className="small-button"
+              onClick={() =>
+                act(async () => {
+                  const copy = await files.duplicate(fileId);
+                  onClose();
+                  navigate(`/file/${copy.id}`);
+                })
+              }
+            >
+              Copy to my files
+            </button>
           )}
+          {role_ === 'owner' && (
+            <button
+              type="button"
+              className="small-button"
+              onClick={() => {
+                const to = prompt('Make this person the owner (username):');
+                if (to && confirm(`Hand over “${file?.name}” to @${to.replace(/^@/, '')}? You will become an editor.`)) {
+                  void act(() => files.transfer(fileId, to.trim().replace(/^@/, '')));
+                }
+              }}
+            >
+              Transfer ownership…
+            </button>
+          )}
+          <button type="button" className="primary-button done" onClick={onClose}>
+            Done
+          </button>
         </footer>
       </div>
     </div>

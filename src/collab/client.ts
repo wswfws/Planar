@@ -1,17 +1,17 @@
 import { parseDocument } from '../core/document';
-import type { CollabInfo, Editor, RemotePeer } from '../core/editor';
+import type { CollabInfo, Editor, FileRole, RemotePeer } from '../core/editor';
 import { ChangeTracker, type Op } from '../core/ops';
-import type { PlanarDocument } from '../core/types';
 
 export interface CollabOptions {
   /** Server address, e.g. https://planar.example.com (ws/wss also accepted). */
   serverUrl: string;
-  roomId: string;
-  name: string;
-  color: string;
-  token?: string;
-  /** Upload this document if the room does not exist yet. */
-  createWith?: PlanarDocument;
+  /** The file to open (its id on the server). */
+  fileId: string;
+  /** Shown to others when the person is not signed in. */
+  guestName?: string;
+  color?: string;
+  /** Personal API key (`plk_…`) for agents; browsers are identified by their session cookie. */
+  key?: string;
   /** Link others can open to join. */
   shareUrl: string;
   /** WebSocket implementation (defaults to the global one). */
@@ -63,9 +63,10 @@ export class CollabClient {
   ) {
     this.info = {
       status: 'connecting',
-      roomId: opts.roomId,
+      fileId: opts.fileId,
       shareUrl: opts.shareUrl,
       serverUrl: opts.serverUrl,
+      role: null,
       peers: [],
       error: null,
       leave: () => this.stop(),
@@ -95,6 +96,7 @@ export class CollabClient {
     if (this.presenceTimer) clearTimeout(this.presenceTimer);
     this.ws?.close();
     this.editor.collab = null;
+    this.editor.readOnly = false;
     this.editor.setAutosave(true);
     this.editor.emit();
   }
@@ -139,11 +141,10 @@ export class CollabClient {
       ws.send(
         JSON.stringify({
           t: 'hello',
-          room: this.opts.roomId,
-          name: this.opts.name,
+          file: this.opts.fileId,
+          guestName: this.opts.guestName,
           color: this.opts.color,
-          token: this.opts.token,
-          doc: this.joined ? undefined : this.opts.createWith,
+          key: this.opts.key,
         }),
       );
     };
@@ -180,6 +181,9 @@ export class CollabClient {
       }
       case 'ops':
         this.onRemoteOps(msg.ops as Op[]);
+        break;
+      case 'role':
+        this.onRole(msg.role as FileRole);
         break;
       case 'presence': {
         const peer = this.peers.get(String(msg.from));
@@ -221,7 +225,8 @@ export class CollabClient {
     // Changes made while disconnected: unacknowledged batches plus anything
     // never sent. They are re-applied on top of the server's version.
     const replay: Op[] = [];
-    if (this.joined) {
+    this.setRole(msg.role as FileRole);
+    if (this.joined && this.role !== 'viewer') {
       for (const ops of this.unacked.values()) replay.push(...ops);
       replay.push(...this.tracker.collect(this.editor.doc));
     }
@@ -230,7 +235,7 @@ export class CollabClient {
 
     const doc = parseDocument(msg.doc);
     this.editor.setAutosave(false);
-    this.editor.replaceDocument(doc, { keepView: this.joined || !!this.opts.createWith });
+    this.editor.replaceDocument(doc, { keepView: this.joined });
     this.tracker.reset(this.editor.doc);
     this.peers = new Map((msg.peers as RemotePeer[]).map((p) => [p.id, { ...p, presence: p.presence ?? null }]));
     this.joined = true;
@@ -243,6 +248,26 @@ export class CollabClient {
     }
     this.lastPresence = '';
     this.sendPresence();
+  }
+
+  private role: FileRole | null = null;
+
+  private setRole(role: FileRole): void {
+    this.role = role;
+    this.editor.readOnly = role === 'viewer';
+    this.info = { ...this.info, role };
+  }
+
+  /** Access changed while connected. */
+  private onRole(role: FileRole): void {
+    const was = this.role;
+    this.setRole(role);
+    if (!this.closed) {
+      this.editor.collab = this.info;
+      this.editor.notify(role === 'viewer' ? 'You now have view-only access' : 'You can edit this file now');
+    }
+    // Losing edit rights: reconnect so unsent changes are dropped and the server's copy shown.
+    if (role === 'viewer' && was !== 'viewer') this.ws?.close();
   }
 
   private onRemoteOps(ops: Op[]): void {
