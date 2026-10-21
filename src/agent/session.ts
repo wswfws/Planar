@@ -48,6 +48,9 @@ interface FileRow {
   updatedAt: number;
 }
 
+/** How long an agent keeps pointing at what it last changed. */
+const AGENT_PRESENCE_MS = 60_000;
+
 export interface RemoteFile extends FileRow {
   link: string;
 }
@@ -58,6 +61,7 @@ export class AgentSession {
   file: string | null = null;
   private mtime = 0;
   private client: CollabClient | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(readonly opts: SessionOptions) {}
 
@@ -68,6 +72,7 @@ export class AgentSession {
   }
 
   close(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
     this.client?.stop();
     this.client = null;
     this.editor = null;
@@ -200,7 +205,17 @@ export class AgentSession {
       editor.setPointer(worldCenter(editor.doc, visible[0]));
     }
     if (this.mode === 'file') await this.save();
-    if (this.mode === 'room') await this.client?.settled(5000).catch(() => undefined);
+    if (this.mode === 'room') {
+      await this.client?.settled(5000).catch(() => undefined);
+      // Point at the work for a while, then step aside so the cursor and outlines do not linger.
+      if (this.idleTimer) clearTimeout(this.idleTimer);
+      this.idleTimer = setTimeout(() => {
+        if (this.editor !== editor) return;
+        editor.select([]);
+        editor.setPointer(null);
+      }, AGENT_PRESENCE_MS);
+      this.idleTimer.unref?.();
+    }
   }
 
   private async save(): Promise<void> {

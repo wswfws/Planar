@@ -207,7 +207,8 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
     if (!p || p.pageId !== editor.pageId) continue;
     for (const id of p.selection) {
       const n = doc.nodes[id];
-      if (!n) continue;
+      // Someone may select layers that live on another page (e.g. an agent that just moved them there).
+      if (!n || getPageOf(doc, id)?.id !== editor.pageId) continue;
       toScreenMatrix(id);
       traceOutline(ctx, n);
       resetTransform();
