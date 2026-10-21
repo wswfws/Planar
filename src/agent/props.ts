@@ -11,6 +11,9 @@ import {
   wouldCycle,
 } from '../core/components';
 import { createNode, insertNode } from '../core/document';
+import { scaleContents } from '../core/geometry';
+import { nodePaths, pathGeometry } from '../core/paths';
+import { insertSvg, parseSvg } from '../core/svg';
 import type { Editor } from '../core/editor';
 import type { NodeType, Paint, PlanarDocument, SceneNode } from '../core/types';
 import { isFrameLike } from '../core/types';
@@ -132,8 +135,14 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
     if (!n.autoWidth && !n.autoHeight && n.textAlignVertical !== 'top') out.textAlignVertical = n.textAlignVertical;
   }
   if (n.type === 'vector') {
-    out.points = n.points.map((p) => [round(p.x * n.width), round(p.y * n.height)]);
-    if (n.closed) out.closed = true;
+    if (n.paths.length) {
+      const ds = nodePaths(n).map((p) => p.d);
+      out.path = ds.length === 1 ? ds[0] : ds;
+      if (n.paths.some((p) => p.fillRule === 'evenodd')) out.fillRule = 'evenodd';
+    } else {
+      out.points = n.points.map((p) => [round(p.x * n.width), round(p.y * n.height)]);
+      if (n.closed) out.closed = true;
+    }
   }
   if (n.type === 'instance') {
     const comp = doc.nodes[n.componentId];
@@ -245,7 +254,7 @@ const KNOWN = new Set([
   'id', 'type', 'name', 'x', 'y', 'width', 'height', 'w', 'h', 'rotation', 'opacity', 'visible', 'locked', 'fill', 'fills', 'stroke',
   'strokes', 'strokeWidth', 'radius', 'clip', 'layout', 'gap', 'padding', 'align', 'crossAlign', 'absolute', 'text', 'font', 'size',
   'fontSize', 'weight', 'fontWeight', 'lineHeight', 'textAlign', 'textAlignVertical', 'component', 'props', 'variant', 'mode',
-  'parent', 'index', 'children', 'points', 'closed',
+  'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg',
 ]);
 
 /**
@@ -279,6 +288,7 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
     }
   };
 
+  const before = { w: node.width, h: node.height };
   editor.updateNodes([id], (n) => {
     const set = <K extends keyof SceneNode>(k: K, v: SceneNode[K]) => {
       n[k] = v;
@@ -387,6 +397,22 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
       n.points = pts.map(([px, py]) => ({ x: w ? (px - minX) / w : 0, y: h ? (py - minY) / h : 0 }));
     }
     if (props.closed !== undefined && n.type === 'vector') set('closed', props.closed === true);
+    if (props.path !== undefined && n.type === 'vector') {
+      const vb = Array.isArray(props.viewBox) ? { w: Number(props.viewBox[0]), h: Number(props.viewBox[1]) } : undefined;
+      let geo;
+      try {
+        geo = pathGeometry(props.path as string | string[], vb);
+      } catch (e) {
+        throw new PropError(`Bad path: ${(e as Error).message}`);
+      }
+      const rule = props.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
+      n.paths = geo.paths.map((p) => ({ ...p, fillRule: rule }));
+      n.pathBox = { w: Math.max(geo.box.width, 0.01), h: Math.max(geo.box.height, 0.01) };
+      // Keep a requested size; otherwise use the path's own size.
+      if (props.width === undefined && props.w === undefined) n.width = n.pathBox.w;
+      if (props.height === undefined && props.h === undefined) n.height = n.pathBox.h;
+      if (!n.fills.length && !n.strokes.length) n.fills = [{ type: 'solid', color: '#000000', opacity: 1, visible: true }];
+    }
 
     if (props.mode !== undefined) {
       const name = String(props.mode);
@@ -396,6 +422,12 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
       else set('variableMode', mode.id);
     }
   });
+
+  // Resizing a group or an icon frame scales what it holds.
+  const resized = doc.nodes[id];
+  if (resized && (resized.width !== before.w || resized.height !== before.h) && before.w > 0 && before.h > 0) {
+    editor.change((d) => scaleContents(d, resized, resized.width / before.w, resized.height / before.h));
+  }
 
   // Instance properties and variants.
   const inst = doc.nodes[id];
@@ -441,7 +473,7 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
   return warnings;
 }
 
-const TYPE_ALIASES: Record<string, NodeType | 'line' | 'instance'> = {
+const TYPE_ALIASES: Record<string, NodeType | 'line' | 'instance' | 'svg'> = {
   frame: 'frame',
   text: 'text',
   rectangle: 'rectangle',
@@ -454,6 +486,7 @@ const TYPE_ALIASES: Record<string, NodeType | 'line' | 'instance'> = {
   group: 'group',
   component: 'component',
   instance: 'instance',
+  svg: 'svg',
 };
 
 export interface CreateResult {
@@ -480,6 +513,52 @@ export function createLayers(
     const kind = TYPE_ALIASES[String(spec.type ?? 'frame').toLowerCase()];
     if (!kind) throw new PropError(`Unknown type "${spec.type}". Use frame, text, rectangle, ellipse, line, vector, group, component or instance.`);
     let node: SceneNode;
+    if (kind === 'svg') {
+      if (typeof spec.svg !== 'string') throw new PropError('type "svg" needs svg: "<svg ...>...</svg>"');
+      let parsed;
+      try {
+        parsed = parseSvg(spec.svg);
+      } catch (e) {
+        throw new PropError(`Cannot read SVG: ${(e as Error).message}`);
+      }
+      let frameId = '';
+      editor.change((d) => {
+        frameId = insertSvg(d, parentId, parsed, { name: spec.name !== undefined ? String(spec.name) : undefined, index: at }).id;
+      });
+      if (at !== undefined) at++;
+      const frame = doc.nodes[frameId];
+      const { svg: _svg, type: _t, fill, stroke, width, height, children: _c, ...rest } = spec;
+      // Resize by scaling the drawing; recolour every shape if asked.
+      const w = typeof width === 'number' ? width : typeof height === 'number' ? (height / frame.height) * frame.width : frame.width;
+      const h = typeof height === 'number' ? height : typeof width === 'number' ? (width / frame.width) * frame.height : frame.height;
+      editor.change((d) => {
+        const sx = w / frame.width;
+        const sy = h / frame.height;
+        for (const c of frame.children) {
+          const k = d.nodes[c];
+          k.x *= sx;
+          k.y *= sy;
+          k.width *= sx;
+          k.height *= sy;
+          k.strokeWidth *= Math.min(sx, sy);
+        }
+        frame.width = w;
+        frame.height = h;
+      });
+      if (fill !== undefined || stroke !== undefined) {
+        for (const c of frame.children) {
+          const k = doc.nodes[c];
+          const recolor: Friendly = {};
+          if (fill !== undefined && k.fills.length) recolor.fill = fill;
+          if (fill !== undefined && !k.fills.length && k.strokes.length) recolor.stroke = fill;
+          if (stroke !== undefined && k.strokes.length) recolor.stroke = stroke;
+          warnings.push(...applyProps(editor, c, recolor, loadImage));
+        }
+      }
+      warnings.push(...applyProps(editor, frameId, rest, loadImage));
+      ids.push(frameId);
+      continue;
+    }
     if (kind === 'instance') {
       const target = findComponent(doc, String(spec.component ?? ''));
       if (!target) throw new PropError(`Unknown component "${spec.component}". Components: ${listComponents(doc).map((c) => c.name).join(', ') || 'none'}`);

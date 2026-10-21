@@ -1,4 +1,5 @@
 import { localMatrix, vectorPoints } from './geometry';
+import { nodePaths } from './paths';
 import { baselineInLine, fontString, lineHeightPx, nodeLines, verticalOffset } from './text';
 import { isFrameLike, type ImagePaint, type Paint, type PlanarDocument, type SceneNode } from './types';
 
@@ -93,6 +94,18 @@ function paintNode(ctx: CanvasRenderingContext2D, node: SceneNode): void {
     return;
   }
   if (node.type === 'group' || node.type === 'page') return;
+  if (node.type === 'vector' && node.paths.length) {
+    if (typeof Path2D === 'undefined') return;
+    for (const p of nodePaths(node)) {
+      const path = new Path2D(p.d);
+      for (const f of node.fills) {
+        if (!f.visible || f.type !== 'solid') continue;
+        ctx.fillStyle = hexToRgba(f.color, f.opacity);
+        ctx.fill(path, p.fillRule);
+      }
+    }
+    return;
+  }
   shapePath(ctx, node);
   if (node.type !== 'vector' || node.closed) {
     for (const f of node.fills) {
@@ -117,6 +130,18 @@ function strokeNode(ctx: CanvasRenderingContext2D, node: SceneNode): void {
   ctx.lineWidth = node.strokeWidth;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+  if (node.type === 'vector' && node.paths.length) {
+    if (typeof Path2D === 'undefined') return;
+    for (const p of nodePaths(node)) {
+      const path = new Path2D(p.d);
+      for (const s of strokes) {
+        if (s.type !== 'solid') continue;
+        ctx.strokeStyle = hexToRgba(s.color, s.opacity);
+        ctx.stroke(path);
+      }
+    }
+    return;
+  }
   if (node.type === 'text') {
     // Text strokes are drawn as an outline around the text box.
     ctx.beginPath();

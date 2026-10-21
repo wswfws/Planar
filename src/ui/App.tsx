@@ -8,6 +8,8 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { Toolbar } from './Toolbar';
 import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
+import { watchFonts } from './fontLoader';
+import { looksLikeSvg } from '../core/svg';
 import { detectServer, loadSettings, parseJoinLink, startSession } from '../collab/session';
 
 const TOOL_KEYS: Record<string, Tool> = {
@@ -140,6 +142,12 @@ function useShortcuts(editor: Editor, openFile: () => void): void {
       const data = e.clipboardData;
       if (!data) return;
       e.preventDefault();
+      const center = editor.screenToWorld({ x: editor.canvasSize.width / 2, y: editor.canvasSize.height / 2 });
+      const svgFile = Array.from(data.files).find((f) => f.type === 'image/svg+xml');
+      if (svgFile) {
+        editor.importSvg(await svgFile.text(), center, svgFile.name.replace(/\.svg$/i, ''));
+        return;
+      }
       const image = Array.from(data.files).find((f) => f.type.startsWith('image/'));
       if (image) {
         const img = await readImageFile(image);
@@ -148,6 +156,10 @@ function useShortcuts(editor: Editor, openFile: () => void): void {
         return;
       }
       const text = data.getData('text/plain');
+      if (looksLikeSvg(text)) {
+        editor.importSvg(text, center);
+        return;
+      }
       if (!editor.paste(text) && !text) editor.paste();
     };
 
@@ -215,6 +227,8 @@ export function App() {
   useEffect(() => {
     (window as unknown as { planar: Editor }).planar = editor; // handy for debugging
   }, [editor]);
+
+  useEffect(() => watchFonts(editor), [editor]);
 
   return (
     <EditorContext.Provider value={editor}>

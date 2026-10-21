@@ -58,6 +58,7 @@ import { measureTextNode } from './text';
 import type { ComponentProp, ComponentPropType, PlanarDocument, SceneNode, VariableType } from './types';
 import { coerce, defaultValue, resolveVariables, unbindVariable } from './variables';
 import { applyOps, diffDocs, repairTree, type Op } from './ops';
+import { insertSvg, parseSvg } from './svg';
 import { createWelcomeDocument } from './welcome';
 
 export type Tool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'text';
@@ -744,6 +745,21 @@ export class Editor {
     });
   }
 
+  /** Re-measures every text layer (after fonts load); not an undo step. */
+  remeasureText(): void {
+    let changed = false;
+    for (const n of Object.values(this.doc.nodes)) {
+      if (n.type !== 'text') continue;
+      const { width, height } = n;
+      this.syncTextSize(n);
+      if (n.width !== width || n.height !== height) changed = true;
+    }
+    if (changed) {
+      this.normalize();
+      this.emit();
+    }
+  }
+
   syncTextSize(node: SceneNode): void {
     const size = measureTextNode(node);
     node.width = size.width;
@@ -871,6 +887,27 @@ export class Editor {
       this.overlay.pen = null;
     }
     this.emit();
+  }
+
+  /** Imports SVG markup as a frame of vector layers centred at `center`. */
+  importSvg(markup: string, center: Vec, name?: string): string | null {
+    let parsed;
+    try {
+      parsed = parseSvg(markup);
+    } catch (e) {
+      this.notify(`Could not import SVG: ${(e as Error).message}`);
+      return null;
+    }
+    let id = '';
+    this.change((doc) => {
+      const frame = insertSvg(doc, this.pageId, parsed, { name });
+      frame.x = Math.round(center.x - frame.width / 2);
+      frame.y = Math.round(center.y - frame.height / 2);
+      id = frame.id;
+    });
+    this.select([id]);
+    if (!parsed.shapes.length) this.notify('The SVG had no shapes Planar can import');
+    return id;
   }
 
   /** Inserts an image as a rectangle with an image fill. */
@@ -1323,13 +1360,14 @@ export class Editor {
     this.emit();
   }
 
-  addPage(): void {
-    const page = createNode('page', { name: uniquePageName(this.doc), width: 0, height: 0 });
+  addPage(name?: string): string {
+    const page = createNode('page', { name: name?.trim() || uniquePageName(this.doc), width: 0, height: 0 });
     this.change((doc) => {
       doc.nodes[page.id] = page;
       doc.pageIds.push(page.id);
     });
     this.setPage(page.id);
+    return page.id;
   }
 
   renamePage(id: string, name: string): void {

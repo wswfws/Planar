@@ -14,7 +14,9 @@ observable behaviour only. See [`../CLEAN_ROOM.md`](../CLEAN_ROOM.md).
   - **Group**: a container without its own paint whose bounds always fit its
     children. A group with no children is removed.
   - **Rectangle** (with corner radius), **Ellipse**.
-  - **Vector**: a polyline or polygon (open or closed), also used for lines.
+  - **Vector**: a polyline or polygon (open or closed), also used for lines,
+    or one or more **paths** with straight and curved (Bézier) segments and a
+    fill rule (non-zero or even-odd). Paths scale with the layer's box.
   - **Text**: a block of text with font family, size, weight, horizontal and
     vertical alignment and line height. Its box has one of three sizing
     modes:
@@ -107,6 +109,20 @@ under the starting point.
 
 Pasting or dropping an image file creates a rectangle with an image fill at
 the image's natural size.
+
+**SVG import.** Pasting SVG markup or dropping an `.svg` file creates a
+frame (no fill, named after the file or the SVG's title) sized like the SVG,
+containing one vector layer per shape (`path`, `rect`, `circle`, `ellipse`,
+`line`, `polyline`, `polygon`), with fills, strokes, stroke widths, fill
+rules, opacity and transforms (including nested groups) preserved. Gradients,
+masks, filters, text and CSS classes are not imported; such shapes fall back
+to a solid colour.
+
+**Fonts.** Text can use any font family. Families that are not installed
+are loaded from Google Fonts automatically when a document uses them, and
+text is re-measured once they arrive. The font picker suggests popular
+families and accepts any name. Generated code and exported SVG include the
+matching Google Fonts import.
 
 ### Context menu
 
@@ -298,7 +314,7 @@ Primary / Secondary and *Size* = Small / Large).
   - X, Y, W, H, rotation, corner radius, clip content;
   - opacity;
   - fills and strokes (add, remove, hide, colour, opacity, stroke width);
-  - text settings (family, size, weight, line height, horizontal and
+  - text settings (family — free text with suggestions, size, weight, line height, horizontal and
     vertical alignment, sizing mode: auto width / auto height / fixed size);
   - export (PNG at 1×/2×/3× or SVG) for the selection, or for the whole page
     when nothing is selected.
@@ -354,6 +370,8 @@ Planar server (see [SELF_HOSTING.md](SELF_HOSTING.md); wire protocol in
 - Planar provides an MCP server for AI agents, locally over stdio (on a
   file or a room) and remotely at `/mcp` on a Planar server (rooms only, no
   file access). Tools and vocabulary are specified in [MCP.md](MCP.md).
+- Agents can create, rename, delete and switch pages, import SVG markup as
+  vector layers, and render pages or layers with the document's web fonts.
 - Agent edits are ordinary edits: in a room the agent is a participant
   named *Agent* with its own pointer and selection, and its changes are
   undoable by the agent.

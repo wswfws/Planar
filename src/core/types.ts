@@ -69,6 +69,10 @@ export interface SceneNode {
 
   points: Vec[];
   closed: boolean;
+  /** Vector paths (normalised SVG path data); when present, points are ignored. */
+  paths: VectorPath[];
+  /** Size of the box path coordinates refer to (scaled to width × height). */
+  pathBox: { w: number; h: number };
 
   /** Auto layout (frames). */
   layoutMode: LayoutMode;
@@ -104,6 +108,11 @@ export interface SceneNode {
   propValues: Record<string, string | boolean>;
   /** Variant component: its value for each variant property of its set. */
   variantProps: Record<string, string>;
+}
+
+export interface VectorPath {
+  d: string;
+  fillRule: 'nonzero' | 'evenodd';
 }
 
 export type ComponentPropType = 'text' | 'boolean' | 'instance';

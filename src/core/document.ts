@@ -68,6 +68,8 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     textAlignVertical: 'top',
     points: [],
     closed: false,
+    paths: [],
+    pathBox: { w: 0, h: 0 },
     layoutMode: 'none',
     itemSpacing: 10,
     paddingTop: 0,

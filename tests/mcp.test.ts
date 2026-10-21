@@ -48,7 +48,7 @@ describe('MCP tools (file mode)', () => {
   it('lists tools and opens a new file', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['code', 'components', 'create', 'delete', 'export', 'find', 'inspect', 'open', 'overview', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables'].sort(),
+      ['code', 'components', 'create', 'delete', 'export', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables'].sort(),
     );
     const r = await call('overview');
     expect(r.isError).toBe(true);
@@ -141,6 +141,44 @@ describe('MCP tools (file mode)', () => {
     const img = r.content.find((c) => c.type === 'image');
     expect(img?.data?.length).toBeGreaterThan(500);
     expect(Buffer.from(img!.data!, 'base64').subarray(1, 4).toString()).toBe('PNG');
+  });
+
+  it('imports SVG icons, draws paths and manages pages', async () => {
+    const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/></svg>';
+    const created = await call('create', {
+      parent: card,
+      layers: [
+        { type: 'svg', name: 'Note icon', svg: icon, width: 32, fill: '$brand' },
+        { type: 'vector', name: 'Chevron', path: 'M9 6 L15 12 L9 18', stroke: '#5A5A68', strokeWidth: 2, fill: null },
+      ],
+    });
+    expect(created.isError).toBeFalsy();
+    const out = textOf(created);
+    expect(out).toMatch(/frame "Note icon" #\S+ {2}32×32/);
+    const iconId = /frame "Note icon" #(\S+)/.exec(out)![1];
+    const parts = JSON.parse(textOf(await call('inspect', { ids: [iconId], children: true })));
+    expect(parts.layers).toHaveLength(2);
+    expect(parts.layers[0].stroke).toBe('$brand');
+    expect(parts.layers[0].path).toMatch(/^M /);
+    const chevron = JSON.parse(textOf(await call('inspect', { ids: [/vector "Chevron" #(\S+)/.exec(out)![1]] })));
+    expect(chevron).toMatchObject({ width: 6, height: 12, stroke: '#5A5A68' });
+
+    // Resizing an icon frame scales the drawing and its strokes.
+    const strokeBefore = parts.layers[0].strokeWidth;
+    await call('update', { changes: [{ id: iconId, width: 64, height: 64 }] });
+    const scaled = JSON.parse(textOf(await call('inspect', { ids: [iconId], children: true })));
+    expect(scaled.layers[0].strokeWidth).toBeCloseTo(strokeBefore * 2, 1);
+    expect(scaled.layers[1].width).toBeCloseTo(parts.layers[1].width * 2, 1);
+
+    const pages = textOf(await call('pages', { action: 'create', name: 'Design system' }));
+    expect(pages).toMatch(/page "Design system" #\S+ {2}0 top-level layers {2}\(current\)/);
+    const ds = /page "Design system" #(\S+)/.exec(pages)![1];
+    await call('create', { layers: [{ type: 'text', text: 'Colours', size: 24 }] });
+    expect(textOf(await call('tree', { id: ds }))).toMatch(/text "Colours"/);
+    const shot = await call('screenshot', { id: ds });
+    expect(shot.content.some((c) => c.type === 'image')).toBe(true);
+    const back = textOf(await call('pages', { action: 'open', id: /page "Page 1" #(\S+)/.exec(pages)![1] }));
+    expect(back).toMatch(/page "Page 1" #\S+ .*\(current\)/);
   });
 
   it('undoes its own steps', async () => {

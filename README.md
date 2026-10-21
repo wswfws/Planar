@@ -34,7 +34,8 @@ shapes, text, layers, properties, undo and export — and was built with a
 - Right-click context menus on the canvas and layer tree: contextual actions with
   their shortcuts, *Select layer* (everything under the pointer), *Order*, paste
   at the pointer, copy as SVG, rename
-- Paste or drop images
+- Paste or drop images; paste or drop SVG to get editable vector layers (paths with curves)
+- Any font family: Google Fonts load automatically (editor, agent screenshots, generated code)
 - Undo / redo, autosave to browser storage
 - Save / open `.planar.json` files ([format](docs/FILE_FORMAT.md))
 - Export PNG (1×–3×) and SVG for the selection or the whole page
@@ -126,7 +127,7 @@ the file layout.
 
 ## Roadmap
 
-Comments, accounts and permissions,
+Comments, accounts and permissions, editing path points by hand,
 variable collections and aliases, wrapping auto layout, constraints, boolean operations, Bézier editing, gradients, shadows and blur,
 styles, prototyping, plugins, version history.
 

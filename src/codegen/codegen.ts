@@ -3,7 +3,9 @@
 
 import { propHost, variantAxes, variantSet, variantsOf } from '../core/components';
 import { vectorPoints } from '../core/geometry';
+import { cssFontFamily, fontImports } from '../core/fonts';
 import { effectiveSizing } from '../core/layout';
+import { nodePaths } from '../core/paths';
 import { variableValue } from '../core/variables';
 import { isFrameLike, type Paint, type PlanarDocument, type SceneNode, type Variable } from '../core/types';
 
@@ -163,7 +165,7 @@ function sizeAndPosition(ctx: Ctx, n: SceneNode, css: Record<string, string>, ro
 function textStyles(ctx: Ctx, n: SceneNode, css: Record<string, string>): void {
   const { doc } = ctx;
   css.margin = '0';
-  css['font-family'] = n.fontFamily;
+  css['font-family'] = cssFontFamily(n.fontFamily);
   css['font-size'] = cssNum(doc, n, 'fontSize', n.fontSize);
   if (n.fontWeight !== 400) css['font-weight'] = String(n.fontWeight);
   css['line-height'] = n.lineHeight > 0 ? String(n.lineHeight) : 'normal';
@@ -179,7 +181,36 @@ function textStyles(ctx: Ctx, n: SceneNode, css: Record<string, string>): void {
   }
 }
 
+/** SVG elements for one vector layer, offset by (ox, oy). */
+function vectorElements(ctx: Ctx, n: SceneNode, ox: number, oy: number): string {
+  const fill = n.fills.find((p) => p.visible && p.type === 'solid');
+  const stroke = n.strokes.find((p) => p.visible && p.type === 'solid');
+  const fillColor = fill && (n.closed || n.paths.length) ? cssColor(ctx.doc, fill) : 'none';
+  const strokeAttrs = stroke && n.strokeWidth > 0 ? ` stroke="${cssColor(ctx.doc, stroke)}" stroke-width="${n.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"` : '';
+  const rule = (r: string) => (r === 'evenodd' ? ' fill-rule="evenodd"' : '');
+  const move = ox || oy ? ` transform="translate(${Math.round(ox * 100) / 100} ${Math.round(oy * 100) / 100})"` : '';
+  if (n.paths.length) return nodePaths(n).map((p) => `<path${move} d="${p.d}" fill="${fillColor}"${rule(p.fillRule)}${strokeAttrs}/>`).join('');
+  const pts = vectorPoints(n);
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${Math.round(p.x * 100) / 100} ${Math.round(p.y * 100) / 100}`).join(' ') + (n.closed ? ' Z' : '');
+  return `<path${move} d="${d}" fill="${fillColor}"${strokeAttrs}/>`;
+}
+
+/** A frame made only of vector layers (an icon) as one inline SVG. */
+function iconSvg(ctx: Ctx, n: SceneNode): string | null {
+  const kids = n.children.map((c) => ctx.doc.nodes[c]).filter((k) => k?.visible);
+  if (!kids.length || n.layoutMode !== 'none' || n.fills.some((f) => f.visible) || !kids.every((k) => k.type === 'vector' && !k.rotation)) return null;
+  const w = Math.round(n.width * 100) / 100;
+  const h = Math.round(n.height * 100) / 100;
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" fill="none">${kids.map((k) => vectorElements(ctx, k, k.x, k.y)).join('')}</svg>`;
+}
+
 function svgFor(ctx: Ctx, n: SceneNode): string {
+  if (n.paths.length) {
+    const sw = n.strokes.some((p) => p.visible) ? n.strokeWidth : 0;
+    const w = Math.max(n.width, 0.01) + sw;
+    const h = Math.max(n.height, 0.01) + sw;
+    return `<svg viewBox="${-sw / 2} ${-sw / 2} ${w} ${h}" width="${w}" height="${h}" fill="none">${vectorElements(ctx, n, 0, 0)}</svg>`;
+  }
   const pts = vectorPoints(n);
   const d = pts.map((p, i) => `${i ? 'L' : 'M'}${Math.round(p.x * 100) / 100} ${Math.round(p.y * 100) / 100}`).join(' ') + (n.closed ? ' Z' : '');
   const fill = n.closed ? n.fills.find((p) => p.visible && p.type === 'solid') : null;
@@ -253,6 +284,12 @@ function build(ctx: Ctx, n: SceneNode, root = false): El | null {
   }
 
   paintStyles(ctx, n, el.css);
+  const icon = isFrameLike(n) && n.type !== 'instance' ? iconSvg(ctx, n) : null;
+  if (icon) {
+    el.raw = icon;
+    el.css.display = 'block';
+    return el;
+  }
   if (isFrameLike(n) || n.type === 'group') {
     if (isFrameLike(n) && n.layoutMode !== 'none') {
       el.css.display = 'flex';
@@ -289,6 +326,18 @@ function cssBlock(selector: string, css: Record<string, string>): string {
   const entries = Object.entries(css);
   if (!entries.length) return '';
   return `${selector} {\n${entries.map(([k, v]) => `  ${k}: ${v};`).join('\n')}\n}`;
+}
+
+/** Ids of a layer and everything inside it. */
+function subtreeIds(doc: PlanarDocument, id: string): string[] {
+  const out = [id];
+  for (const c of doc.nodes[id]?.children ?? []) out.push(...subtreeIds(doc, c));
+  return out;
+}
+
+/** Base CSS plus the Google Fonts imports the layers need. */
+function preamble(doc: PlanarDocument, ids: string[]): string {
+  return [...fontImports(doc, ids), BASE_CSS].join('\n');
 }
 
 function collectCss(el: El, out: string[]): void {
@@ -416,7 +465,7 @@ function reactComponent(doc: PlanarDocument, owner: SceneNode): CodeResult {
   lines.push('}');
   lines.push('');
   lines.push(`/* ${name}.css */`);
-  lines.push([BASE_CSS, ...css].join('\n\n'));
+  lines.push([preamble(doc, variants.flatMap((v) => subtreeIds(doc, v.id))), ...css].join('\n\n'));
   return { code: lines.join('\n'), uses: [...uses.values()].map((c) => ({ name: pascal(c.name), id: c.id })) };
 }
 
@@ -434,7 +483,7 @@ export function generateCode(doc: PlanarDocument, id: string, format: CodeFormat
   if (!el) return { code: '/* Layer is hidden */', uses: [] };
   const css: string[] = [];
   collectCss(el, css);
-  const stylesheet = [BASE_CSS, ...css].join('\n\n');
+  const stylesheet = [preamble(doc, subtreeIds(doc, id)), ...css].join('\n\n');
   const uses = [...ctx.usedComponents.values()].map((c) => ({ name: pascal(c.name), id: c.id }));
 
   if (format === 'css') return { code: stylesheet, uses: [] };

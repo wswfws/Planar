@@ -129,7 +129,9 @@ export function Canvas({ onOpenVariables }: { onOpenVariables: () => void }) {
       return;
     }
     for (const file of Array.from(e.dataTransfer.files)) {
-      if (file.type.startsWith('image/')) {
+      if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+        editor.importSvg(await file.text(), at, file.name.replace(/\.svg$/i, ''));
+      } else if (file.type.startsWith('image/')) {
         try {
           const img = await readImageFile(file);
           editor.placeImage(img.src, img.width, img.height, at);

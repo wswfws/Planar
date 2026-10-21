@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { solid } from '../core/document';
 import type { AlignKind, Editor } from '../core/editor';
 import { hasOverrides, isInInstance, owningInstance, propHost } from '../core/components';
-import { scaleChildren } from '../core/geometry';
+import { POPULAR_FONTS } from '../core/fonts';
+import { scaleContents } from '../core/geometry';
 import { effectiveSizing, isAutoLayout, isLaidOut } from '../core/layout';
 import { isFrameLike, type CounterAlign, type Paint, type PrimaryAlign, type SceneNode, type Sizing, type TextAlign, type TextAlignVertical } from '../core/types';
 import { BINDABLE } from '../core/variables';
@@ -12,14 +13,59 @@ import { ColorField, IconButton, NumberField, Section, type BindProps } from './
 import { useEditorState } from './EditorContext';
 import type { IconName } from './icons';
 
-const FONT_FAMILIES = [
+const SYSTEM_FONTS = [
   { label: 'System UI', value: 'system-ui, sans-serif' },
-  { label: 'Sans-serif', value: 'Arial, Helvetica, sans-serif' },
-  { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
+  { label: 'Arial / Helvetica', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Georgia', value: 'Georgia, "Times New Roman", serif' },
   { label: 'Monospace', value: 'ui-monospace, "Cascadia Code", Consolas, monospace' },
-  { label: 'Verdana', value: 'Verdana, sans-serif' },
-  { label: 'Trebuchet', value: '"Trebuchet MS", sans-serif' },
 ];
+
+/** Font family: free text with suggestions (any Google Fonts family loads automatically). */
+function FontField({ value, onChange }: { value: string | null; onChange: (family: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const label = (v: string) => SYSTEM_FONTS.find((f) => f.value === v)?.label ?? v;
+  const commit = () => {
+    if (draft === null) return;
+    const typed = draft.trim();
+    const system = SYSTEM_FONTS.find((f) => f.label.toLowerCase() === typed.toLowerCase());
+    const next = system ? system.value : typed;
+    if (next && next !== value) onChange(next);
+    setDraft(null);
+  };
+  return (
+    <>
+      <input
+        className="text-field font-field"
+        aria-label="Font family"
+        list="planar-fonts"
+        placeholder={value === null ? 'Mixed' : 'Font family'}
+        value={draft ?? (value === null ? '' : label(value))}
+        onFocus={(e) => {
+          setDraft(e.target.value);
+          e.target.select();
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            setDraft(null);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+      />
+      <datalist id="planar-fonts">
+        {SYSTEM_FONTS.map((f) => (
+          <option key={f.value} value={f.label} />
+        ))}
+        {POPULAR_FONTS.map((f) => (
+          <option key={f} value={f} />
+        ))}
+      </datalist>
+    </>
+  );
+}
 
 const WEIGHTS = [
   [100, 'Thin'],
@@ -472,9 +518,7 @@ export function PropertiesPanel() {
         n.autoWidth = false;
         n.autoHeight = false;
       }
-      if (n.type === 'group' && old > 0) {
-        scaleChildren(editor.doc, n.id, key === 'width' ? v / old : 1, key === 'height' ? v / old : 1);
-      }
+      if (old > 0) scaleContents(editor.doc, n, key === 'width' ? v / old : 1, key === 'height' ? v / old : 1);
     });
 
   return (
@@ -567,21 +611,10 @@ export function PropertiesPanel() {
       {texts.length > 0 && (
         <Section title="Text">
           <div className="row">
-            <select
-              aria-label="Font family"
-              value={common(texts, (n) => n.fontFamily) ?? ''}
-              onChange={(e) => editor.updateNodes(textIds, { fontFamily: e.target.value })}
-            >
-              {common(texts, (n) => n.fontFamily) === null && <option value="">Mixed</option>}
-              {FONT_FAMILIES.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-              {!FONT_FAMILIES.some((f) => f.value === texts[0].fontFamily) && common(texts, (n) => n.fontFamily) !== null && (
-                <option value={texts[0].fontFamily}>{texts[0].fontFamily}</option>
-              )}
-            </select>
+            <FontField
+              value={common(texts, (n) => n.fontFamily)}
+              onChange={(fontFamily) => editor.updateNodes(textIds, { fontFamily })}
+            />
           </div>
           <div className="grid-2">
             <select

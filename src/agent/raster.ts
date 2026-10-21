@@ -15,6 +15,9 @@ export async function initCanvas(): Promise<CanvasModule | null> {
   if (canvasModule !== undefined) return canvasModule;
   try {
     canvasModule = await import('@napi-rs/canvas');
+    // The renderer builds vector paths with Path2D, which Node lacks.
+    const g = globalThis as unknown as { Path2D?: unknown };
+    if (typeof g.Path2D === 'undefined') g.Path2D = canvasModule.Path2D;
     // Generic CSS families mean nothing to the native renderer; map them to
     // fonts that exist on this machine so text looks like it does in browsers.
     const { GlobalFonts } = canvasModule;

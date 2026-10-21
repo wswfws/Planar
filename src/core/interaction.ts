@@ -7,7 +7,7 @@ import {
   parentWorldMatrix,
   placeNode,
   reparentKeepWorld,
-  scaleChildren,
+  scaleContents,
   selectionBounds,
   topLevelSelection,
   worldBounds,
@@ -634,7 +634,12 @@ export class Interaction {
         if ((flipX || flipY) && node.type === 'vector') {
           node.points = orig.points.map((pt) => ({ x: flipX ? 1 - pt.x : pt.x, y: flipY ? 1 - pt.y : pt.y }));
         }
-        if (node.type === 'group') scaleChildren(doc, id, node.width / (orig.width || 1), node.height / (orig.height || 1));
+        // Strokes scale from the original each time, so restore them first.
+        for (const c of node.children) {
+          const o = drag.originals.get(c);
+          if (o) doc.nodes[c].strokeWidth = o.strokeWidth;
+        }
+        scaleContents(doc, node, node.width / (orig.width || 1), node.height / (orig.height || 1));
         if (node.type === 'text') this.resizeText(node, orig, sx !== 1, sy !== 1);
         placeNode(doc, id, center, c0.rotation);
         if (hx) node.sizingH = 'fixed';

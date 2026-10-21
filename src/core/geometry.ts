@@ -114,6 +114,7 @@ function hitsShape(node: SceneNode, p: Vec, tolerance: number): boolean {
       return (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1;
     }
     case 'vector': {
+      if (node.paths.length) return p.x >= -tolerance && p.y >= -tolerance && p.x <= w + tolerance && p.y <= h + tolerance;
       const pts = vectorPoints(node);
       if (node.closed && pointInPolygon(p, pts)) return true;
       const segs = node.closed ? pts.length : pts.length - 1;
@@ -277,6 +278,30 @@ export function fitToChildren(doc: PlanarDocument, node: SceneNode, pad: number)
   node.height = b.height;
   node.x = newCenterInParent.x - b.width / 2;
   node.y = newCenterInParent.y - b.height / 2;
+}
+
+/**
+ * A frame made only of vector layers without auto layout — typically an
+ * imported icon. Resizing it scales the drawing (and its stroke widths).
+ */
+export function isIconFrame(doc: PlanarDocument, n: SceneNode): boolean {
+  return (
+    isFrameLike(n) &&
+    n.type !== 'instance' &&
+    n.layoutMode === 'none' &&
+    n.children.length > 0 &&
+    n.children.every((c) => doc.nodes[c]?.type === 'vector')
+  );
+}
+
+/** Scales what a resized container holds: groups and icon frames. */
+export function scaleContents(doc: PlanarDocument, n: SceneNode, sx: number, sy: number): void {
+  if (n.type === 'group') scaleChildren(doc, n.id, sx, sy);
+  else if (isIconFrame(doc, n)) {
+    scaleChildren(doc, n.id, sx, sy);
+    const k = Math.min(Math.abs(sx), Math.abs(sy));
+    for (const c of n.children) doc.nodes[c].strokeWidth = Math.round(doc.nodes[c].strokeWidth * k * 100) / 100;
+  }
 }
 
 /** Scales the subtree under a container by sx/sy in its local space. */

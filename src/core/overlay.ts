@@ -15,7 +15,7 @@ function traceOutline(ctx: CanvasRenderingContext2D, node: SceneNode): void {
   ctx.beginPath();
   if (node.type === 'ellipse') {
     ctx.ellipse(node.width / 2, node.height / 2, Math.abs(node.width / 2), Math.abs(node.height / 2), 0, 0, Math.PI * 2);
-  } else if (node.type === 'vector') {
+  } else if (node.type === 'vector' && !node.paths.length) {
     vectorPoints(node).forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
     if (node.closed) ctx.closePath();
   } else {

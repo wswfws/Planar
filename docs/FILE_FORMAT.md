@@ -56,6 +56,8 @@ their default value.
 | `textAlignVertical` | `top` \| `middle` \| `bottom` | Placement of text in a taller box |
 | `points` | {x, y}[] | Vector points, normalised to 0–1 of the box |
 | `closed` | boolean | Vector is a closed polygon |
+| `paths` | {d, fillRule}[] | Vector paths (SVG path data using M, L, C, Q, Z in absolute coordinates); when present, `points` is ignored |
+| `pathBox` | {w, h} | Size of the box the path coordinates refer to; paths are scaled from it to `width` × `height` |
 | `layoutMode` | `none` \| `horizontal` \| `vertical` | Frame auto layout direction |
 | `itemSpacing` | number | Gap between auto-layout items |
 | `paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft` | number | Auto-layout padding |
@@ -75,7 +77,7 @@ their default value.
 
 Older files simply lack newer fields; readers fill in the defaults
 (`none`, `10`, `0`, `start`, `start`, `fixed`, `false`, `""`, `""`, `[]`,
-`{}`, `""`, `autoHeight: true`, `textAlignVertical: "top"`), an empty variable list and a single mode.
+`{}`, `""`, `autoHeight: true`, `textAlignVertical: "top"`, `paths: []`, `pathBox: {w: 0, h: 0}`), an empty variable list and a single mode.
 
 ## Components and instances
 

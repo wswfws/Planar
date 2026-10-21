@@ -1,5 +1,7 @@
 import { localMatrix, parentWorldMatrix, selectionBounds, vectorPoints } from './geometry';
+import { fontImports } from './fonts';
 import { clean, type Mat, type Rect } from './math';
+import { nodePaths } from './paths';
 import { drawNode } from './render';
 import { baselineInLine, lineHeightPx, nodeLines, verticalOffset } from './text';
 import { isFrameLike, type PlanarDocument, type SceneNode } from './types';
@@ -22,6 +24,11 @@ function shapeElement(node: SceneNode, paintAttrs: string): string {
     case 'ellipse':
       return `<ellipse cx="${clean(w / 2)}" cy="${clean(h / 2)}" rx="${clean(w / 2)}" ry="${clean(h / 2)}"${paintAttrs}/>`;
     case 'vector': {
+      if (node.paths.length) {
+        return nodePaths(node)
+          .map((p) => `<path d="${p.d}"${p.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${paintAttrs}/>`)
+          .join('');
+      }
       const d = vectorPoints(node)
         .map((p, i) => `${i ? 'L' : 'M'}${clean(p.x)} ${clean(p.y)}`)
         .join(' ');
@@ -58,7 +65,7 @@ function nodeToSvg(doc: PlanarDocument, id: string): string {
       );
     }
   } else if (node.type !== 'group') {
-    const fillable = node.type !== 'vector' || node.closed;
+    const fillable = node.type !== 'vector' || node.closed || node.paths.length > 0;
     for (const f of fillable ? node.fills : []) {
       if (!f.visible) continue;
       if (f.type === 'solid') {
@@ -112,8 +119,17 @@ export function exportSvg(doc: PlanarDocument, ids: string[]): string | null {
   const body = ids
     .map((id) => `<g${matrixAttr(parentWorldMatrix(doc, id))}>${nodeToSvg(doc, id)}</g>`)
     .join('');
+  const all: string[] = [];
+  const collect = (id: string) => {
+    all.push(id);
+    doc.nodes[id]?.children.forEach(collect);
+  };
+  ids.forEach(collect);
+  const imports = fontImports(doc, all);
+  const style = imports.length ? `<style>${imports.join('')}</style>` : '';
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${b.width}" height="${b.height}" viewBox="${b.x} ${b.y} ${b.width} ${b.height}" fill="none">` +
+    style +
     body +
     `</svg>`
   );

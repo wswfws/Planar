@@ -73,6 +73,11 @@ export function fontMetrics(node: Pick<SceneNode, 'fontWeight' | 'fontSize' | 'f
   return result;
 }
 
+/** Forget cached font metrics (after new fonts were loaded). */
+export function clearTextMetrics(): void {
+  metricsCache.clear();
+}
+
 /** Fonts may finish loading after first use; forget cached metrics then. */
 if (typeof document !== 'undefined' && document.fonts) {
   document.fonts.addEventListener?.('loadingdone', () => metricsCache.clear());

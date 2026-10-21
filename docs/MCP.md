@@ -79,6 +79,7 @@ tool.
 | `delete` | design | Delete layers |
 | `components` | design | Create component, combine as variants, add variant, detach instance |
 | `variables` | design | Create/update/delete variables and modes |
+| `pages` | all | List, create, rename, delete or switch pages |
 | `select` | all | Select layers (in a live room, people see the agent's selection) |
 | `undo` | design | Undo the agent's last changes |
 | `code` | dev | React or HTML/CSS for a layer or component |
@@ -92,7 +93,9 @@ optional.
 
 | Key | Values |
 | --- | --- |
-| `type` | `frame`, `text`, `rectangle`, `ellipse`, `line`, `vector`, `group`, `component`, `instance` (create only) |
+| `type` | `frame`, `text`, `rectangle`, `ellipse`, `line`, `vector`, `group`, `component`, `instance`, `svg` (create only) |
+| `svg` | create only, with `type: "svg"`: SVG markup to import as a frame of vector layers (icons, logos, illustrations). `width`/`height` scale it; `fill` recolours every shape (e.g. `"$ink"`) |
+| `path` | vector: SVG path data such as `"M4 12 L20 12 M12 4 L12 20"` (curves allowed); `viewBox: [w, h]` gives the coordinate space (default: the path's bounds) |
 | `name` | string |
 | `x`, `y` | number (relative to the parent; ignored inside auto layout) |
 | `width`, `height` | number, `"hug"` (fit content) or `"fill"` (stretch in auto layout) |
@@ -108,7 +111,7 @@ optional.
 | `crossAlign` | `"start"`, `"center"`, `"end"` |
 | `absolute` | boolean — ignore the parent's auto layout |
 | `text` | string — text content (text layers) |
-| `font`, `size`, `weight` | CSS family; px; 100–900 or `"bold"`, `"medium"`… |
+| `font`, `size`, `weight` | family name (any Google Fonts family works, e.g. `"Manrope"`, `"Unbounded"`); px; 100–900 or `"bold"`, `"medium"`… |
 | `lineHeight` | multiplier or `"auto"` |
 | `textAlign`, `textAlignVertical` | `left/center/right`; `top/middle/bottom` |
 | `component` | instance: component or component-set name or id |

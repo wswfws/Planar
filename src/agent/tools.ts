@@ -176,7 +176,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       title: 'Screenshot',
       description: 'Render a layer (or the whole current page) to a PNG image to check how it looks.',
       inputSchema: {
-        id: z.string().optional().describe('Layer id (default: whole current page)'),
+        id: z.string().optional().describe('Layer or page id (default: whole current page)'),
         scale: z.number().min(0.05).max(4).optional().describe('Pixel ratio (default 1)'),
         maxSize: z.number().int().min(64).max(4096).optional().describe('Longest side in px (default 1600)'),
       },
@@ -185,11 +185,15 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     guard(async ({ id, scale, maxSize }) => {
       const editor = await session.ready();
       const { doc } = editor;
-      const ids = id ? [id] : doc.nodes[editor.pageId].children.filter((c) => doc.nodes[c].visible);
       if (id && !doc.nodes[id]) throw new PropError(`No layer with id ${id}`);
-      const bg = doc.nodes[editor.pageId].fills[0];
-      const png = await renderPng(doc, ids, { scale, maxSize, background: !id && bg?.type === 'solid' ? bg.color : undefined });
-      return { content: [{ type: 'image', data: png.toString('base64'), mimeType: 'image/png' }, { type: 'text', text: id ? summary(doc, doc.nodes[id]) : `Page ${doc.nodes[editor.pageId].name}` }] };
+      await session.ensureFonts();
+      // A page id (or no id) renders the whole page on its background.
+      const page = !id ? doc.nodes[editor.pageId] : doc.nodes[id].type === 'page' ? doc.nodes[id] : null;
+      const ids = page ? page.children.filter((c) => doc.nodes[c].visible) : [id!];
+      if (!ids.length) throw new PropError('Nothing to render on this page');
+      const bg = page?.fills[0];
+      const png = await renderPng(doc, ids, { scale, maxSize, background: page && bg?.type === 'solid' ? bg.color : undefined });
+      return { content: [{ type: 'image', data: png.toString('base64'), mimeType: 'image/png' }, { type: 'text', text: page ? `Page ${page.name}` : summary(doc, doc.nodes[id!]) }] };
     }),
   );
 
@@ -392,6 +396,51 @@ export function registerTools(server: McpServer, session: AgentSession): void {
   );
 
   server.registerTool(
+    'pages',
+    {
+      title: 'Pages',
+      description:
+        'list: all pages. create: add a page (name) and make it current. rename: id + name. delete: id (not the last page). open: id — make it the current page (create/tree/find default to it).',
+      inputSchema: {
+        action: z.enum(['list', 'create', 'rename', 'delete', 'open']),
+        id: z.string().optional(),
+        name: z.string().optional(),
+      },
+    },
+    guard(async ({ action, id, name }) => {
+      const editor = await session.ready();
+      const { doc } = editor;
+      const need = () => {
+        if (!id || doc.nodes[id]?.type !== 'page') throw new PropError(`No page with id ${id}`);
+        return id;
+      };
+      let touched = false;
+      if (action === 'create') {
+        await edit(session, (e) => e.addPage(name));
+        touched = true;
+      } else if (action === 'rename') {
+        if (!name) throw new PropError('rename needs name');
+        const pid = need();
+        await edit(session, (e) => e.renamePage(pid, name));
+        touched = true;
+      } else if (action === 'delete') {
+        const pid = need();
+        if (doc.pageIds.length <= 1) throw new PropError('Cannot delete the only page');
+        await edit(session, (e) => e.deletePage(pid));
+        touched = true;
+      } else if (action === 'open') {
+        editor.setPage(need());
+      }
+      if (touched) await session.committed([]);
+      const lines = editor.doc.pageIds.map((pid) => {
+        const p = editor.doc.nodes[pid];
+        return `- page ${JSON.stringify(p.name)} #${pid}  ${p.children.length} top-level layer${p.children.length === 1 ? '' : 's'}${pid === editor.pageId ? '  (current)' : ''}`;
+      });
+      return text(`Pages:\n${lines.join('\n')}`);
+    }),
+  );
+
+  server.registerTool(
     'select',
     {
       title: 'Select layers',
@@ -481,6 +530,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       const editor = await session.ready();
       const { doc } = editor;
       for (const id of ids) if (!doc.nodes[id]) throw new PropError(`No layer with id ${id}`);
+      await session.ensureFonts();
       if (target) {
         if (!allowFiles) throw new PropError('This server cannot write files; omit path to get the result inline.');
         const full = path.resolve(target);

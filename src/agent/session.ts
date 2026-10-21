@@ -7,6 +7,7 @@ import { CollabClient } from '../collab/client';
 import { createDocument, parseDocument } from '../core/document';
 import { Editor } from '../core/editor';
 import { worldCenter } from '../core/geometry';
+import { ensureDocumentFonts } from './fonts';
 
 export interface SessionOptions {
   /** Whether tools may read and write local files (false on the remote endpoint). */
@@ -129,9 +130,15 @@ export class AgentSession {
   }
 
   /** Persists or shares changes and shows people where the agent worked. */
+  /** Loads the document's web fonts for rendering and measuring text. */
+  async ensureFonts(): Promise<void> {
+    if (this.editor && (await ensureDocumentFonts(this.editor.doc))) this.editor.remeasureText();
+  }
+
   async committed(touched: string[]): Promise<void> {
     const editor = this.editor;
     if (!editor) return;
+    await this.ensureFonts();
     const visible = touched.filter((id) => editor.doc.nodes[id]);
     if (visible.length) {
       editor.select(visible);
