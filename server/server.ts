@@ -138,7 +138,16 @@ export async function startServer(
       res.writeHead(403).end();
       return;
     }
-    const stat = await fs.stat(file).catch(() => null);
+    let stat = await fs.stat(file).catch(() => null);
+    // Static pages such as /privacy live in a folder with an index.html.
+    if (stat?.isDirectory() && url.pathname !== '/') {
+      const index = path.join(file, 'index.html');
+      const inner = await fs.stat(index).catch(() => null);
+      if (inner?.isFile()) {
+        file = index;
+        stat = inner;
+      }
+    }
     if (!stat || stat.isDirectory()) {
       // Pages such as /file/<id> are client routes: serve the editor, with a base so assets still resolve.
       const index = path.join(root, 'index.html');

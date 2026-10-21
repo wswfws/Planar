@@ -191,6 +191,9 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
           {message && <p className="hint">{message}</p>}
         </div>
         <footer className="dialog-footer">
+          <a className="hint" href="/privacy" target="_blank" rel="noopener">
+            Privacy policy
+          </a>
           {me.admin && (
             <button type="button" className="small-button" onClick={() => navigate('/admin')}>
               Admin panel

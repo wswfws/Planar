@@ -333,7 +333,7 @@ export async function handleOAuth(req: IncomingMessage, res: ServerResponse, ctx
         `<h1>Allow <b>${esc(client.clientName)}</b> to use Planar?</h1>
 <p>Signed in as <b>@${esc(user.username)}</b>. The app will act as you:</p>
 <ul><li>see your files and files shared with you</li><li>create files and edit those you can edit</li></ul>
-<p>You can disconnect it at any time in Planar under your account.</p>
+<p>You can disconnect it at any time in Planar under your account. <a href="/privacy" target="_blank" style="color:#8e8ef5">Privacy policy</a></p>
 <p><code>Returns to ${esc(host)}</code></p>
 <form method="post" action="/oauth/authorize" class="row">
 <input type="hidden" name="consent" value="${consentId}">

@@ -1878,3 +1878,7 @@ select:focus {
   gap: 12px;
   max-width: 520px;
 }
+
+.auth-privacy {
+  text-align: center;
+}

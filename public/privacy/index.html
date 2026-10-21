@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · Planar</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root { color-scheme: light dark; --bg: #ffffff; --text: #1b1b22; --muted: #5d5d6e; --border: #e3e3ea; --accent: #5b5bd6; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #18181d; --text: #e6e6ee; --muted: #9a9aab; --border: #33333d; --accent: #8e8ef5; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; }
+  p, li { color: var(--text); }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  code { font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Privacy Policy</h1>
+<p class="muted">Planar server at this address · Last updated: 21 October 2026</p>
+
+<p>
+  Planar is an open-source design editor (<a href="https://github.com/wswfws/Planar">source code</a>). This policy explains what this
+  Planar server stores, why, who can see it and how to remove it. It covers the web editor, the HTTP API and the MCP endpoint
+  (<code>/mcp</code>) that AI assistants such as Claude use. The server is run by an individual operator, not by a company, and
+  is not connected to Figma or Anthropic.
+</p>
+
+<h2>What we store</h2>
+<table>
+  <tr><th>Data</th><th>Why</th></tr>
+  <tr><td><b>Account:</b> username, display name, avatar colour, password (stored only as a salted scrypt hash), sign-up date, last time you were active</td><td>To sign you in, show your name to collaborators and keep your files</td></tr>
+  <tr><td><b>Your files:</b> designs, file names, sharing settings (people you invited and their roles, link access), edit times</td><td>This is the service: storing your documents and sharing them as you choose</td></tr>
+  <tr><td><b>Sign-in sessions:</b> a session cookie (<code>planar_session</code>, HttpOnly); only a hash of it is stored</td><td>To keep you signed in for up to 30 days</td></tr>
+  <tr><td><b>API keys and connected apps:</b> key names, hashes of keys and OAuth tokens, which app was connected and when it was last used</td><td>To let AI agents you authorised act as you, and to let you revoke them</td></tr>
+  <tr><td><b>Usage statistics:</b> daily counts (sign-ups, active users, edits, requests, errors) and per-minute counters for the last 24 hours</td><td>To keep the server running and spot problems; these are counts, not per-person histories</td></tr>
+  <tr><td><b>Technical data:</b> IP addresses, kept only in memory for a few minutes</td><td>To limit password guessing; IP addresses are not written to disk</td></tr>
+</table>
+<p>
+  We do not use advertising or analytics trackers, we do not sell or rent data, and we do not use your files to train AI models.
+  We do not ask for your email address.
+</p>
+
+<h2>What the AI integration (MCP) can access</h2>
+<p>
+  When you connect an assistant such as Claude, you sign in to Planar and approve the connection on a consent page. The assistant
+  then acts as you, with exactly your rights: it can list and open your files and files shared with you, create files, and edit
+  files you are allowed to edit. Its edits are visible to everyone in the file and can be undone. Whatever the assistant reads
+  through Planar (layer names, text, structure, rendered images) is sent to that assistant’s provider and is handled under
+  that provider’s privacy policy (for Claude: <a href="https://www.anthropic.com/legal/privacy">Anthropic’s privacy policy</a>).
+  You can disconnect an app at any time in Planar under your account → <i>Connected apps</i>, or revoke an API key under
+  <i>API keys</i>. Access tokens expire after one hour; unused connections expire after 90 days.
+</p>
+
+<h2>Who can see your data</h2>
+<ul>
+  <li><b>People you share a file with</b> see that file, your display name and username, and — while you have it open — your pointer and selection.</li>
+  <li><b>Anyone with a link</b> to a file with link access turned on can open it, without an account.</li>
+  <li><b>Other users</b> can find your username and display name when inviting people.</li>
+  <li><b>The server operator</b> can see account details, file names, sizes and sharing settings in an admin panel, and can block or delete accounts and files to stop abuse. The admin panel does not open the contents of your files; with direct access to the server the operator technically could, and will do so only when required by law or to keep the service working.</li>
+  <li><b>Notifications to the operator:</b> the server sends the operator Telegram messages about its health and about new sign-ups; these contain the new username and counts, nothing from your files.</li>
+</ul>
+
+<h2>Third parties</h2>
+<ul>
+  <li><b>Google Fonts:</b> when a design uses a web font, your browser loads it from <code>fonts.googleapis.com</code> / <code>fonts.gstatic.com</code>, which receive your IP address (<a href="https://policies.google.com/privacy">Google’s privacy policy</a>).</li>
+  <li><b>Telegram:</b> used only for the operator notifications described above.</li>
+  <li><b>Hosting:</b> the data lives on a rented virtual server; the hosting provider operates the hardware but does not process the data for its own purposes.</li>
+</ul>
+
+<h2>Security</h2>
+<p>
+  Traffic is encrypted with HTTPS. Passwords, sessions, API keys and OAuth tokens are stored only as hashes. Sign-in attempts are
+  rate-limited. No system is perfectly secure; please use a password you do not use elsewhere.
+</p>
+
+<h2>Keeping and deleting data</h2>
+<ul>
+  <li>Files stay until you delete them. Moving a file to the trash hides it from others; <i>Delete forever</i> removes it from the server.</li>
+  <li>Sessions end after 30 days or when you sign out; changing your password signs out your other sessions and connected apps.</li>
+  <li>To delete your account and all your files, or to get a copy of your data, open an issue at <a href="https://github.com/wswfws/Planar/issues">github.com/wswfws/Planar/issues</a> (do not post private details there; ask to be contacted privately). You can also download any file yourself as <code>.planar.json</code>.</li>
+</ul>
+
+<h2>Children</h2>
+<p>The service is not intended for children under 13, and we do not knowingly collect their data.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version will be published at this address with a new date.</p>
+
+<h2>Contact</h2>
+<p>Questions or requests: <a href="https://github.com/wswfws/Planar/issues">github.com/wswfws/Planar/issues</a>.</p>
+</main>
+</body>
+</html>

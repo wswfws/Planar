@@ -79,6 +79,9 @@ export function AuthScreen({ next }: { next: string | null }) {
         >
           {mode === 'login' ? 'No account yet? Create one' : 'Have an account? Sign in'}
         </button>
+        <a className="hint auth-privacy" href="/privacy" target="_blank" rel="noopener">
+          Privacy policy
+        </a>
       </form>
     </div>
   );
