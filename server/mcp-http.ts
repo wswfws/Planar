@@ -9,6 +9,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { AgentSession } from '../src/agent/session';
 import { INSTRUCTIONS, registerTools } from '../src/agent/tools';
 import type { Db } from './db';
+import { wwwAuthenticate } from './oauth';
 
 interface Entry {
   transport: StreamableHTTPServerTransport;
@@ -48,7 +49,7 @@ function apiKey(req: IncomingMessage): string {
   return new URL(req.url ?? '/', 'http://localhost').searchParams.get('key') ?? '';
 }
 
-export function createMcpHandler(opts: { db: Db; localServer: () => string }) {
+export function createMcpHandler(opts: { db: Db; localServer: () => string; publicUrl?: string }) {
   const sessions = new Map<string, Entry>();
 
   const sweep = setInterval(() => {
@@ -66,8 +67,9 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string }) {
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const key = apiKey(req);
     if (!opts.db.keyUser(key)) {
-      res.writeHead(401, { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Bearer' });
-      res.end(JSON.stringify({ error: 'Missing or revoked API key. Create one in Planar (account menu → API keys) and send Authorization: Bearer plk_…' }));
+      // MCP clients follow resource_metadata to sign in with OAuth.
+      res.writeHead(401, { 'Content-Type': 'application/json', 'WWW-Authenticate': wwwAuthenticate(req, opts.publicUrl) });
+      res.end(JSON.stringify({ error: 'Sign in with OAuth, or send Authorization: Bearer plk_… (account menu → API keys).' }));
       return;
     }
     const sessionId = req.headers['mcp-session-id'] as string | undefined;

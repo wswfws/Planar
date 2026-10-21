@@ -21,7 +21,11 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const refresh = () => void accounts.keys().then(setKeys, () => undefined);
+  const [apps, setApps] = useState<Awaited<ReturnType<typeof accounts.apps>>>([]);
+  const refresh = () => {
+    void accounts.keys().then(setKeys, () => undefined);
+    void accounts.apps().then(setApps, () => undefined);
+  };
   useEffect(refresh, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -157,6 +161,31 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
                 <textarea className="text-field code-field" readOnly rows={8} value={snippet} onFocus={(e) => e.target.select()} />
               </label>
             </>
+          )}
+          <h3 className="section-title">Connected apps</h3>
+          <p className="hint">
+            Apps that signed in with your Planar account (OAuth), such as Claude: add <code>{mcpUrl}</code> as a custom connector and approve it here.
+          </p>
+          {apps.length ? (
+            apps.map((a) => (
+              <div key={a.clientId} className="key-row">
+                <span>
+                  <b>{a.name}</b>{' '}
+                  <span className="hint">
+                    connected {new Date(a.connectedAt).toLocaleDateString()} · {a.lastUsed ? `used ${new Date(a.lastUsed).toLocaleDateString()}` : 'not used yet'}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => confirm(`Disconnect ${a.name}? It will have to ask for access again.`) && void run(async () => { await accounts.disconnectApp(a.clientId); refresh(); })}
+                >
+                  Disconnect
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="hint">None yet.</p>
           )}
           {error && <p className="share-error">{error}</p>}
           {message && <p className="hint">{message}</p>}

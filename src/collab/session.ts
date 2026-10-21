@@ -76,6 +76,8 @@ export const accounts = {
   keys: () => api<{ keys: ApiKeyInfo[] }>('GET', '/api/me/keys').then((r) => r.keys),
   createKey: (name: string) => api<{ key: ApiKeyInfo; secret: string }>('POST', '/api/me/keys', { name }),
   deleteKey: (id: string) => api('DELETE', `/api/me/keys/${encodeURIComponent(id)}`),
+  apps: () => api<{ apps: { clientId: string; name: string; connectedAt: number; lastUsed: number | null }[] }>('GET', '/api/me/apps').then((r) => r.apps),
+  disconnectApp: (clientId: string) => api('DELETE', `/api/me/apps/${encodeURIComponent(clientId)}`),
   findUsers: (q: string) => api<{ users: Omit<Me, 'id'>[] }>('GET', `/api/users?q=${encodeURIComponent(q)}`).then((r) => r.users),
 };
 

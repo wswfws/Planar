@@ -33,6 +33,12 @@ export function Root() {
 
   // Links from before accounts existed (/?room=ID) open the file with that id.
   const legacy = server ? search.get('room') : null;
+
+  // Already signed in on the way to an OAuth consent page: continue there.
+  const oauthNext = me && path === '/login' ? search.get('next') : null;
+  useEffect(() => {
+    if (oauthNext && /^\/oauth\//.test(oauthNext)) location.replace(oauthNext);
+  }, [oauthNext]);
   useEffect(() => {
     if (legacy) navigate(`/file/${encodeURIComponent(legacy)}`, true);
   }, [legacy]);

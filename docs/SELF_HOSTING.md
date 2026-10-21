@@ -188,6 +188,7 @@ connect to a plain-HTTP server.
 | `ADMIN_USERS` | empty | Usernames (comma-separated) that may open `/admin` |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | empty | Telegram alerts and daily summary |
 | `METRICS_TOKEN` | empty | Enables `/api/metrics` (Prometheus) with this bearer token |
+| `PUBLIC_URL` | from the request | Public address used in OAuth metadata (e.g. `https://planar.example.com`) |
 
 Health check: `GET /healthz`. Server info: `GET /api/info`.
 

@@ -44,6 +44,22 @@ Then ask the agent to work on a file: *"Create a file called Landing and design
 a hero section"* (it uses `files` and `open`), or give it a link:
 *"Open https://planar.example.com/file/abc123 and …"*.
 
+### Claude (claude.ai, desktop, mobile): custom connector with OAuth
+
+No key needed. In Claude open **Settings → Connectors → Add custom connector**,
+enter `https://planar.example.com/mcp`, keep **OAuth client** on *Use Claude's
+published credentials* (or *Register automatically*) and leave the request
+headers empty. Claude opens Planar: sign in and press **Allow**. The connector
+then acts as you; disconnect it any time under your account → *Connected apps*.
+
+Planar implements the MCP authorization spec: protected-resource metadata
+(`/.well-known/oauth-protected-resource`), authorization-server metadata
+(`/.well-known/oauth-authorization-server`), client ID metadata documents and
+dynamic client registration, authorization code with PKCE (S256), and rotating
+refresh tokens (access tokens last an hour, refresh tokens 90 days). Set
+`PUBLIC_URL` if the server is reached under a different address than its
+`Host` header suggests.
+
 ### Local (stdio)
 
 From a clone of the repository (`npm ci && npm run build` once):

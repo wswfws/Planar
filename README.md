@@ -69,6 +69,7 @@ same files as their owner and work live next to people.
 
 ```bash
 # Remote, on your Planar server
+# Claude (claude.ai / desktop): Settings → Connectors → Add custom connector → https://planar.example.com/mcp (OAuth, no key)
 claude mcp add --transport http planar https://planar.example.com/mcp --header "Authorization: Bearer plk_…"
 # Local, on a file
 claude mcp add planar -- node /path/to/Planar/dist-mcp/index.js --file ./design.planar.json

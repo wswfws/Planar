@@ -11,6 +11,7 @@ import { startServer } from './server';
 //   ADMIN_USERS   comma-separated usernames that may open /admin
 //   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID   alerts and a daily summary in Telegram
 //   METRICS_TOKEN bearer token that enables /api/metrics (Prometheus format)
+//   PUBLIC_URL    public address for OAuth (default: taken from each request)
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +24,7 @@ const server = await startServer({
   admins: (process.env.ADMIN_USERS ?? '').split(','),
   telegram: { token: process.env.TELEGRAM_BOT_TOKEN || undefined, chatId: process.env.TELEGRAM_CHAT_ID || undefined },
   metricsToken: process.env.METRICS_TOKEN || undefined,
+  publicUrl: process.env.PUBLIC_URL || undefined,
 });
 
 console.log(`[planar] collaboration server listening on port ${server.port}`);

@@ -49,6 +49,25 @@ export interface ApiKey {
   lastUsed: number | null;
 }
 
+/** An app registered through OAuth dynamic client registration. */
+export interface OAuthClient {
+  clientId: string;
+  clientName: string;
+  redirectUris: string[];
+  createdAt: number;
+}
+
+/** An OAuth access or refresh token (stored by hash). */
+export interface OAuthToken {
+  kind: 'access' | 'refresh';
+  userId: string;
+  clientId: string;
+  clientName: string;
+  expires: number;
+  createdAt: number;
+  lastUsed: number | null;
+}
+
 interface Session {
   userId: string;
   expires: number;
@@ -79,6 +98,7 @@ export class Db {
   settings: Settings = { ...DEFAULT_SETTINGS };
   /** Usage statistics kept by metrics.ts; stored as stats.json. */
   stats: Record<string, unknown> = {};
+  oauth: { clients: Record<string, OAuthClient>; tokens: Record<string, OAuthToken> } = { clients: {}, tokens: {} };
   private timers = new Map<string, NodeJS.Timeout>();
   private writing: Promise<void> = Promise.resolve();
 
@@ -94,6 +114,9 @@ export class Db {
     for (const [hash, s] of Object.entries(await this.loadObject<Session>('sessions'))) if (s.expires > now) this.sessions.set(hash, s);
     this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadObject<unknown>('settings')) };
     this.stats = await this.loadObject<unknown>('stats');
+    const oauth = await this.loadObject<Record<string, never>>('oauth');
+    this.oauth = { clients: oauth.clients ?? {}, tokens: oauth.tokens ?? {} };
+    for (const [hash, t] of Object.entries(this.oauth.tokens)) if (t.expires < now) delete this.oauth.tokens[hash];
   }
 
   private async read(name: string): Promise<unknown> {
@@ -114,7 +137,7 @@ export class Db {
   }
 
   /** Schedules a write of one collection. */
-  touch(name: 'users' | 'files' | 'keys' | 'sessions' | 'settings' | 'stats'): void {
+  touch(name: 'users' | 'files' | 'keys' | 'sessions' | 'settings' | 'stats' | 'oauth'): void {
     if (!this.dir || this.timers.has(name)) return;
     this.timers.set(
       name,
@@ -137,6 +160,8 @@ export class Db {
               ? this.settings
               : name === 'stats'
                 ? this.stats
+                : name === 'oauth'
+                  ? this.oauth
                 : Object.fromEntries(this.sessions);
     const file = path.join(this.dir!, `${name}.json`);
     const json = JSON.stringify(data);
@@ -236,6 +261,9 @@ export class Db {
     const keep = except ? sha256(except) : null;
     for (const [hash, s] of this.sessions) if (s.userId === userId && hash !== keep) this.sessions.delete(hash);
     this.touch('sessions');
+    // Connected apps (OAuth) are signed out too.
+    for (const [hash, t] of Object.entries(this.oauth.tokens)) if (t.userId === userId) delete this.oauth.tokens[hash];
+    this.touch('oauth');
   }
 
   createKey(userId: string, name: string): { key: ApiKey; secret: string } {
@@ -246,7 +274,9 @@ export class Db {
     return { key, secret };
   }
 
+  /** The user behind a bearer secret: a personal API key (plk_…) or an OAuth access token (pla_…). */
   keyUser(secret: string): User | null {
+    if (secret.startsWith('pla_')) return this.oauthUser(secret);
     if (!secret.startsWith('plk_')) return null;
     const hash = sha256(secret);
     for (const k of this.keys.values()) {
@@ -260,6 +290,43 @@ export class Db {
       }
     }
     return null;
+  }
+
+  issueOAuthToken(kind: OAuthToken['kind'], userId: string, client: { clientId: string; clientName: string }, ttlMs: number): string {
+    const secret = `${kind === 'access' ? 'pla' : 'plr'}_${randomBytes(32).toString('base64url')}`;
+    const now = Date.now();
+    this.oauth.tokens[sha256(secret)] = { kind, userId, ...client, expires: now + ttlMs, createdAt: now, lastUsed: null };
+    this.touch('oauth');
+    return secret;
+  }
+
+  /** Looks up a token of the given kind; null if unknown, expired or of another kind. */
+  oauthToken(secret: string, kind: OAuthToken['kind']): OAuthToken | null {
+    const hash = sha256(secret);
+    const t = this.oauth.tokens[hash];
+    if (!t || t.kind !== kind) return null;
+    if (t.expires < Date.now()) {
+      delete this.oauth.tokens[hash];
+      this.touch('oauth');
+      return null;
+    }
+    return t;
+  }
+
+  dropOAuthToken(secret: string): void {
+    delete this.oauth.tokens[sha256(secret)];
+    this.touch('oauth');
+  }
+
+  private oauthUser(secret: string): User | null {
+    const t = this.oauthToken(secret, 'access');
+    if (!t) return null;
+    if (!t.lastUsed || Date.now() - t.lastUsed > 60_000) {
+      t.lastUsed = Date.now();
+      this.touch('oauth');
+    }
+    const user = this.users.get(t.userId);
+    return user && !user.blocked ? user : null;
   }
 
   // ---- files -------------------------------------------------------------

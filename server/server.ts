@@ -11,6 +11,7 @@ import { disk, type LiveState } from './admin';
 import { Alerts, type AlertOptions } from './alerts';
 import { adoptLegacy, authenticate, handleApi } from './api';
 import { Metrics } from './metrics';
+import { handleOAuth } from './oauth';
 import { Db, type FileRecord, type User } from './db';
 import { createMcpHandler } from './mcp-http';
 import { ROOM_ID, RoomStore, type Room } from './rooms';
@@ -34,6 +35,10 @@ export interface ServerOptions {
   telegram?: AlertOptions;
   /** Bearer token for /api/metrics (Prometheus); off when empty. */
   metricsToken?: string;
+  /** Public address (https://planar.example.com) for OAuth metadata; default: from each request. */
+  publicUrl?: string;
+  /** Fetches OAuth client metadata documents (tests replace the network). */
+  fetchClientMetadata?: (url: string) => Promise<unknown>;
 }
 
 interface Presence {
@@ -156,7 +161,8 @@ export async function startServer(
 
   await initCanvas();
   let boundPort = opts.port;
-  const mcp = createMcpHandler({ db, localServer: () => `http://127.0.0.1:${boundPort}` });
+  const mcp = createMcpHandler({ db, localServer: () => `http://127.0.0.1:${boundPort}`, publicUrl: opts.publicUrl });
+  const oauth = { db, metrics, publicUrl: opts.publicUrl, fetchClientMetadata: opts.fetchClientMetadata };
 
   const send = (c: Client, msg: unknown) => {
     if (c.socket.readyState === c.socket.OPEN) c.socket.send(JSON.stringify(msg));
@@ -237,9 +243,10 @@ export async function startServer(
       res.writeHead(200).end('ok');
       return;
     }
-    void handleApi(req, res, api).then((handled) => {
-      if (!handled) void serveStatic(req, res);
-    });
+    void (async () => {
+      if (await handleOAuth(req, res, oauth)) return;
+      if (!(await handleApi(req, res, api))) await serveStatic(req, res);
+    })();
   });
 
   const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: opts.maxMessageBytes ?? 50 * 1024 * 1024 });

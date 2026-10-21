@@ -23,7 +23,8 @@ export function AuthScreen({ next }: { next: string | null }) {
           : await accounts.register(username.trim(), password, displayName.trim());
       server.setMe(user);
       // Only paths on this site, never other addresses.
-      if (next && /^\/(?!\/)/.test(next)) navigate(next, true);
+      if (next && /^\/oauth\//.test(next)) location.replace(next);
+      else if (next && /^\/(?!\/)/.test(next)) navigate(next, true);
       else navigate('/', true);
     } catch (err) {
       setError((err as Error).message);

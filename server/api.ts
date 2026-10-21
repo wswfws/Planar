@@ -236,6 +236,26 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           return json(200, { user: meView(me) });
         }
       }
+      if (parts[1] === 'apps') {
+        // Apps connected with OAuth, grouped by client.
+        const me = need();
+        if (method === 'GET') {
+          const apps = new Map<string, { clientId: string; name: string; connectedAt: number; lastUsed: number | null }>();
+          for (const t of Object.values(db.oauth.tokens)) {
+            if (t.userId !== me.id) continue;
+            const a = apps.get(t.clientId) ?? { clientId: t.clientId, name: t.clientName, connectedAt: t.createdAt, lastUsed: null };
+            a.connectedAt = Math.min(a.connectedAt, t.createdAt);
+            if (t.lastUsed && (!a.lastUsed || t.lastUsed > a.lastUsed)) a.lastUsed = t.lastUsed;
+            apps.set(t.clientId, a);
+          }
+          return json(200, { apps: [...apps.values()] });
+        }
+        if (method === 'DELETE' && parts[2]) {
+          for (const [hash, t] of Object.entries(db.oauth.tokens)) if (t.userId === me.id && t.clientId === parts[2]) delete db.oauth.tokens[hash];
+          db.touch('oauth');
+          return json(200, { ok: true });
+        }
+      }
       if (parts[1] === 'keys') {
         const me = need();
         if (method === 'GET' && !parts[2]) {
