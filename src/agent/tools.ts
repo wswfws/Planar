@@ -75,6 +75,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'open',
     {
       title: 'Open document',
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description:
         'Open a Planar file by id (from files) or by its link (https://host/file/<id>), or a local .planar.json path (created if missing). In a Planar file you appear as "Agent" and people see your edits live, with the rights of the API key owner.',
       inputSchema: {
@@ -97,6 +98,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'files',
     {
       title: 'Planar files',
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       description:
         'Your files on the Planar server (needs an API key). list: files you own (scope mine) or that others shared with you (scope shared), with your role. create: a new empty file (then open it). duplicate: copy any file you can view into your own files, e.g. to work on a view-only file.',
       inputSchema: {
@@ -235,6 +237,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'create',
     {
       title: 'Create layers',
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       description:
         'Create layers from nested descriptions in one undoable step. Each layer: {type, name, ...props, children:[...]}. Types: frame, text, rectangle, ellipse, line, vector, group, component, instance (with component:"Name", props:{…}, variant:{…}). Props: width/height (number|"hug"|"fill"), layout ("row"|"column"), gap, padding, align, crossAlign, fill/stroke ("#hex", "#hex 50%", "$var"), radius, text, size, weight, font, lineHeight, textAlign, x/y (outside auto layout), opacity, mode.',
       inputSchema: {
@@ -257,6 +260,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'update',
     {
       title: 'Update layers',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       description:
         'Change properties of one or many layers in one undoable step: [{id, ...props}]. Same props as create, plus parent/index to move, component to swap an instance, props/variant for instances. Use null fill to remove fills.',
       inputSchema: {
@@ -309,6 +313,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'components',
     {
       title: 'Component operations',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       description:
         'create: turn layers into a component (a frame becomes one; other selections are wrapped). combine_variants: make a component set from components. add_variant: duplicate a variant. variant_value: set a variant property value (id, axis, value). add_property: add a text/boolean/instance property to a component or set, optionally binding a layer (layer, field: characters|visible|componentId). detach: turn instances into frames.',
       inputSchema: {
@@ -369,6 +374,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'variables',
     {
       title: 'Variables',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       description:
         'Create or update variables and modes in one step. set: [{name, type (color|number|string|boolean; needed for new ones), value (all modes) or values: {ModeName: value}}]. modes: mode names to make sure exist (e.g. ["Light","Dark"]). remove: variable names to delete. Reference variables in props as "$name".',
       inputSchema: {
@@ -431,6 +437,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'pages',
     {
       title: 'Pages',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       description:
         'list: all pages. create: add a page (name) and make it current. rename: id + name. delete: id (not the last page). open: id — make it the current page (create/tree/find default to it).',
       inputSchema: {
@@ -476,6 +483,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'select',
     {
       title: 'Select layers',
+      annotations: { readOnlyHint: true, openWorldHint: false },
       description: 'Select layers (switching page if needed). In a live room people see the agent\'s selection — use it to point at things you are talking about.',
       inputSchema: { ids: z.array(z.string()) },
     },
@@ -493,6 +501,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'undo',
     {
       title: 'Undo',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       description: 'Undo the agent\'s own last changes (never other people\'s).',
       inputSchema: { steps: z.number().int().min(1).max(50).optional() },
     },
@@ -548,6 +557,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'export',
     {
       title: 'Export',
+      annotations: { readOnlyHint: !allowFiles, destructiveHint: allowFiles, openWorldHint: false },
       description: allowFiles
         ? 'Export layers as SVG (markup) or PNG (image). With path, writes files instead (a directory gets one file per layer, named after it).'
         : 'Export layers as SVG markup or a PNG image.',

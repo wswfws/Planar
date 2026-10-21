@@ -51,6 +51,8 @@ describe('MCP tools (file mode)', () => {
     expect(tools.map((t) => t.name).sort()).toEqual(
       ['code', 'components', 'create', 'delete', 'export', 'files', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables'].sort(),
     );
+    // Directories check that every tool says whether it reads or changes data.
+    for (const t of tools) expect(t.annotations?.readOnlyHint !== undefined || t.annotations?.destructiveHint !== undefined, t.name).toBe(true);
     const r = await call('overview');
     expect(r.isError).toBe(true);
     expect(textOf(r)).toMatch(/open/);
