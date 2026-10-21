@@ -77,9 +77,9 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       title: 'Open document',
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description:
-        'Open a Planar file by id (from files) or by its link (https://host/file/<id>), or a local .planar.json path (created if missing). In a Planar file you appear as "Agent" and people see your edits live, with the rights of the API key owner.',
+        'Open a Planar file by id or by its link (https://host/file/<id>), or a local .planar.json path (created if missing). Edits to a Planar file are live: people in it see them immediately. Access follows the signed-in user\'s rights.',
       inputSchema: {
-        fileId: z.string().optional().describe('File id from the files tool'),
+        fileId: z.string().optional().describe('Planar file id'),
         link: z.string().optional().describe('Planar file link'),
         file: z.string().optional().describe('Path to a local .planar.json file'),
       },
@@ -100,7 +100,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       title: 'Planar files',
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       description:
-        'Your files on the Planar server (needs an API key). list: files you own (scope mine) or that others shared with you (scope shared), with your role. create: a new empty file (then open it). duplicate: copy any file you can view into your own files, e.g. to work on a view-only file.',
+        'Files on the Planar server for the signed-in user. list: files you own (scope mine) or that others shared with you (scope shared), with your role. create: a new empty file. duplicate: copy any file you can view into your own files.',
       inputSchema: {
         action: z.enum(['list', 'create', 'duplicate']),
         scope: z.enum(['mine', 'shared']).optional().describe('list: which files (default mine)'),
@@ -128,7 +128,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'overview',
     {
       title: 'Document overview',
-      description: 'Pages with their top-level layers, components (props, variants), variables and modes, the selection, and people in a live room. Start here.',
+      description: 'Pages with their top-level layers, components (props, variants), variables and modes, the selection, and people in a live file.',
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -180,7 +180,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'inspect',
     {
       title: 'Inspect layers',
-      description: 'All properties of layers in the same vocabulary create/update accept (layout, gap, padding, fill, text, size, props, variant…). Set children=true to include nested layers.',
+      description: 'All properties of layers, in the same property vocabulary used for editing (layout, gap, padding, fill, text, size, props, variant…). Set children=true to include nested layers.',
       inputSchema: {
         ids: z.array(z.string()).min(1).describe('Layer ids'),
         children: z.boolean().optional().describe('Include descendants as nested "layers"'),
@@ -262,7 +262,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       title: 'Update layers',
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       description:
-        'Change properties of one or many layers in one undoable step: [{id, ...props}]. Same props as create, plus parent/index to move, component to swap an instance, props/variant for instances. Use null fill to remove fills.',
+        'Change properties of one or many layers in one undoable step: [{id, ...props}]. Same props as when creating layers, plus parent/index to move, component to swap an instance, props/variant for instances. Use null fill to remove fills.',
       inputSchema: {
         changes: z.array(z.object({ id: z.string() }).catchall(z.unknown())).min(1),
       },
@@ -439,7 +439,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       title: 'Pages',
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
       description:
-        'list: all pages. create: add a page (name) and make it current. rename: id + name. delete: id (not the last page). open: id — make it the current page (create/tree/find default to it).',
+        'list: all pages. create: add a page (name) and make it current. rename: id + name. delete: id (not the last page). open: id — make it the current page (the default target for new layers and searches).',
       inputSchema: {
         action: z.enum(['list', 'create', 'rename', 'delete', 'open']),
         id: z.string().optional(),
@@ -484,7 +484,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     {
       title: 'Select layers',
       annotations: { readOnlyHint: true, openWorldHint: false },
-      description: 'Select layers (switching page if needed). In a live room people see the agent\'s selection — use it to point at things you are talking about.',
+      description: 'Select layers (switching page if needed). In a live file, other people see this selection.',
       inputSchema: { ids: z.array(z.string()) },
     },
     guard(async ({ ids }) => {
@@ -519,7 +519,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     {
       title: 'Generate code',
       description:
-        'Code for a layer. react: a React component (TSX + CSS); main components and component sets become components with typed props and variants, instances become <Component …/> elements. html: HTML + CSS. css: stylesheet only. Auto layout becomes flexbox; variables become var(--token) (see tokens).',
+        'Code for a layer. react: a React component (TSX + CSS); main components and component sets become components with typed props and variants, instances become <Component …/> elements. html: HTML + CSS. css: stylesheet only. Auto layout becomes flexbox; variables become var(--token) custom properties.',
       inputSchema: {
         id: z.string(),
         format: z.enum(['react', 'html', 'css']).optional().describe('Default react'),
