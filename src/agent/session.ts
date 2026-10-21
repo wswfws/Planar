@@ -16,6 +16,8 @@ export interface SessionOptions {
   localServer?: string;
   /** Server for the files tool when no link was given (https://planar.example.com). */
   server?: string;
+  /** Address people use to open files, when it differs from where the agent connects (remote endpoint). */
+  publicUrl?: string;
   /** Personal API key (`plk_…`): the agent acts with this person's rights. */
   key?: string;
   name?: string;
@@ -120,7 +122,11 @@ export class AgentSession {
   }
 
   private remoteFile(f: FileRow): RemoteFile {
-    return { id: f.id, name: f.name, role: f.role, owner: f.owner, updatedAt: f.updatedAt, link: `${this.base()}/file/${f.id}` };
+    return { id: f.id, name: f.name, role: f.role, owner: f.owner, updatedAt: f.updatedAt, link: this.fileLink(f.id) };
+  }
+
+  private fileLink(id: string): string {
+    return `${(this.opts.publicUrl ?? this.base()).replace(/\/+$/, '')}/file/${id}`;
   }
 
   /** Files of the key's owner: their own, or those shared with them. */
@@ -140,7 +146,7 @@ export class AgentSession {
   }
 
   async openFileId(id: string): Promise<string> {
-    return this.openRoom({ serverUrl: this.base(), fileId: id, link: `${this.base()}/file/${id}` });
+    return this.openRoom({ serverUrl: this.base(), fileId: id, link: this.fileLink(id) });
   }
 
   async openRoom(target: RoomTarget): Promise<string> {

@@ -234,6 +234,8 @@ describe('remote MCP endpoint (live file)', () => {
     expect(list).toContain(fileId);
     const made = textOf((await remote.callTool({ name: 'files', arguments: { action: 'create', name: 'From agent' } })) as ToolResult);
     expect(made).toMatch(/From agent/);
+    // Links point at the address people use, not the internal one the endpoint connects to.
+    expect(made).toContain(`${url}/file/`);
     const newId = /id (\S+)\./.exec(made)![1];
     expect((await ann.call('GET', `/api/files/${newId}`)).body.file.name).toBe('From agent');
   });

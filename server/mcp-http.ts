@@ -9,7 +9,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { AgentSession } from '../src/agent/session';
 import { INSTRUCTIONS, registerTools } from '../src/agent/tools';
 import type { Db } from './db';
-import { wwwAuthenticate } from './oauth';
+import { publicBase, wwwAuthenticate } from './oauth';
 
 interface Entry {
   transport: StreamableHTTPServerTransport;
@@ -90,7 +90,7 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string; publ
         res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: sessionId ? 'Unknown session' : 'Start with an initialize request' }, id: null }));
         return;
       }
-      const session = new AgentSession({ allowFiles: false, localServer: opts.localServer(), key, name: 'Agent' });
+      const session = new AgentSession({ allowFiles: false, localServer: opts.localServer(), key, name: 'Agent', publicUrl: publicBase(req, opts.publicUrl) });
       const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
