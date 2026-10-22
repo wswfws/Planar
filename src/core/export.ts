@@ -98,7 +98,8 @@ function svgFilter(node: SceneNode, id: string): string | null {
 
 function nodeToSvg(doc: PlanarDocument, id: string): string {
   const node = doc.nodes[id];
-  if (!node || !node.visible) return '';
+  // Annotations are notes for the team, not part of the design.
+  if (!node || !node.visible || node.type === 'note') return '';
   const parts: string[] = [];
   const opacity = node.opacity < 1 ? ` opacity="${clean(node.opacity, 3)}"` : '';
   const fid = `planar-fx-${++clipCounter}`;
@@ -221,7 +222,7 @@ export function exportRaster(doc: PlanarDocument, ids: string[], scale: number, 
   for (const id of ids) {
     ctx.save();
     ctx.transform(...parentWorldMatrix(doc, id));
-    drawNode(ctx, doc, id);
+    drawNode(ctx, doc, id, { annotations: false });
     ctx.restore();
   }
   return new Promise((resolve) => canvas.toBlob(resolve, type, 0.92));

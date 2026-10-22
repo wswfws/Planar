@@ -4,6 +4,7 @@
 // Written from the public REST API reference; see docs/FIGMA_IMPORT.md.
 
 import { createNode, newId } from '../core/document';
+import { createNote } from '../core/notes';
 import { pathGeometry } from '../core/paths';
 import type { ConstraintH, ConstraintV, Effect, NodeType, Paint, PlanarDocument, SceneNode, Sizing, Style } from '../core/types';
 
@@ -26,7 +27,7 @@ const hex = (c: { r: number; g: number; b: number } | undefined) => (c ? `#${hex
 const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const round = (v: number) => Math.round(v * 100) / 100;
 
-const SKIPPED = new Set(['STICKY', 'SHAPE_WITH_TEXT', 'CONNECTOR', 'WIDGET', 'EMBED', 'LINK_UNFURL', 'TABLE', 'TABLE_CELL', 'SLICE', 'CODE_BLOCK', 'STAMP', 'HIGHLIGHT', 'WASHI_TAPE']);
+const SKIPPED = new Set(['SHAPE_WITH_TEXT', 'CONNECTOR', 'WIDGET', 'EMBED', 'LINK_UNFURL', 'TABLE', 'TABLE_CELL', 'SLICE', 'CODE_BLOCK', 'STAMP', 'HIGHLIGHT', 'WASHI_TAPE']);
 const VECTORS = new Set(['VECTOR', 'STAR', 'REGULAR_POLYGON', 'BOOLEAN_OPERATION', 'LINE']);
 const H_CONSTRAINT: Record<string, ConstraintH> = { LEFT: 'left', RIGHT: 'right', CENTER: 'center', LEFT_RIGHT: 'left-right', SCALE: 'scale' };
 const V_CONSTRAINT: Record<string, ConstraintV> = { TOP: 'top', BOTTOM: 'bottom', CENTER: 'center', TOP_BOTTOM: 'top-bottom', SCALE: 'scale' };
@@ -192,6 +193,9 @@ export function figmaToPlanar(file: FNode, images: Record<string, string> = {}):
       case 'TEXT':
         type = 'text';
         break;
+      case 'STICKY':
+        type = 'note';
+        break;
       default:
         if (VECTORS.has(n.type)) type = 'vector';
         else {
@@ -215,7 +219,16 @@ export function figmaToPlanar(file: FNode, images: Record<string, string> = {}):
       node.cornerRadius = Math.max(...r);
       if (new Set(r).size > 1) note('different corner radii (largest used)');
     }
-    if (type !== 'group') node.clipContent = n.clipsContent === true;
+    if (type !== 'group' && type !== 'note') node.clipContent = n.clipsContent === true;
+    if (type === 'note') {
+      // FigJam sticky notes become sticky notes.
+      const sticky = createNote('sticky', { id, name: node.name, parentId, x: node.x, y: node.y, width: node.width, height: node.height });
+      if (node.fills[0]?.type === 'solid') sticky.fills = [node.fills[0]];
+      sticky.characters = String(n.characters ?? '');
+      if (n.authorName) sticky.note = { kind: 'sticky', author: String(n.authorName) };
+      nodes[id] = sticky;
+      return id;
+    }
     if (n.constraints) {
       node.constraintH = H_CONSTRAINT[n.constraints.horizontal] ?? 'left';
       node.constraintV = V_CONSTRAINT[n.constraints.vertical] ?? 'top';

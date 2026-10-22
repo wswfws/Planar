@@ -269,7 +269,7 @@ function svgFor(ctx: Ctx, n: SceneNode): string {
 function build(ctx: Ctx, n: SceneNode, root = false): El | null {
   const { doc } = ctx;
   const visibleProp = n.propBindings.visible && ctx.propNames.get(n.propBindings.visible);
-  if (!n.visible && !visibleProp) return null;
+  if ((!n.visible && !visibleProp) || n.type === 'note') return null;
   const el: El = { tag: 'div', cls: uniqueClass(ctx, n.name), css: {}, attrs: {}, children: [] };
   if (visibleProp) el.showExpr = visibleProp;
   if (n.variableMode) {

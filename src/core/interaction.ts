@@ -158,7 +158,7 @@ export class Interaction {
   }
 
   private hitAt(world: Vec): string | null {
-    const hit = hitTest(this.doc, this.editor.pageId, world, this.tolerance());
+    const hit = hitTest(this.doc, this.editor.pageId, world, this.tolerance(), this.editor.pickExclusions);
     return hit ? this.resolveSelectable(hit) : null;
   }
 
@@ -360,12 +360,16 @@ export class Interaction {
     }
     if (editor.tool !== 'select') return;
     const world = editor.screenToWorld(e.screen);
-    const hit = hitTest(this.doc, editor.pageId, world, this.tolerance());
+    const hit = hitTest(this.doc, editor.pageId, world, this.tolerance(), editor.pickExclusions);
     if (!hit) return;
     const resolved = this.resolveSelectable(hit);
     const node = this.doc.nodes[resolved];
     if (node.type === 'text') {
       editor.startTextEditing(node.id);
+    } else if (node.type === 'note') {
+      // Notes are written in the Properties panel.
+      editor.focusNoteId = node.id;
+      editor.select([node.id]);
     } else if (node.type === 'group' || node.type === 'instance') {
       const chain = [...getAncestors(this.doc, hit).map((a) => a.id), hit];
       const next = chain[chain.indexOf(resolved) + 1];
@@ -406,7 +410,7 @@ export class Interaction {
     const out: string[] = [];
     for (const id of this.doc.nodes[parentId].children) {
       const n = this.doc.nodes[id];
-      if (!n.visible || n.locked) continue;
+      if (!n.visible || n.locked || (n.type === 'note' && !this.editor.showAnnotations)) continue;
       const b = worldBounds(this.doc, id);
       if (!rectsIntersect(b, rect)) continue;
       const contained = b.x >= rect.x && b.y >= rect.y && b.x + b.width <= rect.x + rect.width && b.y + b.height <= rect.y + rect.height;

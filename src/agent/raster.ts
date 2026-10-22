@@ -49,7 +49,7 @@ export function canRender(): boolean {
 }
 
 /** PNG of the given layers (whole page when `ids` is empty). */
-export async function renderPng(doc: PlanarDocument, ids: string[], opts: { scale?: number; maxSize?: number; background?: string; jpeg?: boolean } = {}): Promise<Buffer> {
+export async function renderPng(doc: PlanarDocument, ids: string[], opts: { scale?: number; maxSize?: number; background?: string; jpeg?: boolean; annotations?: boolean } = {}): Promise<Buffer> {
   const mod = await initCanvas();
   if (!mod) throw new Error('Screenshots need the optional @napi-rs/canvas package (npm install @napi-rs/canvas).');
   // Includes the reach of shadows and blurs.
@@ -90,7 +90,7 @@ export async function renderPng(doc: PlanarDocument, ids: string[], opts: { scal
     for (const id of ids) {
       ctx.save();
       ctx.transform(...parentWorldMatrix(doc, id));
-      drawNode(ctx, doc, id);
+      drawNode(ctx, doc, id, { annotations: opts.annotations ?? false });
       ctx.restore();
     }
   } finally {

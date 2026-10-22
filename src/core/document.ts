@@ -1,5 +1,6 @@
 import { sanitizeContext } from './context';
 import { sanitizeEffects } from './effects';
+import { sanitizeNote } from './notes';
 import { sanitizeStyles } from './styles';
 import type { NodeType, Paint, PlanarDocument, SceneNode, SolidPaint } from './types';
 
@@ -25,6 +26,7 @@ const DEFAULT_NAMES: Record<NodeType, string> = {
   ellipse: 'Ellipse',
   vector: 'Vector',
   text: 'Text',
+  note: 'Note',
 };
 
 const DEFAULT_FILLS: Record<NodeType, () => Paint[]> = {
@@ -38,6 +40,7 @@ const DEFAULT_FILLS: Record<NodeType, () => Paint[]> = {
   ellipse: () => [solid('#d9d9d9')],
   vector: () => [],
   text: () => [solid('#000000')],
+  note: () => [solid('#FFE58F')],
 };
 
 export function createNode(type: NodeType, props: Partial<SceneNode> = {}): SceneNode {
@@ -255,6 +258,8 @@ export function parseDocument(data: unknown): PlanarDocument {
     nodes[id] = { ...createNode(raw.type), ...raw, id };
     nodes[id].effects = sanitizeEffects(raw.effects);
     nodes[id].context = sanitizeContext(raw.context);
+    if (raw.type === 'note') nodes[id].note = sanitizeNote(raw.note);
+    else delete nodes[id].note;
     if (!['left', 'right', 'left-right', 'center', 'scale'].includes(nodes[id].constraintH)) nodes[id].constraintH = 'left';
     if (!['top', 'bottom', 'top-bottom', 'center', 'scale'].includes(nodes[id].constraintV)) nodes[id].constraintV = 'top';
   }

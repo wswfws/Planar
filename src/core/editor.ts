@@ -62,6 +62,16 @@ import { coerce, defaultValue, resolveVariables, unbindVariable } from './variab
 import { applyOps, diffDocs, repairTree, type Op } from './ops';
 import { insertSvg, parseSvg } from './svg';
 import { createWelcomeDocument } from './welcome';
+import { createNote, MAX_MESSAGES, newMessage, noteIds } from './notes';
+import type { NoteData, NoteKind } from './types';
+
+function readAnnotationsPref(): boolean {
+  try {
+    return localStorage.getItem('planar.annotations') !== '0';
+  } catch {
+    return true;
+  }
+}
 
 export type Tool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'text' | 'comment';
 
@@ -167,6 +177,10 @@ export class Editor {
   layoutSkip: Set<string> = new Set();
   message: string | null = null;
   version = 0;
+  /** Annotation layers (notes, chats…) are drawn and can be picked. */
+  showAnnotations = readAnnotationsPref();
+  /** Note whose text the Properties panel should focus next (new or double-clicked). */
+  focusNoteId: string | null = null;
 
   private listeners = new Set<() => void>();
   private undoStack: HistoryEntry[] = [];
@@ -1501,6 +1515,85 @@ export class Editor {
     const next = pages[i === 0 ? 1 : i - 1];
     if (id === this.pageId) this.setPage(next);
     this.change((doc) => removeNode(doc, id));
+  }
+
+  // ------------------------------------------------------------ annotations
+
+  setShowAnnotations(on: boolean): void {
+    this.showAnnotations = on;
+    try {
+      localStorage.setItem('planar.annotations', on ? '1' : '0');
+    } catch {
+      // Per-browser preference only.
+    }
+    if (!on) this.selection = this.selection.filter((id) => this.doc.nodes[id]?.type !== 'note');
+    this.emit();
+  }
+
+  /** Annotation layers the pointer should pass through (when they are hidden). */
+  get pickExclusions(): ReadonlySet<string> {
+    return this.showAnnotations ? new Set() : noteIds(this.doc, this.pageId);
+  }
+
+  /**
+   * Adds an annotation layer on the current page and selects it. A callout
+   * points at the selected layer and sits to its right; other notes go to
+   * the middle of the view.
+   */
+  addNote(kind: NoteKind, author = ''): string | null {
+    if (this.readOnly) return null;
+    const target = kind === 'callout' ? this.selectedNodes.find((n) => n.type !== 'note' && n.type !== 'page') : undefined;
+    const note = createNote(kind);
+    if (author && kind === 'sticky') note.note = { ...note.note!, author };
+    if (target) {
+      note.note = { ...note.note!, targetId: target.id };
+      note.characters = target.name;
+      const b = worldBounds(this.doc, target.id);
+      const page = getPageOf(this.doc, target.id);
+      if (page && page.id !== this.pageId) this.setPage(page.id);
+      note.x = Math.round(b.x + b.width + 60);
+      note.y = Math.round(b.y + b.height / 2 - note.height / 2);
+    } else {
+      const c = this.screenToWorld({ x: this.canvasSize.width / 2, y: this.canvasSize.height / 2 });
+      note.x = Math.round(c.x - note.width / 2);
+      note.y = Math.round(c.y - note.height / 2);
+      // Move right past notes already there, so new ones do not hide each other.
+      const taken = this.page.children.map((id) => this.doc.nodes[id]).filter((n) => n?.type === 'note');
+      for (let i = 0; i < 50; i++) {
+        const box = { x: note.x, y: note.y, width: note.width, height: note.height };
+        const hit = taken.find((n) => rectsIntersect(box, { x: n.x, y: n.y, width: n.width, height: n.height }));
+        if (!hit) break;
+        note.x = Math.round(hit.x + hit.width + 24);
+      }
+    }
+    if (!this.showAnnotations) this.setShowAnnotations(true);
+    this.change((doc) => insertNode(doc, note, this.pageId));
+    this.focusNoteId = note.id;
+    this.select([note.id]);
+    return note.id;
+  }
+
+  /** Changes a note's contents (kind-specific data) as one undo step. */
+  updateNote(id: string, patch: Partial<NoteData>): void {
+    const node = this.doc.nodes[id];
+    if (node?.type !== 'note' || !node.note) return;
+    this.updateNodes([id], (n) => (n.note = { ...n.note!, ...structuredClone(patch) }));
+  }
+
+  /** Adds a message to a chat note. Returns the message id. */
+  postMessage(id: string, text: string, author: string, agent = false): string | null {
+    const node = this.doc.nodes[id];
+    if (node?.note?.kind !== 'chat' || !text.trim()) return null;
+    const m = newMessage(author || 'Someone', text.trim(), agent);
+    this.updateNote(id, { messages: [...(node.note.messages ?? []), m].slice(-MAX_MESSAGES) });
+    return m.id;
+  }
+
+  /** Removes a chat message for everyone. */
+  deleteMessage(id: string, messageId: string): void {
+    const node = this.doc.nodes[id];
+    if (node?.note?.kind !== 'chat') return;
+    this.updateNote(id, { messages: (node.note.messages ?? []).map((m) => (m.id === messageId ? { ...m, text: '', deleted: true } : m)) });
   }
 
   /** Sets the brief for the whole file. */

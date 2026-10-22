@@ -1,6 +1,6 @@
 import type { Vec } from './math';
 
-export type NodeType = 'page' | 'frame' | 'component' | 'componentSet' | 'instance' | 'group' | 'rectangle' | 'ellipse' | 'vector' | 'text';
+export type NodeType = 'page' | 'frame' | 'component' | 'componentSet' | 'instance' | 'group' | 'rectangle' | 'ellipse' | 'vector' | 'text' | 'note';
 
 export interface SolidPaint {
   type: 'solid';
@@ -144,6 +144,42 @@ export interface SceneNode {
   library?: LibraryOrigin;
   /** Notes for people and agents about what this layer is for (markdown). */
   context: string;
+  /** Annotation layers (type 'note'): what kind and its contents besides `characters`. */
+  note?: NoteData;
+}
+
+export type NoteKind = 'sticky' | 'doc' | 'chat' | 'checklist' | 'callout';
+
+export interface NoteMessage {
+  id: string;
+  author: string;
+  text: string;
+  /** Milliseconds since 1970. */
+  at: number;
+  /** Written by an AI agent. */
+  agent?: boolean;
+  /** Removed (kept so every copy of the chat forgets it). */
+  deleted?: boolean;
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/**
+ * Annotation contents. Sticky notes, descriptions (markdown) and callouts
+ * keep their text in `characters`; a chat or checklist uses it as its title.
+ */
+export interface NoteData {
+  kind: NoteKind;
+  /** Who wrote a sticky note. */
+  author?: string;
+  messages?: NoteMessage[];
+  items?: ChecklistItem[];
+  /** Callout: the layer it points at. */
+  targetId?: string;
 }
 
 /** Where something imported from a team library came from. */

@@ -66,7 +66,7 @@ export function Present({ fileId }: { fileId: string }) {
       ctx.rect(f.x, f.y, f.width, f.height);
       ctx.clip();
       ctx.globalAlpha = alpha;
-      drawNode(ctx, editor.doc, id);
+      drawNode(ctx, editor.doc, id, { annotations: false });
       ctx.restore();
     };
     const a = anim.current;

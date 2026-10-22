@@ -112,6 +112,7 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 }
 
 export const NODE_ICONS: Record<string, IconName> = {
+  note: 'note',
   frame: 'frame',
   component: 'component',
   componentSet: 'component',

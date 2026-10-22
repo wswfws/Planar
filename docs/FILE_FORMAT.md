@@ -33,7 +33,7 @@ their default value.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | string | Unique id |
-| `type` | `page` \| `frame` \| `component` \| `componentSet` \| `instance` \| `group` \| `rectangle` \| `ellipse` \| `vector` \| `text` | |
+| `type` | `page` \| `frame` \| `component` \| `componentSet` \| `instance` \| `group` \| `rectangle` \| `ellipse` \| `vector` \| `text` \| `note` | |
 | `name` | string | Layer name |
 | `parentId` | string \| null | Parent node (null for pages) |
 | `children` | string[] | Child ids, bottom to top |
@@ -82,6 +82,7 @@ their default value.
 | `propValues` | {propId: value} | Instance: values set for its component's properties |
 | `variantProps` | {property: value} | Variant component: its value for each variant property |
 | `context` | string | Notes for people and agents about what the layer (or page) is for, in markdown, at most 20000 characters. Not copied from a component to its instances |
+| `note` | NoteData | Optional; only on `note` layers. See Annotations |
 | `link` | {to, transition?} | Optional. Prototype: clicking the layer in Present mode goes to the top-level frame `to`; `transition` is `instant` (default), `slide` or `dissolve` |
 
 Older files simply lack newer fields; readers fill in the defaults
@@ -96,6 +97,29 @@ markdown and do not affect rendering. Tools read them from the broadest to
 the most specific: file, page, enclosing layers, the main component (for an
 instance, or the component layer an instance layer mirrors), then the layer.
 Missing or non-string values become `""`.
+
+## Annotations
+
+Layers of type `note` are annotations for the team and AI agents: sticky
+notes, text descriptions, chats, checklists and callouts. They are drawn on
+the canvas (unless the viewer hides annotations) but left out of SVG/PNG/PDF
+export, generated code and presentations, and never take part in auto
+layout (`layoutAbsolute` is true). Their `note` field:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `kind` | `sticky` \| `doc` \| `chat` \| `checklist` \| `callout` | What the note is; unknown kinds read as `sticky` |
+| `author` | string | Sticky note: who wrote it |
+| `messages` | {id, author, text, at, agent?, deleted?}[] | Chat: messages in time order (`at` in ms since 1970), at most 500. A deleted message keeps its id with empty text |
+| `items` | {id, text, done}[] | Checklist: items, at most 200 |
+| `targetId` | string | Callout: the layer its arrow points at (`""` = none) |
+
+`characters` holds the text of a sticky note, a description (markdown:
+headings, lists, `- [ ]` tasks, quotes, code fences) or a callout, and the
+title of a chat or checklist; `fills[0]` is the note's colour. When a chat
+layer is replaced (by a remote change, undo or a newer copy), the messages of
+both versions are merged by id and a deletion wins, so people writing at the
+same moment keep each other's messages.
 
 ## Components and instances
 

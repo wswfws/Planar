@@ -6,6 +6,8 @@ import { useEditorState } from './EditorContext';
 import { Icon, type IconName } from './icons';
 import { navigate, useServer } from './router';
 import { screenOf, screensOf } from '../core/prototype';
+import { NOTE_KINDS, NOTE_LABELS } from '../core/notes';
+import { useAuthorName } from './NoteSection';
 
 const TOOLS: { tool: Tool; icon: IconName; label: string; key: string }[] = [
   { tool: 'select', icon: 'select', label: 'Move', key: 'V' },
@@ -114,6 +116,7 @@ function Collaborators({ onShare }: { onShare: () => void }) {
 export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: { onOpen: () => void; onVariables: () => void; onShare: () => void; onHistory: () => void; onAccount: () => void }) {
   const editor = useEditorState();
   const server = useServer();
+  const author = useAuthorName();
   const [name, setName] = useState(editor.doc.name);
   useEffect(() => setName(editor.doc.name), [editor.doc.name]);
   const fileId = editor.collab?.fileId;
@@ -187,6 +190,19 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
               <Icon name={t.icon} />
             </button>
           ))}
+          <Dropdown
+            className="notes-menu"
+            button={<Icon name="note" />}
+            items={[
+              ...NOTE_KINDS.map((kind) => ({
+                label: kind === 'callout' ? 'Callout (points at the selection)' : NOTE_LABELS[kind],
+                action: () => void editor.addNote(kind, author),
+                disabled: editor.readOnly,
+              })),
+              '-' as const,
+              { label: editor.showAnnotations ? 'Hide annotations' : 'Show annotations', action: () => editor.setShowAnnotations(!editor.showAnnotations) },
+            ]}
+          />
         </div>
       </div>
       <div className="toolbar-center">

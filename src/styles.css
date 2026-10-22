@@ -2494,3 +2494,95 @@ select:focus {
   margin-left: 4px;
   color: var(--muted);
 }
+
+/* Annotation layers */
+.panel-hint {
+  padding: 0 12px 12px;
+  font-size: 12px;
+}
+
+.note-swatches {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.note-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.note-swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  margin: 8px 0;
+  overflow-y: auto;
+}
+
+.chat-message {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.chat-message.agent {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.chat-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.chat-meta b {
+  color: var(--text);
+}
+
+.chat-meta .icon-button {
+  margin-left: auto;
+  opacity: 0;
+}
+
+.chat-message:hover .chat-meta .icon-button {
+  opacity: 1;
+}
+
+.chat-message p {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.checklist {
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

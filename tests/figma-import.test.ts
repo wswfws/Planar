@@ -108,7 +108,9 @@ describe('Figma import', () => {
     expect(doc.styles.find((s) => s.id === title.textStyleId)?.name).toBe('Heading/H1');
     expect(find(doc, 'Photo')).toMatchObject({ sizingH: 'fill', fills: [{ type: 'solid', color: '#D9D9D9' }] });
     expect(imageRefs).toEqual(['abc']);
-    expect(report).toEqual(expect.arrayContaining(['1 × sticky layers', '1 × images not downloaded (grey instead)', '1 × gradient fills (average colour instead)']));
+    expect(report).toEqual(expect.arrayContaining(['1 × images not downloaded (grey instead)', '1 × gradient fills (average colour instead)']));
+    // FigJam sticky notes arrive as sticky notes.
+    expect(find(doc, 'Note')).toMatchObject({ type: 'note', note: { kind: 'sticky' }, parentId: screen.id });
   });
 
   it('keeps components, variants and instance overrides', () => {

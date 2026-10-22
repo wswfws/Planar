@@ -1,3 +1,4 @@
+import { mergeNoteInto } from './notes';
 import type { PlanarDocument, SceneNode } from './types';
 
 /** Document-level fields exchanged as a whole. */
@@ -19,6 +20,8 @@ export function applyOps(doc: PlanarDocument, ops: Op[]): void {
         // Layers from older clients predate effects.
         if (!Array.isArray(node.effects)) node.effects = [];
         if (typeof node.context !== 'string') node.context = '';
+        // Chat messages from everyone are kept when a chat is replaced.
+        mergeNoteInto(doc.nodes[op.id], node);
         doc.nodes[op.id] = node;
       } else delete doc.nodes[op.id];
     } else if ((META_KEYS as readonly string[]).includes(op.key)) {

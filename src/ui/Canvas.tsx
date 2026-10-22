@@ -66,6 +66,7 @@ export function Canvas({ onOpenVariables }: { onOpenVariables: () => void }) {
       ctx.setTransform(dpr * v.zoom, 0, 0, dpr * v.zoom, dpr * v.x, dpr * v.y);
       drawPage(ctx, editor.doc, editor.pageId, {
         hidden: editor.editingTextId ? new Set([editor.editingTextId]) : undefined,
+        annotations: editor.showAnnotations,
       });
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawOverlay(ctx, editor, dpr);

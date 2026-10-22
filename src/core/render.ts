@@ -1,3 +1,4 @@
+import { drawNote } from './noteRender';
 import { localMatrix, vectorPoints } from './geometry';
 import { nodePaths } from './paths';
 import { baselineInLine, fontString, lineHeightPx, nodeLines, verticalOffset } from './text';
@@ -283,11 +284,22 @@ function strokeNode(ctx: CanvasRenderingContext2D, node: SceneNode): void {
 export interface RenderOptions {
   /** Node ids that should not be painted (e.g. text being edited). */
   hidden?: ReadonlySet<string>;
+  /** Paint annotation layers (notes, chats…); off for exports. Default true. */
+  annotations?: boolean;
 }
 
 export function drawNode(ctx: CanvasRenderingContext2D, doc: PlanarDocument, id: string, opts: RenderOptions = {}): void {
   const node = doc.nodes[id];
   if (!node || !node.visible) return;
+  if (node.type === 'note') {
+    if (opts.annotations === false) return;
+    ctx.save();
+    ctx.transform(...localMatrix(node));
+    ctx.globalAlpha *= node.opacity;
+    drawNote(ctx, doc, node);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.transform(...localMatrix(node));
   ctx.globalAlpha *= node.opacity;

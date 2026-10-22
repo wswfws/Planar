@@ -13,6 +13,7 @@ import { InspectSection } from './InspectSection';
 import { EffectsSection } from './EffectsSection';
 import { ConstraintsSection } from './ConstraintsSection';
 import { ContextSection, FileContextSection } from './ContextSection';
+import { NoteSection } from './NoteSection';
 import { StylePicker } from './Styles';
 import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
@@ -519,6 +520,18 @@ export function PropertiesPanel() {
   }
 
   const single = nodes.length === 1 ? nodes[0] : null;
+  if (nodes.every((n) => n.type === 'note')) {
+    return (
+      <aside className="sidebar right">
+        <div className="selection-title">
+          {single ? single.name : `${nodes.length} notes`}
+          <span className="type-badge">annotation</span>
+        </div>
+        {single ? <NoteSection key={single.id} editor={editor} node={single} /> : <p className="hint panel-hint">Select one note to edit it.</p>}
+        <p className="hint panel-hint">Annotations are for the team and AI agents: they are not exported, presented or turned into code.</p>
+      </aside>
+    );
+  }
   const parent = single?.parentId ? editor.doc.nodes[single.parentId] : null;
   const canAlign = nodes.length > 1 || (parent && parent.type !== 'page');
   const texts = nodes.filter((n) => n.type === 'text');

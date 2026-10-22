@@ -353,7 +353,8 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       const ids = page ? page.children.filter((c) => doc.nodes[c].visible) : [id!];
       if (!ids.length) throw new PropError('Nothing to render on this page');
       const bg = page?.fills[0];
-      const png = await renderPng(doc, ids, { scale, maxSize, background: page && bg?.type === 'solid' ? bg.color : undefined });
+      // Screenshots show annotations (notes, chats) too: they are part of what the agent should see.
+      const png = await renderPng(doc, ids, { scale, maxSize, background: page && bg?.type === 'solid' ? bg.color : undefined, annotations: true });
       return { content: [{ type: 'image', data: png.toString('base64'), mimeType: 'image/png' }, { type: 'text', text: page ? `Page ${page.name}` : summary(doc, doc.nodes[id!]) }] };
     }),
   );

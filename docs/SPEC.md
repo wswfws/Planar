@@ -428,3 +428,7 @@ Text styles (font family, size, weight, line height) and effect styles (shadows 
 ## Context notes
 
 The file has a brief and every layer and page has context notes (markdown), edited in the Properties panel (the brief and page notes show when nothing is selected). Layers with notes show an icon in the Layers panel. An instance keeps its own notes and shows its main component's notes as documentation. AI agents read the chain from the file brief down to a layer with the `context` tool and write decisions back; generated React code carries a component's notes as JSDoc. Figma component descriptions are imported as notes.
+
+## Annotations
+
+The notes button in the toolbar adds annotation layers in the middle of the view: a sticky note (colour, author), a text description rendered from markdown, a chat (messages with author and time, written in the Properties panel; Enter sends), a checklist (items with checkboxes and progress) and a callout (a label with a dashed arrow to the selected layer, changeable under "Points at"). Double-click a note to write in it. "Hide annotations" in the same menu hides them and makes them unpickable for this viewer. Annotations are synced, versioned and seen by AI agents (screenshots include them), but are not exported, presented or turned into code. FigJam sticky notes are imported as sticky notes.
