@@ -108,6 +108,8 @@ const paths: Record<string, ReactElement> = {
       <path d="M10 3v10" />
     </>
   ),
+  play: <path d="M5 3.2v9.6L12.8 8z" />,
+  caretDown: <path d="M4.5 6.5 8 10l3.5-3.5" />,
   link: <path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1" />,
   target: (
     <>

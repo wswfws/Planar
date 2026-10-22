@@ -7,7 +7,7 @@ import { EditorContext, useEditorState } from './EditorContext';
 import { LayersPanel } from './LayersPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import { Dock, toggleAllPanels } from './Panels';
-import { Toolbar } from './Toolbar';
+import { ToolDock, Toolbar } from './Toolbar';
 import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
 import { LibrariesDialog } from './LibrariesDialog';
@@ -282,6 +282,7 @@ export function App({ fileId, present }: { fileId?: string; present?: boolean })
           <main className="stage">
             <Canvas onOpenVariables={() => setVariablesOpen(true)} />
             {fileId && <CommentsLayer />}
+            <ToolDock />
           </main>
           <Dock side="right">
             <PropertiesPanel />

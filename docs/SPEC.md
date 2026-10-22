@@ -443,4 +443,8 @@ For a frame with auto layout, the Auto layout section holds everything about it:
 
 ## Side panels
 
-The Layers and Properties panels are resized by dragging their inner edge (180–560 px; double-click restores 248 px) and hidden with the panel buttons in the toolbar, or both at once with Ctrl/⌘+\ (also in the main menu). Widths and visibility are remembered per browser.
+The Layers and Properties panels are resized by dragging their inner edge (180–560 px; double-click restores 248 px) and hidden from the main menu, or both at once with Ctrl/⌘+\. Widths and visibility are remembered per browser.
+
+## Toolbar
+
+As in Figma, the top bar holds only the main menu, the file name, the people in the file, Present, Share and zoom; version history, variables, undo/redo and panel visibility are in the main menu. The tools float at the bottom of the canvas: Move/Hand, Frame, shapes (Rectangle, Ellipse, Line), Pen, Text, Comment and the notes menu. A group shows its active or last used tool; its arrow lists the others.

@@ -2691,3 +2691,48 @@ body.resizing-panel {
   cursor: col-resize;
   user-select: none;
 }
+
+/* Tools at the bottom of the canvas */
+.stage {
+  position: relative;
+}
+
+.tool-dock {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+}
+
+.tool-more .toolbar-button {
+  min-width: 14px;
+  width: 14px;
+  padding: 0;
+  color: var(--muted);
+}
+
+.tool-dock-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.menu.up {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
