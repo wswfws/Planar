@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { redirectAllowed } from '../server/oauth';
 import { startServer } from '../server/server';
 import { signUp, type Account, type TestServer } from './helpers';
 
@@ -160,5 +161,20 @@ describe('authorization code flow', () => {
       redirect: 'manual',
     });
     expect(new URL(res.headers.get('location')!).searchParams.get('error')).toBe('invalid_request');
+  });
+});
+
+describe('loopback redirects', () => {
+  it('accepts any port for registered loopback addresses, and nothing else', () => {
+    const reg = ['http://localhost/callback', 'http://127.0.0.1/callback'];
+    expect(redirectAllowed(reg, 'http://localhost:49141/callback')).toBe(true);
+    expect(redirectAllowed(reg, 'http://127.0.0.1:5000/callback')).toBe(true);
+    expect(redirectAllowed(reg, 'http://localhost:49141/other')).toBe(false);
+    expect(redirectAllowed(reg, 'http://[::1]:49141/callback')).toBe(false);
+    expect(redirectAllowed(reg, 'https://localhost:49141/callback')).toBe(false);
+    expect(redirectAllowed(reg, 'http://evil.example:80/callback')).toBe(false);
+    // Non-loopback addresses must match exactly, port included.
+    expect(redirectAllowed(['https://app.example/cb'], 'https://app.example:8443/cb')).toBe(false);
+    expect(redirectAllowed(['https://app.example/cb'], 'https://app.example/cb')).toBe(true);
   });
 });

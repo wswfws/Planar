@@ -89,6 +89,25 @@ function validRedirect(uri: string): boolean {
   }
 }
 
+/**
+ * A redirect address is allowed when registered exactly or, for loopback
+ * addresses (CLI and desktop apps), when only the port differs: apps listen on a
+ * random free port each time (RFC 8252, section 7.3).
+ */
+export function redirectAllowed(registered: string[], uri: string): boolean {
+  if (registered.includes(uri)) return true;
+  try {
+    const u = new URL(uri);
+    if (u.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)) return false;
+    return registered.some((r) => {
+      const reg = new URL(r);
+      return reg.protocol === 'http:' && reg.hostname === u.hostname && reg.pathname === u.pathname && reg.search === u.search;
+    });
+  } catch {
+    return false;
+  }
+}
+
 function privateAddress(ip: string): boolean {
   if (ip.includes(':')) {
     const v6 = ip.toLowerCase();
@@ -293,7 +312,7 @@ export async function handleOAuth(req: IncomingMessage, res: ServerResponse, ctx
         page(res, 400, 'Cannot connect', `<h1>Cannot connect this app</h1><p>${esc((e as Error).message)}</p>`);
         return true;
       }
-      if (!client.redirectUris.includes(redirectUri)) {
+      if (!redirectAllowed(client.redirectUris, redirectUri)) {
         page(res, 400, 'Cannot connect', '<h1>Cannot connect this app</h1><p>The redirect address is not registered for this app.</p>');
         return true;
       }
