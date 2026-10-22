@@ -457,6 +457,13 @@ function newCtx(doc: PlanarDocument, format: CodeFormat, rootId: string, prefix 
   return { doc, format, classes: new Set(), prefix, propNames: new Map(), usedComponents: new Map(), rootId };
 }
 
+/** A layer's context notes as a JSDoc block ('' when there are none). */
+function docComment(text: string, indent = ''): string {
+  const body = text.trim().replace(/\*\//g, '*\\/');
+  if (!body) return '';
+  return `${indent}/**\n${body.split('\n').map((l) => `${indent} *${l ? ' ' + l : ''}`).join('\n')}\n${indent} */\n`;
+}
+
 /** React component for a main component or a component set. */
 function reactComponent(doc: PlanarDocument, owner: SceneNode): CodeResult {
   const name = pascal(owner.name);
@@ -510,7 +517,7 @@ function reactComponent(doc: PlanarDocument, owner: SceneNode): CodeResult {
   lines.push(...(fields.length ? fields : ['  // No properties']));
   lines.push('}');
   lines.push('');
-  lines.push(`export function ${name}({ ${defaults.join(', ')} }: ${name}Props) {`);
+  lines.push(`${docComment(owner.context || (variants[0]?.context ?? ''))}export function ${name}({ ${defaults.join(', ')} }: ${name}Props) {`);
   for (const { v, jsx } of bodies.slice(1)) {
     const cond = axes.map((axis) => `${camel(axis)} === ${JSON.stringify(v.variantProps[axis])}`).join(' && ');
     lines.push(`  if (${cond || 'false'}) {\n    return (\n${jsx.replace(/^/gm, '  ')}\n    );\n  }`);
@@ -541,12 +548,12 @@ export function generateCode(doc: PlanarDocument, id: string, format: CodeFormat
   const uses = [...ctx.usedComponents.values()].map((c) => ({ name: pascal(c.name), id: c.id }));
 
   if (format === 'css') return { code: stylesheet, uses: [] };
-  if (format === 'html') return { code: `${printHtml(el, '')}\n\n<style>\n${stylesheet}\n</style>`, uses: [] };
+  if (format === 'html') return { code: `${node.context.trim() ? `<!--\n${node.context.trim().replace(/--/g, '- -')}\n-->\n` : ''}${printHtml(el, '')}\n\n<style>\n${stylesheet}\n</style>`, uses: [] };
 
   const name = pascal(node.name);
   const lines = [`// ${name}.tsx`, `import './${name}.css';`];
   for (const u of uses) lines.push(`import { ${u.name} } from './${u.name}';`);
-  lines.push('', `export function ${name}() {`, `  return (\n${printJsx(el, '    ')}\n  );`, '}', '', `/* ${name}.css */`, stylesheet);
+  lines.push('', `${docComment(node.context)}export function ${name}() {`, `  return (\n${printJsx(el, '    ')}\n  );`, '}', '', `/* ${name}.css */`, stylesheet);
   return { code: lines.join('\n'), uses };
 }
 

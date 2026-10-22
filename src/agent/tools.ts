@@ -11,6 +11,7 @@ import { exportSvg } from '../core/export';
 import type { VariableType } from '../core/types';
 import { variableValue } from '../core/variables';
 import { find, outline, overview, summary } from './outline';
+import { contextChain, formatContext, sanitizeContext } from '../core/context';
 import { shadowToString } from '../core/effects';
 import { visiblePageIds } from '../core/library';
 import { applyProps, applyStyleSpec, createLayers, describe, PropError, type Friendly } from './props';
@@ -29,11 +30,13 @@ export const INSTRUCTIONS = `Planar is an open-source design editor. These tools
 Workflow:
 1. If nothing is open, call files to see your Planar files (or create one), then open it by id; or open a file link / local path.
 2. overview first: pages, top-level frames, components (with props/variants), variables, the current selection and, in a live room, what people are looking at.
+   Read the file brief there; context get <id> tells what a screen or component is for before you change it.
 3. tree / find to locate layers; inspect for details. inspect returns the same vocabulary that create and update accept, so read → tweak → write back.
 4. Design: create builds whole nested layouts in one call (frames with layout/gap/padding, text, shapes, component instances). update restyles or moves many layers in one call. Prefer auto layout ("layout": "column"/"row") over absolute x/y.
 5. Check visually with screenshot.
 6. Prototypes: update a layer with "link": "<top-level frame name>" (optional "transition": "slide" | "dissolve") to make it go to that screen on click in Present mode; "link": null removes it.
-7. Developers: code gives React (components with typed props/variants) or HTML/CSS; tokens exports variables.
+7. Context: write decisions, intent and open questions with context set (the file brief, or notes on a layer) so people and later agents know them.
+8. Developers: code gives React (components with typed props/variants) or HTML/CSS; tokens exports variables.
 Colours: "#RRGGBB", "#RRGGBB 50%", or "$variableName". Sizes: number, "hug" or "fill". Every change is undoable with undo.`;
 
 function guard<A>(fn: (args: A) => Promise<Result> | Result): (args: A) => Promise<Result> {
@@ -249,10 +252,11 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'find',
     {
       title: 'Find layers',
-      description: 'Find layers by name and/or text content (substring, or /regex/) and type, on the current page, inside a layer, or everywhere.',
+      description: 'Find layers by name, text content and/or context notes (substring, or /regex/) and type, on the current page, inside a layer, or everywhere.',
       inputSchema: {
         name: z.string().optional(),
         text: z.string().optional().describe('Match text layer content'),
+        context: z.string().optional().describe('Match the context notes written on layers'),
         type: z.string().optional().describe('frame, text, rectangle, ellipse, vector, group, component, componentSet, instance'),
         within: z.string().optional().describe('Layer or page id, or "all" for every page (default: current page)'),
         limit: z.number().int().min(1).max(500).optional(),
@@ -296,6 +300,38 @@ export function registerTools(server: McpServer, session: AgentSession): void {
   );
 
   server.registerTool(
+    'context',
+    {
+      title: 'Context notes',
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      description:
+        'Notes (markdown) that explain what the file and its layers are for: the file brief (goal, audience, rules), and notes on pages, frames, components and any layer. get: everything written about a layer, from the file brief through its page, parents and main component down to the layer itself (no id: the file brief). set: replace the notes of a layer, or the file brief when id is omitted; append: true adds a paragraph instead. Read context before changing a screen, and write down decisions and open questions so the next person or agent knows them.',
+      inputSchema: {
+        action: z.enum(['get', 'set']),
+        id: z.string().optional().describe('Layer or page id (omit for the file brief)'),
+        text: z.string().optional().describe('set: the notes (markdown); empty clears them'),
+        append: z.boolean().optional().describe('set: add text as a new paragraph instead of replacing'),
+      },
+    },
+    guard(async ({ action, id, text: body, append }) => {
+      const editor = await session.ready();
+      if (id && !editor.doc.nodes[id]) throw new PropError(`No layer with id ${id}`);
+      if (action === 'get') {
+        const chain = id ? contextChain(editor.doc, id) : contextChain(editor.doc, '').filter((e) => e.source === 'file');
+        return text(chain.length ? formatContext(chain) : id ? 'Nothing is written about this layer, its parents or the file yet.' : 'The file has no brief yet.');
+      }
+      if (body === undefined) throw new PropError('set needs text');
+      const join = (old: string) => sanitizeContext(append && old.trim() ? `${old.trimEnd()}\n\n${body.trim()}` : body.trim());
+      await edit(session, (ed) => {
+        if (id) ed.updateNodes([id], (n) => (n.context = join(n.context)));
+        else ed.setDocumentContext(join(ed.doc.context));
+      });
+      await session.committed(id ? [id] : []);
+      return text(id ? `Context of "${editor.doc.nodes[id].name}" saved.` : 'File brief saved.');
+    }),
+  );
+
+  server.registerTool(
     'screenshot',
     {
       title: 'Screenshot',
@@ -330,7 +366,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       title: 'Create layers',
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       description:
-        'Create layers from nested descriptions in one undoable step. Each layer: {type, name, ...props, children:[...]}. Types: frame, text, rectangle, ellipse, line, vector, group, component, instance (with component:"Name", props:{…}, variant:{…}). Props: width/height (number|"hug"|"fill"), layout ("row"|"column"), gap, padding, align, crossAlign, fill/stroke ("#hex", "#hex 50%", "$var"), radius, shadow ("0 4 12 #000000 25%", "inset …"), blur, backgroundBlur, wrap/rowGap (row layouts), constraints ("left-right top", outside auto layout), text, size, weight, font, lineHeight, textAlign, x/y (outside auto layout), opacity, mode.',
+        'Create layers from nested descriptions in one undoable step. Each layer: {type, name, ...props, children:[...]}. Types: frame, text, rectangle, ellipse, line, vector, group, component, instance (with component:"Name", props:{…}, variant:{…}). Props: width/height (number|"hug"|"fill"), layout ("row"|"column"), gap, padding, align, crossAlign, fill/stroke ("#hex", "#hex 50%", "$var"), radius, shadow ("0 4 12 #000000 25%", "inset …"), blur, backgroundBlur, wrap/rowGap (row layouts), constraints ("left-right top", outside auto layout), text, size, weight, font, lineHeight, textAlign, x/y (outside auto layout), opacity, mode, context (notes on what the layer is for, markdown).',
       inputSchema: {
         parent: z.string().optional().describe('Parent frame/page id (default: current page)'),
         index: z.number().int().min(0).optional().describe('Position among siblings (default: on top)'),

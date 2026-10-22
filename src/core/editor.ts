@@ -1503,6 +1503,14 @@ export class Editor {
     this.change((doc) => removeNode(doc, id));
   }
 
+  /** Sets the brief for the whole file. */
+  setDocumentContext(text: string): void {
+    if (text === this.doc.context) return;
+    this.change((doc) => {
+      doc.context = text;
+    });
+  }
+
   renameDocument(name: string): void {
     const trimmed = name.trim();
     if (!trimmed || trimmed === this.doc.name) return;

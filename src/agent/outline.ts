@@ -22,7 +22,7 @@ function quote(s: string, max = 48): string {
 export function summary(doc: PlanarDocument, n: SceneNode): string {
   const d = describe(doc, n);
   const parts = [`${d.type} ${quote(n.name)} #${n.id}`];
-  if (n.type === 'page') return `${parts[0]} (${n.children.length} layers)`;
+  if (n.type === 'page') return `${parts[0]} (${n.children.length} layers)${n.context ? `  context ${quote(n.context, 60)}` : ''}`;
   parts.push(`${fmt(d.width)}×${fmt(d.height)}`);
   if (!d.absolute && n.parentId && doc.nodes[n.parentId]?.layoutMode === 'none') parts.push(`at ${fmt(d.x)},${fmt(d.y)}`);
   else if (d.absolute) parts.push(`absolute at ${fmt(d.x)},${fmt(d.y)}`);
@@ -47,6 +47,7 @@ export function summary(doc: PlanarDocument, n: SceneNode): string {
   if (d.mode) parts.push(`mode ${d.mode}`);
   if (!n.visible) parts.push('hidden');
   if (n.locked) parts.push('locked');
+  if (n.context) parts.push(`context ${quote(n.context, 60)}`);
   return parts.join('  ');
 }
 
@@ -73,6 +74,8 @@ export function outline(doc: PlanarDocument, rootId: string, depth: number): str
 export interface FindQuery {
   name?: string;
   text?: string;
+  /** Match the layer's context notes. */
+  context?: string;
   type?: string;
   within?: string;
   limit?: number;
@@ -91,6 +94,7 @@ function matcher(q: string): (s: string) => boolean {
 export function find(doc: PlanarDocument, q: FindQuery, pageId: string): SceneNode[] {
   const nameOk = q.name ? matcher(q.name) : () => true;
   const textOk = q.text ? matcher(q.text) : () => true;
+  const contextOk = q.context ? matcher(q.context) : () => true;
   const roots = q.within === 'all' ? doc.pageIds : [q.within ?? pageId];
   const out: SceneNode[] = [];
   const walk = (id: string) => {
@@ -100,6 +104,7 @@ export function find(doc: PlanarDocument, q: FindQuery, pageId: string): SceneNo
       n.type !== 'page' &&
       nameOk(n.name) &&
       (!q.text || (n.type === 'text' && textOk(n.characters))) &&
+      (!q.context || (!!n.context && contextOk(n.context))) &&
       (!q.type || n.type === q.type || (q.type === 'line' && n.type === 'vector'))
     ) {
       out.push(n);
@@ -117,6 +122,12 @@ export function overview(editor: Editor): string {
   const pages = visiblePageIds(doc);
   out.push(`Document ${quote(doc.name, 80)} — ${pages.length} page${pages.length === 1 ? '' : 's'}, current page #${editor.pageId}`);
   out.push('');
+  // The file brief comes first: it says what the design is for and how to work on it.
+  if (doc.context.trim()) {
+    out.push('File context (brief):', doc.context.trim(), '');
+  } else {
+    out.push('File context: none yet (write a brief with the context tool once you know what the file is for).', '');
+  }
   out.push('Pages and top-level layers:');
   for (const pid of pages) {
     const page = doc.nodes[pid];

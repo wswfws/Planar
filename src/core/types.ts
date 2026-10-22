@@ -142,6 +142,8 @@ export interface SceneNode {
   link?: { to: string; transition?: 'instant' | 'slide' | 'dissolve' };
   /** Copied from a team library: the library file and the layer's id there. */
   library?: LibraryOrigin;
+  /** Notes for people and agents about what this layer is for (markdown). */
+  context: string;
 }
 
 /** Where something imported from a team library came from. */
@@ -226,6 +228,8 @@ export interface PlanarDocument {
   styles: Style[];
   /** Team libraries this document uses. */
   libraries: LibraryLink[];
+  /** Brief for the whole file: goal, audience, rules (markdown). */
+  context: string;
 }
 
 export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 'component', 'componentSet', 'instance', 'group']);

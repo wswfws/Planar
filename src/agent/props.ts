@@ -1,6 +1,7 @@
 // The layer vocabulary shared by the agent tools: `describe` reads a layer
 // into it, `applyProps` / `createLayers` write it back. See docs/MCP.md.
 
+import { sanitizeContext } from '../core/context';
 import {
   createInstanceNode,
   listComponents,
@@ -88,6 +89,7 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
     out.children = n.children.length;
     const bg = n.fills[0];
     if (bg?.type === 'solid') out.background = bg.color;
+    if (n.context) out.context = n.context;
     return out;
   }
   const vars = n.bindings;
@@ -187,6 +189,7 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
     if (n.type === 'componentSet') out.variants = variantsOf(doc, n.id).map((v) => v.variantProps);
   }
   if (n.variableMode) out.mode = doc.modes.find((m) => m.id === n.variableMode)?.name;
+  if (n.context) out.context = n.context;
   if (n.children.length) out.children = n.children.length;
   return out;
 }
@@ -363,7 +366,7 @@ const KNOWN = new Set([
   'strokes', 'strokeWidth', 'radius', 'clip', 'layout', 'gap', 'padding', 'align', 'crossAlign', 'absolute', 'text', 'font', 'size',
   'fontSize', 'weight', 'fontWeight', 'lineHeight', 'textAlign', 'textAlignVertical', 'component', 'props', 'variant', 'mode',
   'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg', 'link', 'transition', 'shadow', 'blur',
-  'backgroundBlur', 'constraints', 'wrap', 'rowGap', 'textStyle', 'effectStyle',
+  'backgroundBlur', 'constraints', 'wrap', 'rowGap', 'textStyle', 'effectStyle', 'context',
 ]);
 
 /**
@@ -403,6 +406,7 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
       n[k] = v;
     };
     if (props.name !== undefined) set('name', String(props.name));
+    if (props.context !== undefined) set('context', sanitizeContext(props.context === null ? '' : String(props.context)));
     if (props.x !== undefined) set('x', Number(props.x));
     if (props.y !== undefined) set('y', Number(props.y));
     if (props.rotation !== undefined) set('rotation', Number(props.rotation));

@@ -294,6 +294,11 @@ export function figmaToPlanar(file: FNode, images: Record<string, string> = {}):
         if (k && v !== undefined) node.variantProps[k] = v;
       }
     }
+    // Component descriptions (in the file's components / componentSets maps) become their context.
+    if (type === 'component' || type === 'componentSet') {
+      const meta = (type === 'component' ? file.components : file.componentSets)?.[n.id];
+      if (typeof meta?.description === 'string' && meta.description.trim()) node.context = meta.description.trim();
+    }
     if (n.componentPropertyDefinitions && Object.keys(n.componentPropertyDefinitions).some((k) => n.componentPropertyDefinitions[k]?.type !== 'VARIANT')) {
       note('component properties (not imported)');
     }
@@ -334,7 +339,7 @@ export function figmaToPlanar(file: FNode, images: Record<string, string> = {}):
 
   // Instances keep what differs from their main component as overrides, so
   // syncing with the component does not undo the imported look.
-  const SKIP = new Set(['id', 'parentId', 'children', 'sourceId', 'overrides', 'library', 'componentId', 'x', 'y', 'type', 'name']);
+  const SKIP = new Set(['id', 'parentId', 'children', 'sourceId', 'overrides', 'library', 'context', 'componentId', 'x', 'y', 'type', 'name']);
   for (const layer of instanceLayers) {
     const src = layer.type === 'instance' && !layer.sourceId ? nodes[layer.componentId] : nodes[layer.sourceId];
     if (!src) continue;
@@ -344,7 +349,7 @@ export function figmaToPlanar(file: FNode, images: Record<string, string> = {}):
 
   const report = [...counts.entries()].map(([what, n]) => `${n} × ${what}`);
   return {
-    doc: { format: 'planar', version: 1, name: String(file.name ?? 'Imported from Figma'), pageIds, nodes, variables: [], modes: [{ id: newId(), name: 'Mode 1' }], styles, libraries: [] },
+    doc: { format: 'planar', version: 1, name: String(file.name ?? 'Imported from Figma'), pageIds, nodes, variables: [], modes: [{ id: newId(), name: 'Mode 1' }], styles, libraries: [], context: '' },
     report,
     imageRefs: [...imageRefs],
   };

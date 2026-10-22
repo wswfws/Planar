@@ -1,7 +1,7 @@
 import type { PlanarDocument, SceneNode } from './types';
 
 /** Document-level fields exchanged as a whole. */
-export const META_KEYS = ['name', 'pageIds', 'variables', 'modes', 'styles', 'libraries'] as const;
+export const META_KEYS = ['name', 'pageIds', 'variables', 'modes', 'styles', 'libraries', 'context'] as const;
 export type MetaKey = (typeof META_KEYS)[number];
 
 /**
@@ -18,6 +18,7 @@ export function applyOps(doc: PlanarDocument, ops: Op[]): void {
         const node = structuredClone({ ...op.node, id: op.id });
         // Layers from older clients predate effects.
         if (!Array.isArray(node.effects)) node.effects = [];
+        if (typeof node.context !== 'string') node.context = '';
         doc.nodes[op.id] = node;
       } else delete doc.nodes[op.id];
     } else if ((META_KEYS as readonly string[]).includes(op.key)) {

@@ -4,7 +4,7 @@ import { measureTextNode } from './text';
 import { isFrameLike, type ComponentProp, type ComponentPropType, type PlanarDocument, type SceneNode } from './types';
 
 /** Fields a layer never takes from the component layer it mirrors. */
-const NEVER_SYNCED = new Set<keyof SceneNode>(['id', 'parentId', 'children', 'sourceId', 'overrides', 'library']);
+const NEVER_SYNCED = new Set<keyof SceneNode>(['id', 'parentId', 'children', 'sourceId', 'overrides', 'library', 'context']);
 
 /** Fields an instance root keeps for itself. */
 const ROOT_OWN = new Set<keyof SceneNode>([
@@ -48,7 +48,7 @@ export function tracksOverrides(node: SceneNode): boolean {
 export function markOverrides(node: SceneNode, keys: Iterable<string>): void {
   if (!tracksOverrides(node)) return;
   const set = new Set(node.overrides);
-  for (const k of keys) if (k !== 'overrides') set.add(k);
+  for (const k of keys) if (k !== 'overrides' && k !== 'context') set.add(k);
   node.overrides = [...set];
 }
 

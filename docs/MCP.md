@@ -96,7 +96,8 @@ tool. `--key` (or `PLANAR_KEY`) is the API key and `--server` (or
 | `open` | all | Open a Planar file by id or link, or a local `.planar.json` |
 | `overview` | all | Pages, top-level frames, components, variables, selection, people |
 | `tree` | all | Outline of a page or layer (depth-limited) |
-| `find` | all | Find layers by name, text content or type |
+| `find` | all | Find layers by name, text content, context notes or type |
+| `context` | all | Read everything written about a layer (file brief → page → parents → component → layer), write the file brief or a layer's notes |
 | `inspect` | all | Full properties of layers, in create/update vocabulary |
 | `screenshot` | all | PNG of a layer or page |
 | `create` | design | Create layers from a nested description (frames, text, shapes, instances…) |
@@ -122,6 +123,7 @@ optional.
 | `svg` | create only, with `type: "svg"`: SVG markup to import as a frame of vector layers (icons, logos, illustrations). `width`/`height` scale it; `fill` recolours every shape (e.g. `"$ink"`) |
 | `path` | vector: SVG path data such as `"M4 12 L20 12 M12 4 L12 20"` (curves allowed); `viewBox: [w, h]` gives the coordinate space (default: the path's bounds) |
 | `name` | string |
+| `context` | notes on what the layer is for (markdown); `null` or `""` clears them |
 | `x`, `y` | number (relative to the parent; ignored inside auto layout) |
 | `width`, `height` | number, `"hug"` (fit content) or `"fill"` (stretch in auto layout) |
 | `rotation`, `opacity` | degrees; 0–1 |
@@ -214,6 +216,10 @@ Example — a card in one call:
 ### Styles
 
 `styles` creates or updates text and effect styles in one call — `set: [{name, type: "text", font, size, weight, lineHeight}]`, `set: [{name, type: "effect", shadow, blur, backgroundBlur}]`, or `{name, from: "<layer id>"}` to copy a layer's settings — and `remove: [names]`; with no arguments it lists them with how many layers use each. Layers follow a style through the props `textStyle` and `effectStyle`. `tokens` exports text styles as `--font-<name>` (for `font: var(…)`) and shadow styles as `--shadow-<name>`; generated code uses those variables for styled layers.
+
+### Context
+
+`context` keeps the reasons behind a design next to it. `action: "get"` with a layer id returns, as markdown sections, the file brief, the page's notes, the notes of every enclosing layer, the main component's notes (documentation) and the layer's own; without an id it returns the file brief. `action: "set"` replaces the notes of a layer, or the file brief when `id` is omitted; `append: true` adds a paragraph instead. `overview` starts with the file brief, `tree` and `find` show a short excerpt of a layer's notes, and `find` takes `context` to search them. Generated React code puts a component's notes in a JSDoc comment.
 
 ### Team libraries
 

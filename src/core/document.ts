@@ -1,3 +1,4 @@
+import { sanitizeContext } from './context';
 import { sanitizeEffects } from './effects';
 import { sanitizeStyles } from './styles';
 import type { NodeType, Paint, PlanarDocument, SceneNode, SolidPaint } from './types';
@@ -99,6 +100,7 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     propBindings: {},
     propValues: {},
     variantProps: {},
+    context: '',
     ...props,
   };
 }
@@ -115,6 +117,7 @@ export function createDocument(name = 'Untitled'): PlanarDocument {
     modes: [{ id: newId(), name: 'Mode 1' }],
     styles: [],
     libraries: [],
+    context: '',
   };
 }
 
@@ -251,6 +254,7 @@ export function parseDocument(data: unknown): PlanarDocument {
     }
     nodes[id] = { ...createNode(raw.type), ...raw, id };
     nodes[id].effects = sanitizeEffects(raw.effects);
+    nodes[id].context = sanitizeContext(raw.context);
     if (!['left', 'right', 'left-right', 'center', 'scale'].includes(nodes[id].constraintH)) nodes[id].constraintH = 'left';
     if (!['top', 'bottom', 'top-bottom', 'center', 'scale'].includes(nodes[id].constraintV)) nodes[id].constraintV = 'top';
   }
@@ -289,5 +293,6 @@ export function parseDocument(data: unknown): PlanarDocument {
           .filter((l) => l && typeof l.fileId === 'string' && typeof l.pageId === 'string' && nodes[l.pageId]?.type === 'page')
           .map((l) => ({ fileId: l.fileId, name: String(l.name ?? 'Library'), version: Number(l.version) || 0, pageId: l.pageId }))
       : [],
+    context: sanitizeContext(d.context),
   };
 }

@@ -216,6 +216,11 @@ export function LayersPanel() {
           ) : (
             <span className="row-name">{node.name}</span>
           )}
+          {node.context.trim() && (
+            <span className="row-context" title={node.context.length > 200 ? node.context.slice(0, 200) + '…' : node.context}>
+              <Icon name="note" size={12} />
+            </span>
+          )}
           <span className={`row-actions${node.locked || !node.visible ? ' pinned' : ''}`} onClick={(e) => e.stopPropagation()}>
             <IconButton icon={node.locked ? 'lock' : 'unlock'} title={node.locked ? 'Unlock' : 'Lock'} onClick={() => editor.toggleLocked([id])} />
             <IconButton icon={node.visible ? 'eye' : 'eyeOff'} title={node.visible ? 'Hide' : 'Show'} onClick={() => editor.toggleVisible([id])} />

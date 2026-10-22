@@ -2462,3 +2462,35 @@ select:focus {
   margin: 4px 0 10px;
   padding-left: 18px;
 }
+
+/* Context notes */
+.context-field {
+  display: block;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.45;
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+.context-inherited {
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.context-inherited summary {
+  cursor: pointer;
+}
+
+.context-inherited p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.row-context {
+  display: inline-flex;
+  flex: none;
+  margin-left: 4px;
+  color: var(--muted);
+}

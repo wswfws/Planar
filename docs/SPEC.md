@@ -424,3 +424,7 @@ Text styles (font family, size, weight, line height) and effect styles (shadows 
 ## Importing Figma files
 
 "Import from Figma…" on the Files page converts a Figma design file read through the Figma REST API with the user's own token (in the browser; the token is not stored), or the API's JSON saved by the user, into a new Planar file, and lists what was simplified. See FIGMA_IMPORT.md.
+
+## Context notes
+
+The file has a brief and every layer and page has context notes (markdown), edited in the Properties panel (the brief and page notes show when nothing is selected). Layers with notes show an icon in the Layers panel. An instance keeps its own notes and shows its main component's notes as documentation. AI agents read the chain from the file brief down to a layer with the `context` tool and write decisions back; generated React code carries a component's notes as JSDoc. Figma component descriptions are imported as notes.

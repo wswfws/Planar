@@ -7,6 +7,7 @@ A Planar document is a single UTF-8 JSON object.
   "format": "planar",
   "version": 1,
   "name": "Untitled",
+  "context": "Brief: what the file is for (markdown)",
   "pageIds": ["page-id-1"],
   "modes": [{ "id": "m1", "name": "Light" }, { "id": "m2", "name": "Dark" }],
   "variables": [
@@ -80,11 +81,21 @@ their default value.
 | `propBindings` | {property: propId} | `characters`, `visible` or `componentId` driven by a component property |
 | `propValues` | {propId: value} | Instance: values set for its component's properties |
 | `variantProps` | {property: value} | Variant component: its value for each variant property |
+| `context` | string | Notes for people and agents about what the layer (or page) is for, in markdown, at most 20000 characters. Not copied from a component to its instances |
 | `link` | {to, transition?} | Optional. Prototype: clicking the layer in Present mode goes to the top-level frame `to`; `transition` is `instant` (default), `slide` or `dissolve` |
 
 Older files simply lack newer fields; readers fill in the defaults
 (`none`, `10`, `0`, `start`, `start`, `fixed`, `false`, `""`, `""`, `[]`,
 `{}`, `""`, `autoHeight: true`, `textAlignVertical: "top"`, `paths: []`, `pathBox: {w: 0, h: 0}`), an empty variable list and a single mode.
+
+## Context
+
+The document's `context` is the brief for the whole file (goal, audience,
+rules); each node's `context` holds notes about that layer. Both are plain
+markdown and do not affect rendering. Tools read them from the broadest to
+the most specific: file, page, enclosing layers, the main component (for an
+instance, or the component layer an instance layer mirrors), then the layer.
+Missing or non-string values become `""`.
 
 ## Components and instances
 

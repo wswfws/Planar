@@ -12,6 +12,7 @@ import { PrototypeSection } from './PrototypeSection';
 import { InspectSection } from './InspectSection';
 import { EffectsSection } from './EffectsSection';
 import { ConstraintsSection } from './ConstraintsSection';
+import { ContextSection, FileContextSection } from './ContextSection';
 import { StylePicker } from './Styles';
 import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
@@ -502,6 +503,8 @@ export function PropertiesPanel() {
           </div>
           <ModeSelect editor={editor} ids={[editor.pageId]} value={editor.page.variableMode} />
         </Section>
+        <FileContextSection editor={editor} />
+        <ContextSection key={editor.pageId} editor={editor} node={editor.page} />
         <ExportSection editor={editor} count={0} />
         <div className="shortcuts-hint">
           <p>
@@ -558,6 +561,7 @@ export function PropertiesPanel() {
       )}
       {single?.type === 'instance' && <InstancePropsSection editor={editor} instance={single} />}
       {single && <LayerPropBindings editor={editor} node={single} />}
+      {single && <ContextSection key={single.id} editor={editor} node={single} />}
 
       <Section title="Align">
         <div className="align-row">
