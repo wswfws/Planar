@@ -2640,3 +2640,13 @@ select:focus {
   padding: 0;
   pointer-events: none;
 }
+
+/* Fields placed directly in a section keep its side margins inside the panel width. */
+.panel-section > textarea.text-field,
+.panel-section > input.text-field {
+  width: calc(100% - 24px);
+}
+
+.sidebar.right {
+  overflow-x: hidden;
+}
