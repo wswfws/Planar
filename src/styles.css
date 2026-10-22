@@ -2124,3 +2124,36 @@ select:focus {
   color: #fff;
   font-size: 10px;
 }
+
+/* ---- presentation ---- */
+.present {
+  position: fixed;
+  inset: 0;
+  background: #0d0d10;
+  color: #e6e6ee;
+}
+.present-canvas {
+  display: block;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.present-bar {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  background: rgba(24, 24, 29, 0.85);
+  backdrop-filter: blur(6px);
+  opacity: 0.35;
+  transition: opacity 0.15s;
+}
+.present-bar:hover,
+.present-bar:focus-within {
+  opacity: 1;
+}

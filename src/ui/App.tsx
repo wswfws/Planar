@@ -11,6 +11,7 @@ import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
 import { VersionsDialog } from './VersionsDialog';
 import { CommentsLayer, CommentsProvider } from './Comments';
+import { Present } from './Present';
 import { watchFonts } from './fontLoader';
 import { looksLikeSvg } from '../core/svg';
 import { openServerFile } from '../collab/session';
@@ -231,7 +232,7 @@ function MaybeComments({ fileId, children }: { fileId?: string; children: React.
   return fileId ? <CommentsProvider fileId={fileId}>{children}</CommentsProvider> : <>{children}</>;
 }
 
-export function App({ fileId }: { fileId?: string }) {
+export function App({ fileId, present }: { fileId?: string; present?: boolean }) {
   const editor = useMemo(() => (fileId ? new Editor(createDocument('Loading…'), { autosave: false }) : new Editor()), [fileId]);
   const fileInput = useRef<HTMLInputElement>(null);
   const openFile = useMemo(() => () => fileInput.current?.click(), []);
@@ -249,6 +250,15 @@ export function App({ fileId }: { fileId?: string }) {
   }, [editor]);
 
   useEffect(() => watchFonts(editor), [editor]);
+
+  if (present && fileId) {
+    return (
+      <EditorContext.Provider value={editor}>
+        <Present fileId={fileId} />
+        <ConnectionOverlay />
+      </EditorContext.Provider>
+    );
+  }
 
   return (
     <EditorContext.Provider value={editor}>

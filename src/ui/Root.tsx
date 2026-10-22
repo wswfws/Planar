@@ -48,7 +48,16 @@ export function Root() {
   if (me === undefined || legacy) return <Splash text="Loading…" />;
 
   const file = /^\/file\/([A-Za-z0-9_-]+)\/?$/.exec(path)?.[1];
+  const presenting = /^\/file\/([A-Za-z0-9_-]+)\/present\/?$/.exec(path)?.[1];
   const session = { me, setMe };
+
+  if (presenting) {
+    return (
+      <ServerContext.Provider value={session}>
+        <App key={presenting} fileId={presenting} present />
+      </ServerContext.Provider>
+    );
+  }
 
   if (file) {
     return (

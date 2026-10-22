@@ -108,6 +108,9 @@ export interface SceneNode {
   propValues: Record<string, string | boolean>;
   /** Variant component: its value for each variant property of its set. */
   variantProps: Record<string, string>;
+
+  /** Prototype: clicking this layer in presentation goes to another screen (top-level frame). */
+  link?: { to: string; transition?: 'instant' | 'slide' | 'dissolve' };
 }
 
 export interface VectorPath {

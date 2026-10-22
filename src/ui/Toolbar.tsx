@@ -4,6 +4,7 @@ import { files } from '../collab/session';
 import { useEditorState } from './EditorContext';
 import { Icon, type IconName } from './icons';
 import { navigate, useServer } from './router';
+import { screenOf, screensOf } from '../core/prototype';
 
 const TOOLS: { tool: Tool; icon: IconName; label: string; key: string }[] = [
   { tool: 'select', icon: 'select', label: 'Move', key: 'V' },
@@ -119,6 +120,12 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
     fileId && server?.me
       ? files.duplicate(fileId).then((f) => navigate(`/file/${f.id}`), (e: Error) => editor.notify(e.message))
       : editor.notify('Sign in to copy this file to your files');
+  const present = () => {
+    if (!fileId) return;
+    const start = (editor.selection[0] && screenOf(editor.doc, editor.selection[0])) || screensOf(editor.doc, editor.pageId)[0];
+    if (!start) return editor.notify('Draw a frame to present it');
+    navigate(`/file/${fileId}/present?frame=${start}`);
+  };
   const newServerFile = () => files.create({}).then((f) => navigate(`/file/${f.id}`), (e: Error) => editor.notify(e.message));
 
   const fileItems: (MenuItem | '-')[] = server
@@ -152,6 +159,7 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
             '-',
             { label: 'Variables…', action: onVariables },
             ...(server ? [{ label: 'Share…', action: onShare }] : []),
+            ...(server && fileId ? [{ label: 'Present', action: present }] : []),
             ...(server && fileId && !editor.readOnly ? [{ label: 'Version history…', action: onHistory }] : []),
             { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: !editor.selection.length || editor.readOnly },
             '-',
@@ -199,6 +207,11 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
       <div className="toolbar-right">
         {editor.readOnly && <span className="badge" title="You can look at this file but not change it">View only</span>}
         <Collaborators onShare={onShare} />
+        {server && fileId && (
+          <button type="button" className="small-button" title="Play this page as a clickable prototype" onClick={present}>
+            Present
+          </button>
+        )}
         {server && fileId && !editor.readOnly && (
           <button type="button" className="small-button" title="Earlier versions of this file" onClick={onHistory}>
             History

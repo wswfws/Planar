@@ -195,3 +195,7 @@ Example — a card in one call:
 ### comments
 
 `comments` — `list` (open threads, `resolved: true` for all), `add {text, nodeId?, x?, y?}`, `reply {commentId, text}`, `resolve {commentId, resolved?}` for the open server file.
+
+### Prototype links
+
+`create` / `update` accept `"link": "<top-level frame name or id>"` (and optionally `"transition": "instant" | "slide" | "dissolve"`) to make a layer open that screen on click in Present mode (`/file/<id>/present?frame=<id>`). `"link": null` removes it; `inspect` returns it.

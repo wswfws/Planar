@@ -30,7 +30,8 @@ Workflow:
 3. tree / find to locate layers; inspect for details. inspect returns the same vocabulary that create and update accept, so read → tweak → write back.
 4. Design: create builds whole nested layouts in one call (frames with layout/gap/padding, text, shapes, component instances). update restyles or moves many layers in one call. Prefer auto layout ("layout": "column"/"row") over absolute x/y.
 5. Check visually with screenshot.
-6. Developers: code gives React (components with typed props/variants) or HTML/CSS; tokens exports variables.
+6. Prototypes: update a layer with "link": "<top-level frame name>" (optional "transition": "slide" | "dissolve") to make it go to that screen on click in Present mode; "link": null removes it.
+7. Developers: code gives React (components with typed props/variants) or HTML/CSS; tokens exports variables.
 Colours: "#RRGGBB", "#RRGGBB 50%", or "$variableName". Sizes: number, "hug" or "fill". Every change is undoable with undo.`;
 
 function guard<A>(fn: (args: A) => Promise<Result> | Result): (args: A) => Promise<Result> {

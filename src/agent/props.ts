@@ -10,7 +10,7 @@ import {
   variantsOf,
   wouldCycle,
 } from '../core/components';
-import { createNode, insertNode } from '../core/document';
+import { createNode, getPageOf, insertNode } from '../core/document';
 import { scaleContents } from '../core/geometry';
 import { nodePaths, pathGeometry } from '../core/paths';
 import { insertSvg, parseSvg } from '../core/svg';
@@ -101,6 +101,10 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
   if (!n.visible) out.visible = false;
   if (n.locked) out.locked = true;
   if (n.layoutAbsolute) out.absolute = true;
+  if (n.link && doc.nodes[n.link.to]) {
+    out.link = doc.nodes[n.link.to].name;
+    if (n.link.transition && n.link.transition !== 'instant') out.transition = n.link.transition;
+  }
 
   if (n.type !== 'group' && n.type !== 'componentSet') {
     const fill = paintsToFriendly(doc, n.fills);
@@ -254,7 +258,7 @@ const KNOWN = new Set([
   'id', 'type', 'name', 'x', 'y', 'width', 'height', 'w', 'h', 'rotation', 'opacity', 'visible', 'locked', 'fill', 'fills', 'stroke',
   'strokes', 'strokeWidth', 'radius', 'clip', 'layout', 'gap', 'padding', 'align', 'crossAlign', 'absolute', 'text', 'font', 'size',
   'fontSize', 'weight', 'fontWeight', 'lineHeight', 'textAlign', 'textAlignVertical', 'component', 'props', 'variant', 'mode',
-  'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg',
+  'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg', 'link', 'transition',
 ]);
 
 /**
@@ -301,6 +305,22 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
     if (props.visible !== undefined) set('visible', props.visible !== false);
     if (props.locked !== undefined) set('locked', props.locked === true);
     if (props.absolute !== undefined) set('layoutAbsolute', props.absolute === true);
+    if (props.link !== undefined) {
+      if (props.link === null || props.link === '') delete n.link;
+      else {
+        const ref = String(props.link);
+        const top = doc.nodes[getPageOf(doc, node.id)?.id ?? '']?.children ?? [];
+        const to = top.find((c) => c === ref) ?? top.find((c) => doc.nodes[c]?.name === ref);
+        if (!to) throw new PropError(`link: no top-level frame "${ref}" on this page (use its name or id)`);
+        const t = String(props.transition ?? n.link?.transition ?? 'instant');
+        if (t !== 'instant' && t !== 'slide' && t !== 'dissolve') throw new PropError('transition must be instant, slide or dissolve');
+        n.link = { to, transition: t };
+      }
+    } else if (props.transition !== undefined && n.link) {
+      const t = String(props.transition);
+      if (t !== 'instant' && t !== 'slide' && t !== 'dissolve') throw new PropError('transition must be instant, slide or dissolve');
+      n.link = { ...n.link, transition: t };
+    }
     const fill = props.fill ?? props.fills;
     if (fill !== undefined) set('fills', parsePaints(doc, fill, loadImage));
     const stroke = props.stroke ?? props.strokes;

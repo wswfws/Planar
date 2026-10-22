@@ -3,6 +3,7 @@ import type { Editor } from './editor';
 import { vectorPoints, worldMatrix } from './geometry';
 import { frameLabelRect, HANDLES, selectionFrame } from './interaction';
 import { apply, clean } from './math';
+import { linksOnPage, screenOf } from './prototype';
 import { isFrameLike, type SceneNode } from './types';
 
 export const ACCENT = '#7b7bf0';
@@ -67,6 +68,35 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
     ctx.stroke();
   }
   ctx.setLineDash([]);
+
+  // Prototype links of the selected layers and screens, drawn as arrows to their target screen.
+  for (const link of linksOnPage(doc, editor.pageId)) {
+    const screen = screenOf(doc, link.from);
+    if (!editor.selection.includes(link.from) && !(screen && editor.selection.includes(screen))) continue;
+    const src = doc.nodes[link.from];
+    const dst = doc.nodes[link.to];
+    const a = apply(worldMatrix(doc, link.from), { x: src.width / 2, y: src.height / 2 });
+    const b = apply(worldMatrix(doc, link.to), { x: 0, y: dst.height / 2 });
+    const sa = { x: viewport.x + a.x * z, y: viewport.y + a.y * z };
+    const sb = { x: viewport.x + b.x * z - 6, y: viewport.y + b.y * z };
+    const dx = Math.max(40, Math.abs(sb.x - sa.x) / 2);
+    ctx.strokeStyle = ACCENT;
+    ctx.fillStyle = ACCENT;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(sa.x, sa.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(sa.x, sa.y);
+    ctx.bezierCurveTo(sa.x + dx, sa.y, sb.x - dx, sb.y, sb.x, sb.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sb.x + 6, sb.y);
+    ctx.lineTo(sb.x - 2, sb.y - 5);
+    ctx.lineTo(sb.x - 2, sb.y + 5);
+    ctx.closePath();
+    ctx.fill();
+  }
 
   // Hover outline.
   const hover = editor.hoverId ? doc.nodes[editor.hoverId] : null;

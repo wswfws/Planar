@@ -8,6 +8,7 @@ import { effectiveSizing, isAutoLayout, isLaidOut } from '../core/layout';
 import { isFrameLike, type CounterAlign, type Paint, type PrimaryAlign, type SceneNode, type Sizing, type TextAlign, type TextAlignVertical } from '../core/types';
 import { BINDABLE } from '../core/variables';
 import { CodeSection } from './CodeSection';
+import { PrototypeSection } from './PrototypeSection';
 import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
@@ -694,6 +695,7 @@ export function PropertiesPanel() {
         </>
       )}
 
+      {single && single.type !== 'page' && <PrototypeSection editor={editor} node={single} />}
       <ExportSection editor={editor} count={ids.length} />
       {single && <CodeSection editor={editor} id={single.id} />}
     </aside>

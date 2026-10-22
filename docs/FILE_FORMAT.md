@@ -74,6 +74,7 @@ their default value.
 | `propBindings` | {property: propId} | `characters`, `visible` or `componentId` driven by a component property |
 | `propValues` | {propId: value} | Instance: values set for its component's properties |
 | `variantProps` | {property: value} | Variant component: its value for each variant property |
+| `link` | {to, transition?} | Optional. Prototype: clicking the layer in Present mode goes to the top-level frame `to`; `transition` is `instant` (default), `slide` or `dissolve` |
 
 Older files simply lack newer fields; readers fill in the defaults
 (`none`, `10`, `0`, `start`, `start`, `fixed`, `false`, `""`, `""`, `[]`,

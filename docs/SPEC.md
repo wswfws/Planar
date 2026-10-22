@@ -402,3 +402,7 @@ Comments, accounts and permissions,
 variable collections and aliases, wrapping auto layout,
 constraints, boolean operations, Bézier curve editing, gradients, effects
 (shadows, blur), styles, prototyping, plugins, version history.
+
+## Prototypes and presentation
+
+A layer can link to another top-level frame of its page (`link`, see FILE_FORMAT). The editor shows arrows from the selected layers to their targets and a Prototype section in the properties panel. Present (`/file/<id>/present?frame=<id>`, also by link for viewers and guests) shows one screen at a time scaled to the window: clicking a layer with a link (or inside one) goes to the target with the chosen animation, arrow keys step through screens in layer order, Backspace goes back, Esc leaves. A click that hits nothing briefly highlights the clickable areas.
