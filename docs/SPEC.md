@@ -406,3 +406,7 @@ constraints, boolean operations, Bézier curve editing, gradients, effects
 ## Prototypes and presentation
 
 A layer can link to another top-level frame of its page (`link`, see FILE_FORMAT). The editor shows arrows from the selected layers to their targets and a Prototype section in the properties panel. Present (`/file/<id>/present?frame=<id>`, also by link for viewers and guests) shows one screen at a time scaled to the window: clicking a layer with a link (or inside one) goes to the target with the chosen animation, arrow keys step through screens in layer order, Backspace goes back, Esc leaves. A click that hits nothing briefly highlights the clickable areas.
+
+## Developer export and inspect
+
+Export (properties panel) offers PNG, SVG and PDF. With several layers or screens selected (or nothing selected: every screen of the page), "One file per layer" produces a ZIP, and PDF has one page per layer, sized like it. Inspect shows size, position, radius, gap, padding, font and colours (with variable names) that copy on click, and red distances from the selected layer to the one under the pointer; viewers have it on by default. `GET /api/files/:id/export.zip?format=png|svg|pdf&scale=2&page=<name or id>` returns every screen of a page the same way (PNG and PDF need the optional `@napi-rs/canvas` on the server), for scripts and CI.

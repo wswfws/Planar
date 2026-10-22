@@ -48,7 +48,7 @@ export function canRender(): boolean {
 }
 
 /** PNG of the given layers (whole page when `ids` is empty). */
-export async function renderPng(doc: PlanarDocument, ids: string[], opts: { scale?: number; maxSize?: number; background?: string } = {}): Promise<Buffer> {
+export async function renderPng(doc: PlanarDocument, ids: string[], opts: { scale?: number; maxSize?: number; background?: string; jpeg?: boolean } = {}): Promise<Buffer> {
   const mod = await initCanvas();
   if (!mod) throw new Error('Screenshots need the optional @napi-rs/canvas package (npm install @napi-rs/canvas).');
   const b = selectionBounds(doc, ids);
@@ -94,5 +94,5 @@ export async function renderPng(doc: PlanarDocument, ids: string[], opts: { scal
   } finally {
     setImageProvider(null);
   }
-  return canvas.toBuffer('image/png');
+  return opts.jpeg ? canvas.toBuffer('image/jpeg', 92) : canvas.toBuffer('image/png');
 }

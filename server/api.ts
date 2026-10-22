@@ -1,6 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createDocument, parseDocument } from '../src/core/document';
 import { canRender, renderPng } from '../src/agent/raster';
+import { exportSvg } from '../src/core/export';
+import { pdfFromJpegs } from '../src/core/pdf';
+import { selectionBounds } from '../src/core/geometry';
+import { uniqueNames, zipFiles } from '../src/core/zip';
 import type { PlanarDocument } from '../src/core/types';
 import { can, type LinkAccess, type MemberRole, type Role } from './access';
 import { Db, randomFileId, SESSION_DAYS, USERNAME, type FileRecord, type Project, type User } from './db';
@@ -717,6 +721,44 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
         res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store' });
         res.end(JSON.stringify(room.doc));
         return true;
+      }
+
+      if (sub === 'export.zip' && method === 'GET') {
+        // Every screen (top-level frame) of a page as PNG or SVG files in a ZIP, or as one PDF: for scripts and CI.
+        const room = await store.get(rec.id);
+        if (!room) throw new HttpError(404, 'The document is missing on the server');
+        const format = url.searchParams.get('format') ?? 'png';
+        if (format !== 'png' && format !== 'svg' && format !== 'pdf') throw new HttpError(400, 'format must be png, svg or pdf');
+        if (format !== 'svg' && !canRender()) throw new HttpError(501, 'Rendering needs the optional @napi-rs/canvas package on the server');
+        const scale = Math.min(4, Math.max(0.25, Number(url.searchParams.get('scale')) || 2));
+        const doc = room.doc;
+        const wanted = url.searchParams.get('page');
+        const page = doc.nodes[wanted ?? ''] ?? [...doc.pageIds.map((id) => doc.nodes[id])].find((p) => p.name === wanted) ?? doc.nodes[doc.pageIds[0]];
+        const ids = page.children.filter((id) => doc.nodes[id].visible && (doc.nodes[id].type === 'frame' || doc.nodes[id].type === 'component'));
+        if (!ids.length) throw new HttpError(404, 'This page has no screens to export');
+        const base = rec.name.replace(/[^\w.-]+/g, '_') || 'export';
+        const sendFile = (data: Uint8Array, type: string, ext: string) => {
+          res.writeHead(200, { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${base}.${ext}"`, 'Cache-Control': 'no-store' });
+          res.end(Buffer.from(data));
+          return true;
+        };
+        if (format === 'pdf') {
+          const pages = [];
+          for (const id of ids) {
+            const b = selectionBounds(doc, [id]);
+            if (!b) continue;
+            const jpeg = await renderPng(doc, [id], { scale, maxSize: 8000, background: '#ffffff', jpeg: true });
+            pages.push({ width: b.width, height: b.height, jpeg, pixelWidth: Math.round(b.width * scale), pixelHeight: Math.round(b.height * scale) });
+          }
+          return sendFile(pdfFromJpegs(pages, rec.name), 'application/pdf', 'pdf');
+        }
+        const names = uniqueNames(ids.map((id) => `${doc.nodes[id].name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'screen'}.${format}`));
+        const entries = [];
+        for (const [i, id] of ids.entries()) {
+          const data = format === 'svg' ? Buffer.from(exportSvg(doc, [id]) ?? '') : await renderPng(doc, [id], { scale, maxSize: 8000 });
+          entries.push({ name: names[i], data: new Uint8Array(data) });
+        }
+        return sendFile(zipFiles(entries), 'application/zip', 'zip');
       }
 
       if (sub === 'thumbnail.png' && method === 'GET') {

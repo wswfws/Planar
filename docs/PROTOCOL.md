@@ -126,3 +126,7 @@ Server message `{t:'comments'}` tells open clients to reload the comments of the
 ## Projects and search
 
 A project groups files and is shared as a whole: `GET|POST /api/projects`, `GET|PATCH|DELETE /api/projects/:id`, `PUT /api/projects/:id/members {username, role}`. The project owner and editors can edit every file in it, viewers can view them; a person's role on a file is the strongest of the file's own roles, the link and the project. `PATCH /api/files/:id {projectId}` moves a file (the file's owner, into a project they own or edit; `null` removes it). Deleting a project keeps the files. `GET /api/files?scope=mine|shared|trash|all&q=<text>&project=<id>` filters by name and project.
+
+## Export
+
+`GET /api/files/:id/export.zip?format=png|svg|pdf&scale=<0.25–4>&page=<id or name>` (anyone who can view the file): the top-level frames of the page as `<name>.png|svg` files in a ZIP, or as a PDF with one page per frame.

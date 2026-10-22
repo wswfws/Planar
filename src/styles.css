@@ -2192,3 +2192,34 @@ select:focus {
 .move-option {
   margin: 3px;
 }
+
+/* ---- inspect and export ---- */
+.inspect-grid {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 4px 8px;
+  align-items: start;
+}
+.inspect-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.inspect-value {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: copy;
+}
+.inspect-value:hover {
+  color: var(--accent, #7b7bf0);
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

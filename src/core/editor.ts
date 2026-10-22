@@ -36,7 +36,7 @@ import {
   removeNode,
   uniquePageName,
 } from './document';
-import { downloadBlob, exportPng, exportSvg, safeFilename } from './export';
+import { downloadBlob, exportEach, exportPng, exportSvg, safeFilename } from './export';
 import {
   fitGroups,
   fitToChildren,
@@ -149,6 +149,8 @@ export class Editor {
   canvasSize = { width: 800, height: 600 };
   editingTextId: string | null = null;
   hoverId: string | null = null;
+  /** Show distances to the layer under the pointer (for developers; always on for viewers). */
+  inspect = false;
   overlay: Overlay = { marquee: null, guides: [], pen: null, insertion: null };
   spaceDown = false;
   /** Shared-document session, when collaborating. */
@@ -1521,10 +1523,20 @@ export class Editor {
     return ids.length ? ids : this.page.children.filter((id) => this.doc.nodes[id].visible);
   }
 
-  async exportAs(format: 'png' | 'svg', scale = 1): Promise<void> {
+  /**
+   * Downloads the selection (or every screen of the page). `each` makes one file per layer in a ZIP;
+   * a PDF always has one page per layer.
+   */
+  async exportAs(format: 'png' | 'svg' | 'pdf', scale = 1, each = false): Promise<void> {
     const ids = this.exportTargets();
     if (!ids.length) {
       this.notify('Nothing to export');
+      return;
+    }
+    if (format === 'pdf' || (each && ids.length > 1)) {
+      const out = await exportEach(this.doc, ids, format, scale, ids.length === 1 ? this.doc.nodes[ids[0]].name : this.page.name);
+      if (out) downloadBlob(out.blob, out.filename);
+      else this.notify('Nothing to export');
       return;
     }
     const base = safeFilename(ids.length === 1 ? this.doc.nodes[ids[0]].name : this.page.name);

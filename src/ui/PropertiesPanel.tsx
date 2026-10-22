@@ -9,6 +9,7 @@ import { isFrameLike, type CounterAlign, type Paint, type PrimaryAlign, type Sce
 import { BINDABLE } from '../core/variables';
 import { CodeSection } from './CodeSection';
 import { PrototypeSection } from './PrototypeSection';
+import { InspectSection } from './InspectSection';
 import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
@@ -442,7 +443,8 @@ function ModeSelect({ editor, ids, value }: { editor: Editor; ids: string[]; val
 
 function ExportSection({ editor, count }: { editor: Editor; count: number }) {
   const [scale, setScale] = useState(2);
-  const [format, setFormat] = useState<'png' | 'svg'>('png');
+  const [format, setFormat] = useState<'png' | 'svg' | 'pdf'>('png');
+  const [each, setEach] = useState(true);
   return (
     <Section title="Export">
       <div className="row">
@@ -451,13 +453,20 @@ function ExportSection({ editor, count }: { editor: Editor; count: number }) {
           <option value={2}>2×</option>
           <option value={3}>3×</option>
         </select>
-        <select value={format} onChange={(e) => setFormat(e.target.value as 'png' | 'svg')} aria-label="Format">
+        <select value={format} onChange={(e) => setFormat(e.target.value as 'png' | 'svg' | 'pdf')} aria-label="Format">
           <option value="png">PNG</option>
           <option value="svg">SVG</option>
+          <option value="pdf">PDF</option>
         </select>
       </div>
-      <button type="button" className="wide-button" onClick={() => editor.exportAs(format, scale)}>
-        {count ? `Export ${count === 1 ? 'layer' : `${count} layers`}` : 'Export page'}
+      {format !== 'pdf' && editor.exportTargets().length > 1 && (
+        <label className="hint check-row">
+          <input type="checkbox" checked={each} onChange={(e) => setEach(e.target.checked)} /> One file per layer (ZIP)
+        </label>
+      )}
+      {format === 'pdf' && <p className="hint">One page per {count === 1 ? 'layer' : 'layer or screen'}.</p>}
+      <button type="button" className="wide-button" onClick={() => editor.exportAs(format, scale, each)}>
+        {count ? `Export ${count === 1 ? 'layer' : `${count} layers`}` : 'Export all screens'}
       </button>
     </Section>
   );
@@ -696,6 +705,7 @@ export function PropertiesPanel() {
       )}
 
       {single && single.type !== 'page' && <PrototypeSection editor={editor} node={single} />}
+      {single && <InspectSection editor={editor} node={single} />}
       <ExportSection editor={editor} count={ids.length} />
       {single && <CodeSection editor={editor} id={single.id} />}
     </aside>

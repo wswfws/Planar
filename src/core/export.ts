@@ -3,6 +3,8 @@ import { fontImports } from './fonts';
 import { clean, type Mat, type Rect } from './math';
 import { nodePaths } from './paths';
 import { drawNode } from './render';
+import { pdfFromJpegs } from './pdf';
+import { uniqueNames, zipFiles } from './zip';
 import { baselineInLine, lineHeightPx, nodeLines, verticalOffset } from './text';
 import { isFrameLike, type PlanarDocument, type SceneNode } from './types';
 
@@ -105,7 +107,7 @@ function nodeToSvg(doc: PlanarDocument, id: string): string {
   return parts.join('');
 }
 
-function exportBounds(doc: PlanarDocument, ids: string[]): Rect | null {
+export function exportBounds(doc: PlanarDocument, ids: string[]): Rect | null {
   const b = selectionBounds(doc, ids);
   if (!b) return null;
   const x = Math.floor(b.x);
@@ -136,6 +138,11 @@ export function exportSvg(doc: PlanarDocument, ids: string[]): string | null {
 }
 
 export function exportPng(doc: PlanarDocument, ids: string[], scale: number): Promise<Blob | null> {
+  return exportRaster(doc, ids, scale, 'image/png');
+}
+
+/** PNG (transparent) or JPEG (white background) of the given layers. */
+export function exportRaster(doc: PlanarDocument, ids: string[], scale: number, type: 'image/png' | 'image/jpeg'): Promise<Blob | null> {
   const b = exportBounds(doc, ids);
   if (!b) return Promise.resolve(null);
   const canvas = document.createElement('canvas');
@@ -143,6 +150,10 @@ export function exportPng(doc: PlanarDocument, ids: string[], scale: number): Pr
   canvas.height = Math.round(b.height * scale);
   const ctx = canvas.getContext('2d');
   if (!ctx) return Promise.resolve(null);
+  if (type === 'image/jpeg') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   ctx.scale(scale, scale);
   ctx.translate(-b.x, -b.y);
   for (const id of ids) {
@@ -151,7 +162,31 @@ export function exportPng(doc: PlanarDocument, ids: string[], scale: number): Pr
     drawNode(ctx, doc, id);
     ctx.restore();
   }
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  return new Promise((resolve) => canvas.toBlob(resolve, type, 0.92));
+}
+
+/**
+ * Every layer on its own: a ZIP of PNG or SVG files, or one PDF with a page per layer.
+ * Returns null when nothing could be drawn.
+ */
+export async function exportEach(doc: PlanarDocument, ids: string[], format: 'png' | 'svg' | 'pdf', scale: number, title: string): Promise<{ blob: Blob; filename: string } | null> {
+  const bytes = async (blob: Blob | null) => (blob ? new Uint8Array(await blob.arrayBuffer()) : null);
+  if (format === 'pdf') {
+    const pages = [];
+    for (const id of ids) {
+      const b = exportBounds(doc, [id]);
+      const jpeg = await bytes(await exportRaster(doc, [id], scale, 'image/jpeg'));
+      if (b && jpeg) pages.push({ width: b.width, height: b.height, jpeg, pixelWidth: Math.round(b.width * scale), pixelHeight: Math.round(b.height * scale) });
+    }
+    return pages.length ? { blob: new Blob([pdfFromJpegs(pages, title)], { type: 'application/pdf' }), filename: `${safeFilename(title)}.pdf` } : null;
+  }
+  const entries: { name: string; data: Uint8Array }[] = [];
+  const names = uniqueNames(ids.map((id) => `${safeFilename(doc.nodes[id].name)}${format === 'png' && scale !== 1 ? `@${scale}x` : ''}.${format}`));
+  for (const [i, id] of ids.entries()) {
+    const data = format === 'svg' ? new TextEncoder().encode(exportSvg(doc, [id]) ?? '') : await bytes(await exportPng(doc, [id], scale));
+    if (data?.length) entries.push({ name: names[i], data });
+  }
+  return entries.length ? { blob: new Blob([zipFiles(entries)], { type: 'application/zip' }), filename: `${safeFilename(title)}.zip` } : null;
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

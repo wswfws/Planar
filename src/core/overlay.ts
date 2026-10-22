@@ -1,12 +1,64 @@
 import { getPageOf } from './document';
 import type { Editor } from './editor';
-import { vectorPoints, worldMatrix } from './geometry';
+import { selectionBounds, vectorPoints, worldMatrix } from './geometry';
 import { frameLabelRect, HANDLES, selectionFrame } from './interaction';
 import { apply, clean } from './math';
 import { linksOnPage, screenOf } from './prototype';
 import { isFrameLike, type SceneNode } from './types';
 
 export const ACCENT = '#7b7bf0';
+const MEASURE = '#ff4f4f';
+
+interface Segment {
+  /** Screen-space line (world units are converted by the caller). */
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  value: number;
+}
+
+/**
+ * The gaps between two boxes in world units: when one holds the other, the
+ * space on each side; otherwise the space between them along each axis they overlap on.
+ */
+export function measure(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }): Segment[] {
+  const out: Segment[] = [];
+  const ar = a.x + a.width;
+  const ab = a.y + a.height;
+  const br = b.x + b.width;
+  const bb = b.y + b.height;
+  const mid = (lo: number, hi: number) => (lo + hi) / 2;
+  const inside = (i: typeof a, o: typeof a) => i.x >= o.x && i.y >= o.y && i.x + i.width <= o.x + o.width && i.y + i.height <= o.y + o.height;
+  if (inside(a, b) || inside(b, a)) {
+    const [inner, outer] = inside(a, b) ? [a, b] : [b, a];
+    const ir = inner.x + inner.width;
+    const ib = inner.y + inner.height;
+    const or = outer.x + outer.width;
+    const ob = outer.y + outer.height;
+    const cx = mid(inner.x, ir);
+    const cy = mid(inner.y, ib);
+    out.push({ x1: outer.x, y1: cy, x2: inner.x, y2: cy, value: inner.x - outer.x });
+    out.push({ x1: ir, y1: cy, x2: or, y2: cy, value: or - ir });
+    out.push({ x1: cx, y1: outer.y, x2: cx, y2: inner.y, value: inner.y - outer.y });
+    out.push({ x1: cx, y1: ib, x2: cx, y2: ob, value: ob - ib });
+    return out.filter((s) => s.value > 0);
+  }
+  const yLo = Math.max(a.y, b.y);
+  const yHi = Math.min(ab, bb);
+  const xLo = Math.max(a.x, b.x);
+  const xHi = Math.min(ar, br);
+  if (yHi > yLo) {
+    if (ar <= b.x) out.push({ x1: ar, y1: mid(yLo, yHi), x2: b.x, y2: mid(yLo, yHi), value: b.x - ar });
+    else if (br <= a.x) out.push({ x1: br, y1: mid(yLo, yHi), x2: a.x, y2: mid(yLo, yHi), value: a.x - br });
+  }
+  if (xHi > xLo) {
+    if (ab <= b.y) out.push({ x1: mid(xLo, xHi), y1: ab, x2: mid(xLo, xHi), y2: b.y, value: b.y - ab });
+    else if (bb <= a.y) out.push({ x1: mid(xLo, xHi), y1: bb, x2: mid(xLo, xHi), y2: a.y, value: a.y - bb });
+  }
+  return out.filter((s) => s.value > 0);
+}
+
 /** Components and instances are outlined in their own colour. */
 export const COMPONENT = '#d07cf5';
 const GUIDE = '#ff4f8b';
@@ -68,6 +120,36 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, editor: Editor, dpr: 
     ctx.stroke();
   }
   ctx.setLineDash([]);
+
+  // Inspect: red distances from the selected layer to the one under the pointer.
+  if ((editor.inspect || editor.readOnly) && editor.selection.length === 1 && editor.hoverId && editor.hoverId !== editor.selection[0]) {
+    const a = selectionBounds(doc, [editor.selection[0]]);
+    const b = selectionBounds(doc, [editor.hoverId]);
+    if (a && b) {
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = MEASURE;
+      for (const s of measure(a, b)) {
+        const p1 = { x: viewport.x + s.x1 * z, y: viewport.y + s.y1 * z };
+        const p2 = { x: viewport.x + s.x2 * z, y: viewport.y + s.y2 * z };
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        const label = String(Math.round(s.value * 10) / 10);
+        const cx = (p1.x + p2.x) / 2;
+        const cy = (p1.y + p2.y) / 2;
+        const w = ctx.measureText(label).width + 8;
+        ctx.fillStyle = MEASURE;
+        ctx.fillRect(cx - w / 2, cy - 8, w, 16);
+        ctx.fillStyle = '#fff';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, cx, cy);
+      }
+      ctx.textAlign = 'start';
+    }
+  }
 
   // Prototype links of the selected layers and screens, drawn as arrows to their target screen.
   for (const link of linksOnPage(doc, editor.pageId)) {
