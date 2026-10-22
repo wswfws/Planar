@@ -114,6 +114,7 @@ export function createDocument(name = 'Untitled'): PlanarDocument {
     variables: [],
     modes: [{ id: newId(), name: 'Mode 1' }],
     styles: [],
+    libraries: [],
   };
 }
 
@@ -266,7 +267,13 @@ export function parseDocument(data: unknown): PlanarDocument {
   const variables = Array.isArray(d.variables)
     ? d.variables
         .filter((v) => v && typeof v.id === 'string' && typeof v.name === 'string' && types.has(v.type))
-        .map((v) => ({ id: v.id, name: v.name, type: v.type, values: v.values && typeof v.values === 'object' ? { ...v.values } : {} }))
+        .map((v) => ({
+          id: v.id,
+          name: v.name,
+          type: v.type,
+          values: v.values && typeof v.values === 'object' ? { ...v.values } : {},
+          ...(v.library && typeof v.library.fileId === 'string' ? { library: { fileId: v.library.fileId, key: String(v.library.key) } } : {}),
+        }))
     : [];
   return {
     format: 'planar',
@@ -277,5 +284,10 @@ export function parseDocument(data: unknown): PlanarDocument {
     variables,
     modes,
     styles: sanitizeStyles(d.styles),
+    libraries: Array.isArray(d.libraries)
+      ? d.libraries
+          .filter((l) => l && typeof l.fileId === 'string' && typeof l.pageId === 'string' && nodes[l.pageId]?.type === 'page')
+          .map((l) => ({ fileId: l.fileId, name: String(l.name ?? 'Library'), version: Number(l.version) || 0, pageId: l.pageId }))
+      : [],
   };
 }

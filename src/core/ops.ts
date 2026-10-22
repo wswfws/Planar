@@ -1,7 +1,7 @@
 import type { PlanarDocument, SceneNode } from './types';
 
 /** Document-level fields exchanged as a whole. */
-export const META_KEYS = ['name', 'pageIds', 'variables', 'modes', 'styles'] as const;
+export const META_KEYS = ['name', 'pageIds', 'variables', 'modes', 'styles', 'libraries'] as const;
 export type MetaKey = (typeof META_KEYS)[number];
 
 /**

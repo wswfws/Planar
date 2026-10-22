@@ -1,3 +1,4 @@
+import { openLibraries } from './LibrariesDialog';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Tool } from '../core/editor';
 import { files } from '../collab/session';
@@ -161,6 +162,7 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
             ...(server ? [{ label: 'Share…', action: onShare }] : []),
             ...(server && fileId ? [{ label: 'Present', action: present }] : []),
             ...(server && fileId && !editor.readOnly ? [{ label: 'Version history…', action: onHistory }] : []),
+            ...(server?.me && fileId ? [{ label: 'Team libraries…', action: openLibraries }] : []),
             { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: !editor.selection.length || editor.readOnly },
             '-',
             { label: 'Undo', shortcut: `${MOD}Z`, action: () => editor.undo(), disabled: !editor.canUndo },

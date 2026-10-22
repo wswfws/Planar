@@ -56,6 +56,7 @@ import { applyAutoLayout, isAutoLayout, isLaidOut } from './layout';
 import { apply, applyLinear, invert, rectCenter, rectFromPoints, rectsIntersect, type Rect, type Vec } from './math';
 import { measureTextNode } from './text';
 import { applyStyles, TEXT_STYLE_FIELDS, textStyleValues } from './styles';
+import { importLibrary, libraryOf, removeLibrary, visiblePageIds, type LibrarySnapshot } from './library';
 import type { ComponentProp, ComponentPropType, EffectStyle, PlanarDocument, SceneNode, TextStyle, VariableType } from './types';
 import { coerce, defaultValue, resolveVariables, unbindVariable } from './variables';
 import { applyOps, diffDocs, repairTree, type Op } from './ops';
@@ -1033,6 +1034,12 @@ export class Editor {
       this.notify('The main component was deleted');
       return;
     }
+    // Library components live in their own file.
+    const lib = libraryOf(this.doc, comp.id);
+    if (lib) {
+      if (typeof window !== 'undefined') window.open(`/file/${encodeURIComponent(lib.fileId)}`, '_blank', 'noopener');
+      return;
+    }
     const page = getPageOf(this.doc, comp.id);
     if (page) this.setPage(page.id);
     this.select([comp.id]);
@@ -1372,6 +1379,22 @@ export class Editor {
     });
   }
 
+  /** Imports a team library, or brings an imported one up to date. */
+  useLibrary(snapshot: LibrarySnapshot): void {
+    if (snapshot.fileId === this.collab?.fileId) {
+      this.notify('A file cannot use itself as a library');
+      return;
+    }
+    this.change((doc) => void importLibrary(doc, snapshot));
+  }
+
+  /** Stops using a team library; its instances keep their look as ordinary layers. */
+  removeLibrary(fileId: string): void {
+    const link = this.doc.libraries.find((l) => l.fileId === fileId);
+    if (link && this.pageId === link.pageId) this.setPage(visiblePageIds(this.doc)[0]);
+    this.change((doc) => removeLibrary(doc, fileId));
+  }
+
   addMode(): void {
     this.change((doc) => {
       const mode = { id: newId(), name: `Mode ${doc.modes.length + 1}` };
@@ -1472,9 +1495,10 @@ export class Editor {
   }
 
   deletePage(id: string): void {
-    if (this.doc.pageIds.length <= 1) return;
-    const i = this.doc.pageIds.indexOf(id);
-    const next = this.doc.pageIds[i === 0 ? 1 : i - 1];
+    const pages = visiblePageIds(this.doc);
+    if (pages.length <= 1 || !pages.includes(id)) return;
+    const i = pages.indexOf(id);
+    const next = pages[i === 0 ? 1 : i - 1];
     if (id === this.pageId) this.setPage(next);
     this.change((doc) => removeNode(doc, id));
   }

@@ -4,6 +4,7 @@ import { listComponents, propHost, variantAxes, variantSet, variantsOf } from '.
 import { getPageOf } from '../core/document';
 import type { Editor } from '../core/editor';
 import { variableValue } from '../core/variables';
+import { libraryOf, visiblePageIds } from '../core/library';
 import type { PlanarDocument, SceneNode } from '../core/types';
 import { describe } from './props';
 
@@ -113,10 +114,11 @@ export function find(doc: PlanarDocument, q: FindQuery, pageId: string): SceneNo
 export function overview(editor: Editor): string {
   const { doc } = editor;
   const out: string[] = [];
-  out.push(`Document ${quote(doc.name, 80)} — ${doc.pageIds.length} page${doc.pageIds.length === 1 ? '' : 's'}, current page #${editor.pageId}`);
+  const pages = visiblePageIds(doc);
+  out.push(`Document ${quote(doc.name, 80)} — ${pages.length} page${pages.length === 1 ? '' : 's'}, current page #${editor.pageId}`);
   out.push('');
   out.push('Pages and top-level layers:');
-  for (const pid of doc.pageIds) {
+  for (const pid of pages) {
     const page = doc.nodes[pid];
     out.push(`- page ${quote(page.name)} #${pid}${pid === editor.pageId ? ' (current)' : ''}`);
     const kids = page.children;
@@ -133,7 +135,9 @@ export function overview(editor: Editor): string {
     for (const c of [...sets, ...loose]) {
       const host = propHost(doc, c);
       const props = host.componentProps.map((p) => `${p.name}: ${p.type}=${JSON.stringify(p.defaultValue)}`);
-      let line = `- ${c.type === 'componentSet' ? 'set' : 'component'} ${quote(c.name)} #${c.id} on ${quote(getPageOf(doc, c.id)?.name ?? '?')}`;
+      const lib = libraryOf(doc, c.id);
+      const where = lib ? `from library ${quote(lib.name)}` : `on ${quote(getPageOf(doc, c.id)?.name ?? '?')}`;
+      let line = `- ${c.type === 'componentSet' ? 'set' : 'component'} ${quote(c.name)} #${c.id} ${where}`;
       if (c.type === 'componentSet') {
         line += ` — variants ${variantAxes(doc, c.id)
           .map((axis) => `${axis}: ${[...new Set(variantsOf(doc, c.id).map((v) => v.variantProps[axis]))].join('|')}`)

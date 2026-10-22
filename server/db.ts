@@ -39,6 +39,17 @@ export interface FileRecord {
   members: Record<string, MemberRole>;
   /** Project the file is organised in (its people get access to the file too). */
   projectId?: string | null;
+  /** Set while the file is published as a team library. */
+  library?: LibraryInfo;
+}
+
+export interface LibraryInfo {
+  version: number;
+  publishedAt: number;
+  publishedBy: string;
+  components: number;
+  variables: number;
+  styles: number;
 }
 
 /** A group of files that is organised and shared as a whole. */

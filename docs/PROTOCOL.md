@@ -130,3 +130,7 @@ A project groups files and is shared as a whole: `GET|POST /api/projects`, `GET|
 ## Export
 
 `GET /api/files/:id/export.zip?format=png|svg|pdf&scale=<0.25–4>&page=<id or name>` (anyone who can view the file): the top-level frames of the page as `<name>.png|svg` files in a ZIP, or as a PDF with one page per frame.
+
+## Team libraries
+
+`POST /api/files/:id/library` (editors) publishes the file's components and component sets (plus components they use), variables, modes and styles as a snapshot with the next version number; `DELETE` stops publishing; `GET` returns `{library: {version, publishedAt, publishedBy, components, variables, styles} | null}` (also as `library` on the file). `GET /api/libraries` lists published files the user owns, is a member of, or reaches through a project (not ones only reachable by a public link); `GET /api/libraries/:fileId` returns the snapshot to anyone who may open the file. A file that uses a library keeps its own copy (see FILE_FORMAT, `libraries`), so publishing or deleting the library never changes other files until they update.

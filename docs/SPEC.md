@@ -416,3 +416,7 @@ Layers in a frame without auto layout (or ignoring it) have horizontal and verti
 ## Styles
 
 Text styles (font family, size, weight, line height) and effect styles (shadows and blurs) are named, shared settings. "Create style…" in the style menu of the Text or Effects section makes one from the selected layer and applies it; the menu also applies an existing style or detaches the layer. Layers follow later changes to their style; editing a styled setting by hand detaches the layer, and deleting a style leaves layers looking the same. The Assets tab lists styles with a preview and usage count: click to apply to the selection, double-click to rename, update from the selected layer, or delete.
+
+## Team libraries
+
+"Team libraries…" (main menu, or the button in Assets) publishes the open file's components, variables and styles as a library, republishes changes with a new version, or unpublishes. The same dialog lists libraries published in files you work with: "Add to file" copies one in (its components appear in Assets with the library's name and insert like local ones), "Update" brings a newer version in while instances keep their overrides, and "Remove" turns its instances into ordinary layers. "Go to main component" on a library instance opens the library file.

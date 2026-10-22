@@ -14,6 +14,7 @@ export function sanitizeStyles(raw: unknown): Style[] {
   const out: Style[] = [];
   for (const s of raw) {
     if (!s || typeof s !== 'object' || typeof s.id !== 'string' || typeof s.name !== 'string') continue;
+    const library = s.library && typeof s.library.fileId === 'string' ? { library: { fileId: s.library.fileId, key: String(s.library.key) } } : {};
     if (s.type === 'text') {
       out.push({
         id: s.id,
@@ -23,9 +24,10 @@ export function sanitizeStyles(raw: unknown): Style[] {
         fontSize: Math.max(1, num(s.fontSize, 16)),
         fontWeight: num(s.fontWeight, 400),
         lineHeight: Math.max(0, num(s.lineHeight, 0)),
+        ...library,
       });
     } else if (s.type === 'effect') {
-      out.push({ id: s.id, name: s.name, type: 'effect', effects: sanitizeEffects(s.effects) });
+      out.push({ id: s.id, name: s.name, type: 'effect', effects: sanitizeEffects(s.effects), ...library });
     }
   }
   return out;

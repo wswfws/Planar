@@ -156,3 +156,7 @@ The document's `styles` list holds named text and effect styles:
 - `{id, name, type: "effect", effects: Effect[]}`
 
 A layer whose `textStyleId` / `effectStyleId` names a style takes those values from it whenever the document changes; editing one of them on the layer clears the id. A reference to a missing style is dropped. Names may use slashes for grouping (`Heading/H1`).
+
+## Team libraries
+
+`libraries` lists the team libraries the document uses: `{fileId, name, version, pageId}`. Each library's components live on its own page (`pageId`), which editors hide from the page list. Layers, variables and styles copied from a library carry `library: {fileId, key}` (`key` is their id in the library file), so an update replaces them in place and instances keep pointing at the same ids. Instances of library components are ordinary layers of the document.

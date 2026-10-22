@@ -12,6 +12,7 @@ import type { VariableType } from '../core/types';
 import { variableValue } from '../core/variables';
 import { find, outline, overview, summary } from './outline';
 import { shadowToString } from '../core/effects';
+import { visiblePageIds } from '../core/library';
 import { applyProps, applyStyleSpec, createLayers, describe, PropError, type Friendly } from './props';
 import { renderPng } from './raster';
 import { parseLink, type AgentSession } from './session';
@@ -573,6 +574,58 @@ export function registerTools(server: McpServer, session: AgentSession): void {
   );
 
   server.registerTool(
+    'libraries',
+    {
+      title: 'Team libraries',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      description:
+        'Share components, variables and styles between files. list: libraries used in the open file and ones available to add (with versions). add / update: copy a library (name or file id) into the open file, or bring it to the latest version — its components then work like local ones (instances via create with component: "Name"). remove: stop using a library (its instances become ordinary layers). publish: publish the open file as a library (again to share changes).',
+      inputSchema: {
+        action: z.enum(['list', 'add', 'update', 'remove', 'publish']),
+        library: z.string().optional().describe('Library name or file id (add, update, remove)'),
+      },
+    },
+    guard(async ({ action, library }) => {
+      const editor = await session.ready();
+      if (action === 'publish') {
+        const info = await session.publishLibrary();
+        return text(`Published "${editor.doc.name}" as version ${info.version}: ${info.components} components, ${info.variables} variables, ${info.styles} styles.`);
+      }
+      const available = await session.listLibraries();
+      const used = editor.doc.libraries ?? [];
+      const pick = (list: { fileId: string; name: string }[]) => {
+        if (!library) throw new PropError(`${action} needs library (a name or file id)`);
+        const lower = library.toLowerCase();
+        return list.find((l) => l.fileId === library) ?? list.find((l) => l.name.toLowerCase() === lower) ?? null;
+      };
+      if (action === 'add' || action === 'update') {
+        const target = pick(available);
+        if (!target) throw new PropError(`No published library "${library}". Available: ${available.map((l) => `"${l.name}"`).join(', ') || 'none'}`);
+        const snapshot = await session.getLibrary(target.fileId);
+        await edit(session, (ed) => ed.useLibrary(snapshot));
+        await session.committed([]);
+      } else if (action === 'remove') {
+        const target = pick(used);
+        if (!target) throw new PropError(`This file does not use a library "${library}"`);
+        await edit(session, (ed) => ed.removeLibrary(target.fileId));
+        await session.committed([]);
+      }
+      const now = (await session.ready()).doc.libraries ?? [];
+      const lines = ['Used in this file:'];
+      for (const l of now) {
+        const latest = available.find((a) => a.fileId === l.fileId);
+        lines.push(`- "${l.name}" (${l.fileId}) version ${l.version}${latest && latest.version > l.version ? ` — update to ${latest.version} available` : ''}`);
+      }
+      if (!now.length) lines.push('- none');
+      lines.push('Available:');
+      const rest = available.filter((a) => !now.some((l) => l.fileId === a.fileId) && a.fileId !== editor.collab?.fileId);
+      for (const a of rest) lines.push(`- "${a.name}" (${a.fileId}) version ${a.version}: ${a.components} components, ${a.variables} variables, ${a.styles} styles`);
+      if (!rest.length) lines.push('- none');
+      return text(lines.join('\n'));
+    }),
+  );
+
+  server.registerTool(
     'pages',
     {
       title: 'Pages',
@@ -603,14 +656,14 @@ export function registerTools(server: McpServer, session: AgentSession): void {
         touched = true;
       } else if (action === 'delete') {
         const pid = need();
-        if (doc.pageIds.length <= 1) throw new PropError('Cannot delete the only page');
+        if (visiblePageIds(doc).length <= 1) throw new PropError('Cannot delete the only page');
         await edit(session, (e) => e.deletePage(pid));
         touched = true;
       } else if (action === 'open') {
         editor.setPage(need());
       }
       if (touched) await session.committed([]);
-      const lines = editor.doc.pageIds.map((pid) => {
+      const lines = visiblePageIds(editor.doc).map((pid) => {
         const p = editor.doc.nodes[pid];
         return `- page ${JSON.stringify(p.name)} #${pid}  ${p.children.length} top-level layer${p.children.length === 1 ? '' : 's'}${pid === editor.pageId ? '  (current)' : ''}`;
       });

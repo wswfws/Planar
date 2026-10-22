@@ -229,6 +229,7 @@ export async function handleAdmin(
             await store.remove(f.id);
             await ctx.versions.removeFile(f.id);
             ctx.comments.removeFile(f.id);
+            await ctx.libraries.remove(f.id);
           }
         }
         delete f.members[target.id];
@@ -297,6 +298,7 @@ export async function handleAdmin(
       await store.remove(rec.id);
       await ctx.versions.removeFile(rec.id);
       ctx.comments.removeFile(rec.id);
+      await ctx.libraries.remove(rec.id);
       audit(`deleted file "${rec.name}" (${rec.id})`);
       return json({ ok: true });
     }

@@ -7,6 +7,7 @@ import { CollabClient } from '../collab/client';
 import { createDocument, parseDocument } from '../core/document';
 import { Editor } from '../core/editor';
 import { worldCenter } from '../core/geometry';
+import type { LibrarySnapshot } from '../core/library';
 import { ensureDocumentFonts } from './fonts';
 
 export interface SessionOptions {
@@ -52,6 +53,17 @@ interface FileRow {
 
 /** How long an agent keeps pointing at what it last changed. */
 const AGENT_PRESENCE_MS = 60_000;
+
+export interface LibraryRow {
+  fileId: string;
+  name: string;
+  version: number;
+  publishedAt: number;
+  publishedBy: string;
+  components: number;
+  variables: number;
+  styles: number;
+}
 
 export interface VersionRow {
   id: string;
@@ -204,6 +216,29 @@ export class AgentSession {
     await this.request('POST', `${this.versionsRoute()}/${encodeURIComponent(id)}/restore`, {});
     // The server tells open editors to reload; wait until this one has.
     await new Promise((r) => setTimeout(r, 200));
+  }
+
+  private currentFileId(what: string): string {
+    const id = this.editor?.collab?.fileId;
+    if (!id) throw new Error(`${what} need a file from a Planar server; open one first.`);
+    return id;
+  }
+
+  /** Team libraries published in files this account works with. */
+  async listLibraries(): Promise<LibraryRow[]> {
+    return (await this.request<{ libraries: LibraryRow[] }>('GET', '/api/libraries')).libraries;
+  }
+
+  async getLibrary(fileId: string): Promise<LibrarySnapshot> {
+    return (await this.request<{ library: LibrarySnapshot }>('GET', `/api/libraries/${encodeURIComponent(fileId)}`)).library;
+  }
+
+  /** Publishes (or republishes) the open file as a team library. */
+  async publishLibrary(): Promise<LibraryRow> {
+    const id = this.currentFileId('Libraries');
+    await new Promise((r) => setTimeout(r, 150)); // let unsent edits reach the server
+    const { library } = await this.request<{ library: LibraryRow }>('POST', `/api/files/${encodeURIComponent(id)}/library`, {});
+    return { ...library, fileId: id, name: this.editor!.doc.name, publishedBy: '' };
   }
 
   private commentsRoute(): string {

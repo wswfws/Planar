@@ -140,6 +140,24 @@ export interface SceneNode {
 
   /** Prototype: clicking this layer in presentation goes to another screen (top-level frame). */
   link?: { to: string; transition?: 'instant' | 'slide' | 'dissolve' };
+  /** Copied from a team library: the library file and the layer's id there. */
+  library?: LibraryOrigin;
+}
+
+/** Where something imported from a team library came from. */
+export interface LibraryOrigin {
+  fileId: string;
+  /** Its id in the library file. */
+  key: string;
+}
+
+/** A team library used by this document; its components live on a hidden page. */
+export interface LibraryLink {
+  fileId: string;
+  name: string;
+  /** Published version that was imported. */
+  version: number;
+  pageId: string;
 }
 
 export interface VectorPath {
@@ -166,6 +184,7 @@ export interface Variable {
   type: VariableType;
   /** Mode id → value. */
   values: Record<string, VariableValue>;
+  library?: LibraryOrigin;
 }
 
 export interface VariableMode {
@@ -182,6 +201,7 @@ export interface TextStyle {
   fontSize: number;
   fontWeight: number;
   lineHeight: number;
+  library?: LibraryOrigin;
 }
 
 /** A named set of shadows and blurs. */
@@ -190,6 +210,7 @@ export interface EffectStyle {
   name: string;
   type: 'effect';
   effects: Effect[];
+  library?: LibraryOrigin;
 }
 
 export type Style = TextStyle | EffectStyle;
@@ -203,6 +224,8 @@ export interface PlanarDocument {
   variables: Variable[];
   modes: VariableMode[];
   styles: Style[];
+  /** Team libraries this document uses. */
+  libraries: LibraryLink[];
 }
 
 export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 'component', 'componentSet', 'instance', 'group']);

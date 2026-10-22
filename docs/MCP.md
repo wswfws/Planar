@@ -214,3 +214,7 @@ Example — a card in one call:
 ### Styles
 
 `styles` creates or updates text and effect styles in one call — `set: [{name, type: "text", font, size, weight, lineHeight}]`, `set: [{name, type: "effect", shadow, blur, backgroundBlur}]`, or `{name, from: "<layer id>"}` to copy a layer's settings — and `remove: [names]`; with no arguments it lists them with how many layers use each. Layers follow a style through the props `textStyle` and `effectStyle`. `tokens` exports text styles as `--font-<name>` (for `font: var(…)`) and shadow styles as `--shadow-<name>`; generated code uses those variables for styled layers.
+
+### Team libraries
+
+`libraries` lists the libraries the open file uses and the ones it could add (with versions and contents), and with `action: "add" | "update" | "remove"` and `library: "<name or file id>"` adds, updates or removes one. Library components then work like local ones (`create` with `component: "Name"`), and `overview` marks them "from library". `action: "publish"` publishes the open file as a library (again to share changes).

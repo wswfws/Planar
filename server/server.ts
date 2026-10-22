@@ -16,6 +16,7 @@ import { Db, type FileRecord, type User } from './db';
 import { createMcpHandler } from './mcp-http';
 import { ROOM_ID, RoomStore, type Room } from './rooms';
 import { CommentStore } from './comments';
+import { LibraryStore } from './libraries';
 import { VersionStore } from './versions';
 
 export interface ServerOptions {
@@ -129,6 +130,7 @@ export async function startServer(
   const comments = new CommentStore(opts.dataDir);
   await comments.init();
   const versions = new VersionStore(opts.dataDir ? path.join(opts.dataDir, 'versions') : null);
+  const libraries = new LibraryStore(opts.dataDir ? path.join(opts.dataDir, 'libraries') : null);
   if (opts.dataDir) await migrateLegacy(opts.dataDir, db);
   if (opts.legacyOwner) {
     const owner = db.userByName(opts.legacyOwner);
@@ -245,6 +247,7 @@ export async function startServer(
     dataDir: opts.dataDir,
     versions,
     comments,
+    libraries,
     commentsChanged: (fileId: string) => {
       const set = members.get(fileId);
       if (set) for (const c of set) send(c, { t: 'comments' });

@@ -7,6 +7,7 @@ import { drawNode } from '../core/render';
 import type { SceneNode } from '../core/types';
 import { useEditorState } from './EditorContext';
 import { StylesAssets } from './Styles';
+import { openLibraries } from './LibrariesDialog';
 
 export const COMPONENT_DRAG_TYPE = 'application/x-planar-component';
 
@@ -77,6 +78,11 @@ export function AssetsPanel() {
         </p>
       )}
       <StylesAssets />
+      {editor.collab && (
+        <button type="button" className="wide-button libraries-button" onClick={openLibraries}>
+          Team libraries{editor.doc.libraries?.length ? ` (${editor.doc.libraries.length})` : ''}…
+        </button>
+      )}
     </div>
   );
 }

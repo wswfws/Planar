@@ -3,6 +3,7 @@ import { getAncestors } from '../core/document';
 import { isAutoLayout } from '../core/layout';
 import { isContainer } from '../core/types';
 import { AssetsPanel } from './AssetsPanel';
+import { visiblePageIds } from '../core/library';
 import { CommentsPanel, useComments } from './Comments';
 import { useContextMenu } from './ContextMenu';
 import { selectionMenu } from './menus';
@@ -45,7 +46,7 @@ function PagesList() {
         <IconButton icon="plus" title="Add page" onClick={() => editor.addPage()} />
       </header>
       <ul>
-        {editor.doc.pageIds.map((id) => {
+        {visiblePageIds(editor.doc).map((id) => {
           const page = editor.doc.nodes[id];
           return (
             <li
@@ -65,7 +66,7 @@ function PagesList() {
               ) : (
                 <span className="row-name">{page.name}</span>
               )}
-              {editor.doc.pageIds.length > 1 && (
+              {visiblePageIds(editor.doc).length > 1 && (
                 <span className="row-actions" onClick={(e) => e.stopPropagation()}>
                   <IconButton
                     icon="trash"

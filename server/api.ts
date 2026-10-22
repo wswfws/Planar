@@ -13,6 +13,8 @@ import type { Metrics } from './metrics';
 import type { Room, RoomStore } from './rooms';
 import type { VersionMeta, VersionStore } from './versions';
 import type { Comment, CommentStore } from './comments';
+import type { LibraryStore } from './libraries';
+import { buildLibrarySnapshot, snapshotSummary } from '../src/core/library';
 
 const COOKIE = 'planar_session';
 const MAX_BODY = 60 * 1024 * 1024;
@@ -40,6 +42,7 @@ export interface ApiContext {
   dataDir: string | null;
   versions: VersionStore;
   comments: CommentStore;
+  libraries: LibraryStore;
   /** Tells open editors to reload the comments of a file. */
   commentsChanged: (fileId: string) => void;
   /** Tells open editors that the whole document was replaced (restoring a version). */
@@ -304,6 +307,28 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
       return json(200, { users });
     }
 
+    // ---- team libraries ----------------------------------------------------
+    if (parts[0] === 'libraries') {
+      const me = need();
+      const id = parts[1];
+      if (!id && method === 'GET') {
+        // Published files the person works with (not ones merely reachable by a public link).
+        const list = [...db.files.values()]
+          .filter((f) => f.library && !f.deletedAt && db.memberRoleFor(f, me.id))
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((f) => ({ fileId: f.id, name: f.name, ...f.library, publishedBy: db.users.get(f.library!.publishedBy)?.displayName ?? '' }));
+        return json(200, { libraries: list });
+      }
+      if (id && method === 'GET') {
+        const rec = db.files.get(id);
+        if (!rec || rec.deletedAt || !rec.library || !db.roleFor(rec, me.id)) throw new HttpError(404, 'No such library');
+        const snapshot = await ctx.libraries.load(rec.id);
+        if (!snapshot) throw new HttpError(404, 'No such library');
+        return json(200, { library: { ...snapshot, name: rec.name } });
+      }
+      throw new HttpError(405, 'Method not allowed');
+    }
+
     // ---- projects --------------------------------------------------------
     if (parts[0] === 'projects') {
       const me = need();
@@ -400,6 +425,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           deletedAt: f.deletedAt,
           linkAccess: f.linkAccess,
           projectId: f.projectId ?? null,
+          library: f.library ? { version: f.library.version, publishedAt: f.library.publishedAt } : null,
           ...(user ? { unreadComments: ctx.comments.unread(user.id, f.id) } : {}),
         };
         if (!detailed) return base;
@@ -513,6 +539,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
             await store.remove(rec.id);
             await ctx.versions.removeFile(rec.id);
             ctx.comments.removeFile(rec.id);
+            await ctx.libraries.remove(rec.id);
             thumbs.delete(rec.id);
           } else {
             rec.deletedAt = Date.now();
@@ -665,6 +692,32 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           ctx.comments.remove(c);
           ctx.commentsChanged(rec.id);
           return json(200, { ok: true });
+        }
+        throw new HttpError(405, 'Method not allowed');
+      }
+
+      if (sub === 'library') {
+        const info = () => (rec.library ? { ...rec.library, publishedBy: db.users.get(rec.library.publishedBy)?.displayName ?? '' } : null);
+        if (method === 'GET') return json(200, { library: info() });
+        const me = need();
+        if (!can(role, 'edit')) throw new HttpError(403, 'Only people who can edit this file can publish it');
+        if (method === 'POST') {
+          const room = await store.get(rec.id);
+          if (!room) throw new HttpError(404, 'The document is missing on the server');
+          const version = (rec.library?.version ?? 0) + 1;
+          const snapshot = buildLibrarySnapshot(room.doc, rec.id, rec.name, version);
+          const summary = snapshotSummary(snapshot);
+          if (!summary.components && !summary.variables && !summary.styles) throw new HttpError(400, 'Nothing to publish: add components, variables or styles first');
+          await ctx.libraries.save(snapshot);
+          rec.library = { version, publishedAt: snapshot.publishedAt, publishedBy: me.id, ...summary };
+          db.touch('files');
+          return json(200, { library: info() });
+        }
+        if (method === 'DELETE') {
+          await ctx.libraries.remove(rec.id);
+          delete rec.library;
+          db.touch('files');
+          return json(200, { library: null });
         }
         throw new HttpError(405, 'Method not allowed');
       }

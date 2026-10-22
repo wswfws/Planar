@@ -1,4 +1,5 @@
 import type { Editor, FileRole } from '../core/editor';
+import type { LibrarySnapshot } from '../core/library';
 import type { PlanarDocument } from '../core/types';
 import { CollabClient } from './client';
 
@@ -31,6 +32,8 @@ export interface FileInfo {
   deletedAt: number | null;
   linkAccess: LinkAccess;
   projectId?: string | null;
+  /** Set while the file is published as a team library. */
+  library?: { version: number; publishedAt: number } | null;
   members?: Member[];
   /** Comments by others since you last looked (your files and shared ones). */
   unreadComments?: number;
@@ -174,6 +177,34 @@ export const versions = {
   save: (fileId: string, label: string) => api<{ version: VersionInfo }>('POST', `/api/files/${fileId}/versions`, { label }).then((r) => r.version),
   rename: (fileId: string, id: string, label: string) => api<{ version: VersionInfo }>('PATCH', `/api/files/${fileId}/versions/${id}`, { label }).then((r) => r.version),
   restore: (fileId: string, id: string) => api('POST', `/api/files/${fileId}/versions/${id}/restore`, {}),
+};
+
+/** A published team library as listed for its users. */
+export interface LibraryInfo {
+  fileId: string;
+  name: string;
+  version: number;
+  publishedAt: number;
+  publishedBy: string;
+  components: number;
+  variables: number;
+  styles: number;
+}
+
+export interface PublishedInfo {
+  version: number;
+  publishedAt: number;
+  components: number;
+  variables: number;
+  styles: number;
+}
+
+export const libraries = {
+  list: () => api<{ libraries: LibraryInfo[] }>('GET', '/api/libraries').then((r) => r.libraries),
+  get: (fileId: string) => api<{ library: LibrarySnapshot }>('GET', `/api/libraries/${fileId}`).then((r) => r.library),
+  status: (fileId: string) => api<{ library: PublishedInfo | null }>('GET', `/api/files/${fileId}/library`).then((r) => r.library),
+  publish: (fileId: string) => api<{ library: PublishedInfo }>('POST', `/api/files/${fileId}/library`, {}).then((r) => r.library),
+  unpublish: (fileId: string) => api('DELETE', `/api/files/${fileId}/library`),
 };
 
 // ---- admin --------------------------------------------------------------------

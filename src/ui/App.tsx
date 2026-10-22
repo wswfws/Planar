@@ -9,6 +9,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { Toolbar } from './Toolbar';
 import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
+import { LibrariesDialog } from './LibrariesDialog';
 import { VersionsDialog } from './VersionsDialog';
 import { CommentsLayer, CommentsProvider } from './Comments';
 import { Present } from './Present';
@@ -240,6 +241,12 @@ export function App({ fileId, present }: { fileId?: string; present?: boolean })
   const [shareOpen, setShareOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [librariesOpen, setLibrariesOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setLibrariesOpen(true);
+    window.addEventListener('planar:libraries', open);
+    return () => window.removeEventListener('planar:libraries', open);
+  }, []);
 
   // A file on the server is edited live.
   useEffect(() => (fileId ? openServerFile(editor, fileId) : undefined), [editor, fileId]);
@@ -280,6 +287,7 @@ export function App({ fileId, present }: { fileId?: string; present?: boolean })
         {variablesOpen && <VariablesDialog onClose={() => setVariablesOpen(false)} />}
         {shareOpen && fileId && <ShareDialog onClose={() => setShareOpen(false)} />}
         {historyOpen && fileId && <VersionsDialog onClose={() => setHistoryOpen(false)} />}
+        {librariesOpen && fileId && <LibrariesDialog onClose={() => setLibrariesOpen(false)} />}
         <input
           ref={fileInput}
           type="file"

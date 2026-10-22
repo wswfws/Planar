@@ -4,7 +4,7 @@ import { measureTextNode } from './text';
 import { isFrameLike, type ComponentProp, type ComponentPropType, type PlanarDocument, type SceneNode } from './types';
 
 /** Fields a layer never takes from the component layer it mirrors. */
-const NEVER_SYNCED = new Set<keyof SceneNode>(['id', 'parentId', 'children', 'sourceId', 'overrides']);
+const NEVER_SYNCED = new Set<keyof SceneNode>(['id', 'parentId', 'children', 'sourceId', 'overrides', 'library']);
 
 /** Fields an instance root keeps for itself. */
 const ROOT_OWN = new Set<keyof SceneNode>([
