@@ -8,6 +8,7 @@ import { navigate, useServer } from './router';
 import { screenOf, screensOf } from '../core/prototype';
 import { NOTE_KINDS, NOTE_LABELS } from '../core/notes';
 import { useAuthorName } from './NoteSection';
+import { togglePanel, toggleAllPanels, usePanels } from './Panels';
 
 const TOOLS: { tool: Tool; icon: IconName; label: string; key: string }[] = [
   { tool: 'select', icon: 'select', label: 'Move', key: 'V' },
@@ -117,6 +118,7 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
   const editor = useEditorState();
   const server = useServer();
   const author = useAuthorName();
+  const panels = usePanels();
   const [name, setName] = useState(editor.doc.name);
   useEffect(() => setName(editor.doc.name), [editor.doc.name]);
   const fileId = editor.collab?.fileId;
@@ -167,6 +169,8 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
             ...(server && fileId && !editor.readOnly ? [{ label: 'Version history…', action: onHistory }] : []),
             ...(server?.me && fileId ? [{ label: 'Team libraries…', action: openLibraries }] : []),
             { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: !editor.selection.length || editor.readOnly },
+            '-',
+            { label: panels.left.open && panels.right.open ? 'Hide panels' : 'Show panels', shortcut: `${MOD}\\`, action: toggleAllPanels },
             '-',
             { label: 'Undo', shortcut: `${MOD}Z`, action: () => editor.undo(), disabled: !editor.canUndo },
             { label: 'Redo', shortcut: `${MOD}Shift+Z`, action: () => editor.redo(), disabled: !editor.canRedo },
@@ -250,6 +254,24 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
               Sign in
             </button>
           ))}
+        <button
+          type="button"
+          className={`toolbar-button${panels.left.open ? ' active' : ''}`}
+          title={`${panels.left.open ? 'Hide' : 'Show'} layers panel`}
+          aria-pressed={panels.left.open}
+          onClick={() => togglePanel('left')}
+        >
+          <Icon name="panelLeft" />
+        </button>
+        <button
+          type="button"
+          className={`toolbar-button${panels.right.open ? ' active' : ''}`}
+          title={`${panels.right.open ? 'Hide' : 'Show'} properties panel`}
+          aria-pressed={panels.right.open}
+          onClick={() => togglePanel('right')}
+        >
+          <Icon name="panelRight" />
+        </button>
         <button type="button" className="toolbar-button" title="Variables" onClick={onVariables}>
           <Icon name="variable" />
           <span className="toolbar-label">Variables</span>

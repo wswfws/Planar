@@ -440,3 +440,7 @@ Mentioning @ai in a chat message or a note leaves a request for AI agents connec
 ## Auto layout panel and grids
 
 For a frame with auto layout, the Auto layout section holds everything about it: direction (vertical, horizontal, grid) and Wrap; dimensions (W, H with an aspect-ratio lock, and Fixed / Hug / Fill on each axis); a 3×3 alignment grid; the gap with "Fixed gap" or "Auto" (space between); paddings as horizontal and vertical pairs, or per side; whether strokes take up space (Strokes: Included / Excluded); which item is on top (Canvas stacking: Last on top / First on top); and Clip content. A grid lays items out row by row in a set number of columns (and optionally rows) with column and row gaps; arrow keys move an item by a cell or a row, and dragged layers drop in reading order. Code export uses CSS grid. The aspect-ratio lock also applies to resize handles (Shift then frees the ratio).
+
+## Side panels
+
+The Layers and Properties panels are resized by dragging their inner edge (180–560 px; double-click restores 248 px) and hidden with the panel buttons in the toolbar, or both at once with Ctrl/⌘+\ (also in the main menu). Widths and visibility are remembered per browser.

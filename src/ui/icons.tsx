@@ -96,6 +96,18 @@ const paths: Record<string, ReactElement> = {
   gapH: <path d="M3.5 3v10M12.5 3v10M6 8h4M7 6.5 5.5 8 7 9.5M9 6.5l1.5 1.5L9 9.5" />,
   gapV: <path d="M3 3.5h10M3 12.5h10M8 6v4M6.5 7 8 5.5 9.5 7M6.5 9 8 10.5 9.5 9" />,
   unlink: <path d="M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1M3 3l10 10" />,
+  panelLeft: (
+    <>
+      <rect x="2" y="3" width="12" height="10" rx="1" />
+      <path d="M6 3v10" />
+    </>
+  ),
+  panelRight: (
+    <>
+      <rect x="2" y="3" width="12" height="10" rx="1" />
+      <path d="M10 3v10" />
+    </>
+  ),
   link: <path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1" />,
   target: (
     <>

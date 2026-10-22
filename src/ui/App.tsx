@@ -6,6 +6,7 @@ import { ContextMenuProvider } from './ContextMenu';
 import { EditorContext, useEditorState } from './EditorContext';
 import { LayersPanel } from './LayersPanel';
 import { PropertiesPanel } from './PropertiesPanel';
+import { Dock, toggleAllPanels } from './Panels';
 import { Toolbar } from './Toolbar';
 import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
@@ -55,7 +56,8 @@ function useShortcuts(editor: Editor, openFile: () => void): void {
 
       if (mod) {
         let handled = true;
-        if (key === 'z' && !e.shiftKey) editor.undo();
+        if (e.code === 'Backslash') toggleAllPanels();
+        else if (key === 'z' && !e.shiftKey) editor.undo();
         else if ((key === 'z' && e.shiftKey) || key === 'y') editor.redo();
         else if (key === 'd') editor.duplicateSelection();
         else if (key === 'a') editor.selectAll();
@@ -274,12 +276,16 @@ export function App({ fileId, present }: { fileId?: string; present?: boolean })
       <div className={`app${editor.readOnly ? ' read-only' : ''}`}>
         <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} onHistory={() => setHistoryOpen(true)} onAccount={() => setAccountOpen(true)} />
         <div className="workspace">
-          <LayersPanel />
+          <Dock side="left">
+            <LayersPanel />
+          </Dock>
           <main className="stage">
             <Canvas onOpenVariables={() => setVariablesOpen(true)} />
             {fileId && <CommentsLayer />}
           </main>
-          <PropertiesPanel />
+          <Dock side="right">
+            <PropertiesPanel />
+          </Dock>
         </div>
         <Toast />
         {fileId && <ConnectionOverlay />}

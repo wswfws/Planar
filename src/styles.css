@@ -2650,3 +2650,44 @@ select:focus {
 .sidebar.right {
   overflow-x: hidden;
 }
+
+/* Resizable, hideable side panels */
+.dock {
+  position: relative;
+  flex: none;
+  display: flex;
+  min-height: 0;
+}
+
+.dock > .sidebar {
+  width: 100%;
+  min-width: 0;
+}
+
+.dock-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 5;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.dock.left .dock-handle {
+  right: -3px;
+}
+
+.dock.right .dock-handle {
+  left: -3px;
+}
+
+.dock-handle:hover,
+body.resizing-panel .dock-handle {
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+body.resizing-panel {
+  cursor: col-resize;
+  user-select: none;
+}
