@@ -59,7 +59,7 @@ import { applyStyles, TEXT_STYLE_FIELDS, textStyleValues } from './styles';
 import { importLibrary, libraryOf, removeLibrary, visiblePageIds, type LibrarySnapshot } from './library';
 import type { ComponentProp, ComponentPropType, EffectStyle, PlanarDocument, SceneNode, TextStyle, VariableType } from './types';
 import { coerce, defaultValue, resolveVariables, unbindVariable } from './variables';
-import { applyOps, diffDocs, repairTree, type Op } from './ops';
+import { applyOps, DocSnapshot, repairTree, type Op } from './ops';
 import { insertSvg, parseSvg } from './svg';
 import { createWelcomeDocument } from './welcome';
 import { createNote, MAX_MESSAGES, newMessage, noteIds } from './notes';
@@ -186,7 +186,13 @@ export class Editor {
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
   /** Document as it was when the current transaction began. */
-  private txBase: { doc: PlanarDocument; selection: string[]; pageId: string } | null = null;
+  private txBase: { selection: string[]; pageId: string } | null = null;
+  /** The document as JSON when the current (or next) transaction began. */
+  private snapshot: DocSnapshot | null = null;
+  /** The document changed since the snapshot outside a transaction (undo, remote changes). */
+  private snapshotStale = true;
+  /** Bumped whenever the document may have changed (not for selection or view changes). */
+  docVersion = 0;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private messageTimer: ReturnType<typeof setTimeout> | null = null;
   private pageViewports = new Map<string, Viewport>();
@@ -262,6 +268,7 @@ export class Editor {
 
   /** Applies history or remote ops and tidies up what depends on them. */
   private applyAndNormalize(ops: Op[]): void {
+    if (!this.txBase) this.snapshotStale = true;
     applyOps(this.doc, ops);
     this.normalize();
     if (!this.doc.nodes[this.pageId]) this.pageId = this.doc.pageIds[0];
@@ -272,7 +279,10 @@ export class Editor {
   }
 
   begin(): void {
-    if (!this.txBase) this.txBase = { doc: structuredClone(this.doc), selection: [...this.selection], pageId: this.pageId };
+    if (this.txBase) return;
+    if (!this.snapshot || this.snapshotStale) this.snapshot = new DocSnapshot(this.doc);
+    this.snapshotStale = false;
+    this.txBase = { selection: [...this.selection], pageId: this.pageId };
   }
 
   commit(): void {
@@ -280,15 +290,17 @@ export class Editor {
     this.txBase = null;
     if (!base) return;
     this.normalize();
-    const redo = diffDocs(base.doc, this.doc);
+    const d = this.snapshot!.diff(this.doc);
+    const { redo, undo } = d;
     if (redo.length && this.readOnly) {
       // Safety net: some direct edit slipped past change(). Undo it.
-      this.applyAndNormalize(diffDocs(this.doc, base.doc));
+      this.applyAndNormalize(undo);
       this.emit();
       return;
     }
+    this.snapshot!.adopt(d);
     if (redo.length) {
-      this.undoStack.push({ undo: diffDocs(this.doc, base.doc), redo, selection: base.selection, pageId: base.pageId });
+      this.undoStack.push({ undo, redo, selection: base.selection, pageId: base.pageId });
       if (this.undoStack.length > 200) this.undoStack.shift();
       this.redoStack = [];
       this.scheduleSave();
@@ -300,7 +312,7 @@ export class Editor {
     const base = this.txBase;
     this.txBase = null;
     if (base) {
-      this.applyAndNormalize(diffDocs(this.doc, base.doc));
+      this.applyAndNormalize(this.snapshot!.diff(this.doc).undo);
       this.selection = base.selection.filter((id) => this.doc.nodes[id]);
     }
     this.emit();
@@ -313,7 +325,7 @@ export class Editor {
    */
   applyRemote(ops: Op[]): void {
     if (!ops.length) return;
-    if (this.txBase) applyOps(this.txBase.doc, ops);
+    if (this.txBase) this.snapshot!.applyOps(ops);
     this.applyAndNormalize(ops);
     this.emit();
   }
@@ -322,6 +334,7 @@ export class Editor {
   replaceDocument(doc: PlanarDocument, opts: { keepView?: boolean } = {}): void {
     this.finishTextEditing();
     this.txBase = null;
+    this.snapshotStale = true;
     this.doc = doc;
     repairTree(doc);
     this.pageId = doc.nodes[this.pageId] ? this.pageId : doc.pageIds[0];
@@ -354,6 +367,7 @@ export class Editor {
 
   private normalize(): void {
     const { doc } = this;
+    this.docVersion++;
     // Order matters: variables feed sizes, groups and layout feed the
     // components that instances copy, and instances then lay out themselves.
     resolveVariables(doc);
@@ -371,6 +385,24 @@ export class Editor {
     for (const p of doc.pageIds) fitGroups(doc, p);
     this.selection = this.selection.filter((id) => this.doc.nodes[id]);
     if (this.editingTextId && !this.doc.nodes[this.editingTextId]) this.editingTextId = null;
+  }
+
+  /** Times each step of normalize() on the current document, in ms (for diagnosing slow files). */
+  profileNormalize(): Record<string, number> {
+    const { doc } = this;
+    const out: Record<string, number> = {};
+    const time = (name: string, fn: () => void) => {
+      const t = performance.now();
+      fn();
+      out[name] = (out[name] ?? 0) + Math.round((performance.now() - t) * 10) / 10;
+    };
+    time('resolveVariables', () => resolveVariables(doc));
+    time('applyStyles', () => applyStyles(doc));
+    time('fitGroups', () => doc.pageIds.forEach((p) => fitGroups(doc, p)));
+    time('applyAutoLayout', () => doc.pageIds.forEach((p) => applyAutoLayout(doc, p, this.layoutSkip)));
+    time('syncInstances', () => syncInstances(doc));
+    time('applyComponentProps', () => applyComponentProps(doc));
+    return out;
   }
 
   get canUndo(): boolean {

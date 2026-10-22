@@ -63,6 +63,17 @@ function shapePath(ctx: CanvasRenderingContext2D, node: SceneNode, spread = 0, b
 
 const canFilter = (ctx: CanvasRenderingContext2D) => 'filter' in ctx;
 
+/** Parsed vector paths, kept while the layer's paths and size stay the same. */
+const pathCache = new WeakMap<object, { w: number; h: number; bw: number; bh: number; list: { path: Path2D; fillRule: CanvasFillRule }[] }>();
+
+function vectorPaths(node: SceneNode): { path: Path2D; fillRule: CanvasFillRule }[] {
+  const c = pathCache.get(node.paths);
+  if (c && c.w === node.width && c.h === node.height && c.bw === node.pathBox.w && c.bh === node.pathBox.h) return c.list;
+  const list = nodePaths(node).map((p) => ({ path: new Path2D(p.d), fillRule: p.fillRule }));
+  pathCache.set(node.paths, { w: node.width, h: node.height, bw: node.pathBox.w, bh: node.pathBox.h, list });
+  return list;
+}
+
 /** How many device pixels one layer unit covers under the current transform. */
 function deviceScale(m: DOMMatrix): number {
   return Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
@@ -83,9 +94,8 @@ function fillSilhouette(ctx: CanvasRenderingContext2D, doc: PlanarDocument, node
   const stroked = node.strokeWidth > 0 && node.strokes.some((s) => s.visible);
   if (node.type === 'vector' && node.paths.length) {
     if (typeof Path2D === 'undefined') return;
-    for (const p of nodePaths(node)) {
-      const path = new Path2D(p.d);
-      if (node.fills.some((f) => f.visible)) ctx.fill(path, p.fillRule);
+    for (const { path, fillRule } of vectorPaths(node)) {
+      if (node.fills.some((f) => f.visible)) ctx.fill(path, fillRule);
       if (stroked) {
         ctx.lineWidth = node.strokeWidth;
         ctx.stroke(path);
@@ -142,7 +152,7 @@ function innerShadow(ctx: CanvasRenderingContext2D, node: SceneNode, e: Effect):
   if (node.type === 'vector' && node.paths.length) {
     if (typeof Path2D === 'undefined') return ctx.restore();
     hole = new Path2D();
-    for (const p of nodePaths(node)) hole.addPath(new Path2D(p.d));
+    for (const p of vectorPaths(node)) hole.addPath(p.path);
     ctx.clip(hole);
   } else {
     shapePath(ctx, node);
@@ -206,6 +216,12 @@ function drawText(ctx: CanvasRenderingContext2D, node: SceneNode, paint: Paint):
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = node.textAlign;
   const lh = lineHeightPx(node);
+  if (node.fontSize * deviceScale(ctx.getTransform()) < 3) {
+    const lines = Math.max(1, Math.round(node.height / lh));
+    ctx.globalAlpha *= 0.35;
+    for (let i = 0; i < lines; i++) ctx.fillRect(0, i * lh + lh * 0.25, node.width, lh * 0.5);
+    return;
+  }
   const top = verticalOffset(node) + baselineInLine(node);
   const x = node.textAlign === 'center' ? node.width / 2 : node.textAlign === 'right' ? node.width : 0;
   nodeLines(node).forEach((line, i) => {
@@ -221,12 +237,11 @@ function paintNode(ctx: CanvasRenderingContext2D, node: SceneNode): void {
   if (node.type === 'group' || node.type === 'page') return;
   if (node.type === 'vector' && node.paths.length) {
     if (typeof Path2D === 'undefined') return;
-    for (const p of nodePaths(node)) {
-      const path = new Path2D(p.d);
+    for (const { path, fillRule } of vectorPaths(node)) {
       for (const f of node.fills) {
         if (!f.visible || f.type !== 'solid') continue;
         ctx.fillStyle = hexToRgba(f.color, f.opacity);
-        ctx.fill(path, p.fillRule);
+        ctx.fill(path, fillRule);
       }
     }
     return;
@@ -257,8 +272,7 @@ function strokeNode(ctx: CanvasRenderingContext2D, node: SceneNode): void {
   ctx.lineCap = 'round';
   if (node.type === 'vector' && node.paths.length) {
     if (typeof Path2D === 'undefined') return;
-    for (const p of nodePaths(node)) {
-      const path = new Path2D(p.d);
+    for (const { path } of vectorPaths(node)) {
       for (const s of strokes) {
         if (s.type !== 'solid') continue;
         ctx.strokeStyle = hexToRgba(s.color, s.opacity);
@@ -303,6 +317,18 @@ export function drawNode(ctx: CanvasRenderingContext2D, doc: PlanarDocument, id:
   ctx.save();
   ctx.transform(...localMatrix(node));
   ctx.globalAlpha *= node.opacity;
+  // Skip what is off screen or smaller than a pixel. Children of a frame that
+  // does not clip may stick out, so only its own painting is skipped then.
+  const out = !visibleOnCanvas(ctx, node);
+  if (out && (!node.children.length || node.type === 'group' || (isFrameLike(node) && node.clipContent))) {
+    ctx.restore();
+    return;
+  }
+  if (out) {
+    for (const c of paintOrder(node)) drawNode(ctx, doc, c, opts);
+    ctx.restore();
+    return;
+  }
   const effects = opts.hidden?.has(id) ? [] : (node.effects ?? []).filter((e) => e.visible);
   if (effects.length) {
     const blur = effects.find((e) => e.type === 'layer-blur');
@@ -325,6 +351,37 @@ export function drawNode(ctx: CanvasRenderingContext2D, doc: PlanarDocument, id:
   }
   if (!opts.hidden?.has(id)) strokeNode(ctx, node);
   ctx.restore();
+}
+
+/** Whether a layer (in the current transform) covers any of the canvas and at least half a pixel. */
+function visibleOnCanvas(ctx: CanvasRenderingContext2D, node: SceneNode): boolean {
+  if (typeof ctx.getTransform !== 'function' || !ctx.canvas) return true;
+  const m = ctx.getTransform();
+  let reach = node.strokeWidth;
+  for (const e of node.effects ?? []) if (e.visible) reach += Math.abs(e.x) + Math.abs(e.y) + e.radius + Math.max(0, e.spread);
+  const x0 = -reach;
+  const y0 = -reach;
+  const x1 = node.width + reach;
+  const y1 = node.height + reach;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+  ]) {
+    const px = m.a * x + m.c * y + m.e;
+    const py = m.b * x + m.d * y + m.f;
+    minX = Math.min(minX, px);
+    maxX = Math.max(maxX, px);
+    minY = Math.min(minY, py);
+    maxY = Math.max(maxY, py);
+  }
+  if (maxX < 0 || maxY < 0 || minX > ctx.canvas.width || minY > ctx.canvas.height) return false;
+  return maxX - minX >= 0.5 || maxY - minY >= 0.5;
 }
 
 export function drawPage(ctx: CanvasRenderingContext2D, doc: PlanarDocument, pageId: string, opts: RenderOptions = {}): void {

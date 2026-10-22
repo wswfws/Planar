@@ -46,6 +46,8 @@ function opKey(op: Op): string {
 export class CollabClient {
   private ws: WebSocket | null = null;
   private tracker = new ChangeTracker();
+  /** Editor document version at the last flush. */
+  private flushedVersion = -1;
   private seq = 0;
   private pending = new Map<string, number>();
   private unacked = new Map<number, Op[]>();
@@ -312,6 +314,9 @@ export class CollabClient {
       this.flushTimer = null;
     }
     if (!this.joined || this.closed || this.ws?.readyState !== 1) return;
+    // Selection, hover and view changes do not touch the document: nothing to compare.
+    if (this.editor.docVersion === this.flushedVersion) return;
+    this.flushedVersion = this.editor.docVersion;
     const ops = this.tracker.collect(this.editor.doc);
     if (!ops.length) return;
     const seq = ++this.seq;

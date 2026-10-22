@@ -2635,3 +2635,8 @@ select:focus {
   width: 100%;
   min-width: 0;
 }
+
+.rows-spacer {
+  padding: 0;
+  pointer-events: none;
+}

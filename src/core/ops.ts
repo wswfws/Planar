@@ -140,3 +140,73 @@ export class ChangeTracker {
     return ops;
   }
 }
+
+export interface SnapshotDiff {
+  /** Ops turning the snapshot into the document. */
+  redo: Op[];
+  /** Ops turning the document back into the snapshot. */
+  undo: Op[];
+  /** The document's state as JSON, to adopt as the new snapshot. */
+  nodes: Map<string, string>;
+  meta: Map<string, string>;
+}
+
+/**
+ * Every layer and document field as JSON at some moment, to find what
+ * changed since. Cheaper than cloning a large document: only changed layers
+ * are copied.
+ */
+export class DocSnapshot {
+  private nodes = new Map<string, string>();
+  private meta = new Map<string, string>();
+
+  constructor(doc: PlanarDocument) {
+    for (const [id, n] of Object.entries(doc.nodes)) this.nodes.set(id, JSON.stringify(n));
+    for (const key of META_KEYS) this.meta.set(key, JSON.stringify(doc[key]));
+  }
+
+  diff(doc: PlanarDocument): SnapshotDiff {
+    const redo: Op[] = [];
+    const undo: Op[] = [];
+    const nodes = new Map<string, string>();
+    for (const [id, n] of Object.entries(doc.nodes)) {
+      const json = JSON.stringify(n);
+      nodes.set(id, json);
+      const prev = this.nodes.get(id);
+      if (prev === json) continue;
+      redo.push({ o: 'node', id, node: JSON.parse(json) });
+      undo.push({ o: 'node', id, node: prev === undefined ? null : JSON.parse(prev) });
+    }
+    for (const [id, prev] of this.nodes) {
+      if (nodes.has(id)) continue;
+      redo.push({ o: 'node', id, node: null });
+      undo.push({ o: 'node', id, node: JSON.parse(prev) });
+    }
+    const meta = new Map<string, string>();
+    for (const key of META_KEYS) {
+      const json = JSON.stringify(doc[key]);
+      meta.set(key, json);
+      const prev = this.meta.get(key);
+      if (prev === json) continue;
+      redo.push({ o: 'meta', key, value: JSON.parse(json) });
+      if (prev !== undefined) undo.push({ o: 'meta', key, value: JSON.parse(prev) });
+    }
+    return { redo, undo, nodes, meta };
+  }
+
+  /** Takes the document state a diff saw as the new snapshot. */
+  adopt(d: SnapshotDiff): void {
+    this.nodes = d.nodes;
+    this.meta = d.meta;
+  }
+
+  /** Changes made by others while the snapshot is the base of a local edit. */
+  applyOps(ops: Op[]): void {
+    for (const op of ops) {
+      if (op.o === 'node') {
+        if (op.node) this.nodes.set(op.id, JSON.stringify({ ...op.node, id: op.id }));
+        else this.nodes.delete(op.id);
+      } else this.meta.set(op.key, JSON.stringify(op.value));
+    }
+  }
+}

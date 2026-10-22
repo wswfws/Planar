@@ -23,18 +23,30 @@ export function fontString(node: Pick<SceneNode, 'fontWeight' | 'fontSize' | 'fo
   return `${node.fontWeight} ${node.fontSize}px ${node.fontFamily}`;
 }
 
+const linesCache = new Map<string, string[]>();
+
 /** Splits text into lines, wrapping words when maxWidth is given. */
 export function layoutLines(node: SceneNode, maxWidth: number | null): string[] {
   const font = fontString(node);
   const paragraphs = node.characters.split('\n');
   if (maxWidth === null) return paragraphs;
+  const key = `${font}|${maxWidth}|${node.characters}`;
+  const cached = linesCache.get(key);
+  if (cached) return cached;
+  const lines = wrapParagraphs(paragraphs, font, node.fontSize, maxWidth);
+  if (linesCache.size > 20000) linesCache.clear();
+  linesCache.set(key, lines);
+  return lines;
+}
+
+function wrapParagraphs(paragraphs: string[], font: string, fontSize: number, maxWidth: number): string[] {
   const lines: string[] = [];
   for (const para of paragraphs) {
     const words = para.split(/(\s+)/);
     let line = '';
     for (const word of words) {
       const candidate = line + word;
-      if (line && measureWidth(candidate.trimEnd(), font, node.fontSize) > maxWidth) {
+      if (line && measureWidth(candidate.trimEnd(), font, fontSize) > maxWidth) {
         lines.push(line.trimEnd());
         line = word.trimStart();
       } else {
@@ -76,11 +88,12 @@ export function fontMetrics(node: Pick<SceneNode, 'fontWeight' | 'fontSize' | 'f
 /** Forget cached font metrics (after new fonts were loaded). */
 export function clearTextMetrics(): void {
   metricsCache.clear();
+  linesCache.clear();
 }
 
 /** Fonts may finish loading after first use; forget cached metrics then. */
 if (typeof document !== 'undefined' && document.fonts) {
-  document.fonts.addEventListener?.('loadingdone', () => metricsCache.clear());
+  document.fonts.addEventListener?.('loadingdone', () => clearTextMetrics());
 }
 
 /**

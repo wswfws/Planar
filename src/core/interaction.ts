@@ -286,7 +286,8 @@ export class Interaction {
         const hover = h ? null : this.frameLabelAt(e.screen) ?? this.hitAt(world);
         if (hover !== editor.hoverId) {
           editor.hoverId = hover;
-          editor.emit();
+          // Only the canvas shows the hover outline; re-rendering the panels for it is costly in big files.
+          editor.requestRedraw();
         }
       }
       return;
