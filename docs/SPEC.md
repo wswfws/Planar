@@ -420,3 +420,7 @@ Text styles (font family, size, weight, line height) and effect styles (shadows 
 ## Team libraries
 
 "Team libraries…" (main menu, or the button in Assets) publishes the open file's components, variables and styles as a library, republishes changes with a new version, or unpublishes. The same dialog lists libraries published in files you work with: "Add to file" copies one in (its components appear in Assets with the library's name and insert like local ones), "Update" brings a newer version in while instances keep their overrides, and "Remove" turns its instances into ordinary layers. "Go to main component" on a library instance opens the library file.
+
+## Importing Figma files
+
+"Import from Figma…" on the Files page converts a Figma design file read through the Figma REST API with the user's own token (in the browser; the token is not stored), or the API's JSON saved by the user, into a new Planar file, and lists what was simplified. See FIGMA_IMPORT.md.

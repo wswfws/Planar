@@ -1,3 +1,5 @@
+import { FigmaImportDialog, looksLikeFigmaFile } from './FigmaImportDialog';
+import { figmaToPlanar } from '../import/figma';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { files, fileLink, projects, type FileInfo, type FileScope, type ProjectInfo } from '../collab/session';
 import { ProjectDialog } from './ProjectDialog';
@@ -158,6 +160,7 @@ export function FilesHome() {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const importRef = useRef<HTMLInputElement>(null);
+  const [figmaOpen, setFigmaOpen] = useState(false);
   const draft = (() => {
     try {
       return localStorage.getItem('planar:document');
@@ -227,6 +230,9 @@ export function FilesHome() {
           </button>
           <button type="button" className="small-button" onClick={() => importRef.current?.click()}>
             Import…
+          </button>
+          <button type="button" className="small-button" onClick={() => setFigmaOpen(true)}>
+            Import from Figma…
           </button>
           {draft && (
             <button
@@ -307,13 +313,17 @@ export function FilesHome() {
           e.target.value = '';
           if (!file) return;
           try {
-            await create({ doc: JSON.parse(await file.text()), name: file.name.replace(/\.planar\.json$|\.json$/i, '') });
+            const data = JSON.parse(await file.text());
+            // The JSON of a Figma file (from its REST API) is converted on the way in.
+            if (looksLikeFigmaFile(data)) await create({ doc: figmaToPlanar(data).doc });
+            else await create({ doc: data, name: file.name.replace(/\.planar\.json$|\.json$/i, '') });
           } catch {
             setError('That file is not a Planar document');
           }
         }}
       />
       {account && <AccountDialog onClose={() => setAccount(false)} />}
+      {figmaOpen && <FigmaImportDialog onClose={() => setFigmaOpen(false)} onCreate={(doc) => create({ doc })} />}
       {projectDialog && (
         <ProjectDialog
           id={projectDialog}
