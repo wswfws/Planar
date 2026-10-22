@@ -52,11 +52,30 @@ export function markOverrides(node: SceneNode, keys: Iterable<string>): void {
   node.overrides = [...set];
 }
 
+/** Deep equality for plain JSON-like values. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!sameValue(a[i], b[i])) return false;
+    return true;
+  }
+  if (Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) if (!sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) return false;
+  return true;
+}
+
 function copyFields(target: SceneNode, source: SceneNode, root: boolean): void {
   const overridden = new Set(target.overrides);
   for (const key of Object.keys(source) as (keyof SceneNode)[]) {
     if (NEVER_SYNCED.has(key) || overridden.has(key) || (root && ROOT_OWN.has(key))) continue;
     const value = source[key];
+    // Most fields are already in sync; comparing is much cheaper than copying
+    // large values (image data, vector paths) on every change.
+    if (sameValue(target[key], value)) continue;
     const next = typeof value === 'object' && value !== null ? structuredClone(value) : value;
     (target as unknown as Record<string, unknown>)[key] = next;
   }
