@@ -38,12 +38,25 @@ function isTyping(target: EventTarget | null): boolean {
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
 
+/**
+ * The key a shortcut means, from the physical key where it has a Latin
+ * letter or digit, so shortcuts work the same with any keyboard layout
+ * (e.g. V is V with a Russian layout too, where it types "м").
+ */
+function shortcutKey(e: KeyboardEvent): string {
+  if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3).toLowerCase();
+  if (/^(Digit|Numpad)\d$/.test(e.code)) return e.code.slice(-1);
+  if (e.code === 'Minus' || e.code === 'NumpadSubtract') return '-';
+  if (e.code === 'Equal' || e.code === 'NumpadAdd') return '=';
+  return e.key.toLowerCase();
+}
+
 function useShortcuts(editor: Editor, openFile: () => void): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTyping(e.target) || document.querySelector('.dialog')) return;
       const mod = e.ctrlKey || e.metaKey;
-      const key = e.key.toLowerCase();
+      const key = shortcutKey(e);
 
       if (e.key === ' ') {
         e.preventDefault();
