@@ -711,7 +711,7 @@ export function PropertiesPanel() {
       )}
       {single?.type === 'instance' && <InstancePropsSection editor={editor} instance={single} />}
       {single && <LayerPropBindings editor={editor} node={single} />}
-      {single && <ContextSection key={single.id} editor={editor} node={single} />}
+      {single && <ContextSection key={`context-${single.id}`} editor={editor} node={single} />}
 
       <Section title="Align">
         <div className="align-row">
@@ -758,7 +758,7 @@ export function PropertiesPanel() {
         )}
       </Section>
 
-      <AutoLayoutSection key={single?.id} editor={editor} nodes={nodes} setSize={setSize} />
+      <AutoLayoutSection key={`autolayout-${single?.id ?? 'multi'}`} editor={editor} nodes={nodes} setSize={setSize} />
       {nodes.length > 0 &&
         nodes.every((n) => {
           const p = n.parentId ? editor.doc.nodes[n.parentId] : null;
