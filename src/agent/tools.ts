@@ -328,7 +328,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       title: 'Create layers',
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       description:
-        'Create layers from nested descriptions in one undoable step. Each layer: {type, name, ...props, children:[...]}. Types: frame, text, rectangle, ellipse, line, vector, group, component, instance (with component:"Name", props:{…}, variant:{…}). Props: width/height (number|"hug"|"fill"), layout ("row"|"column"), gap, padding, align, crossAlign, fill/stroke ("#hex", "#hex 50%", "$var"), radius, shadow ("0 4 12 #000000 25%", "inset …"), blur, backgroundBlur, text, size, weight, font, lineHeight, textAlign, x/y (outside auto layout), opacity, mode.',
+        'Create layers from nested descriptions in one undoable step. Each layer: {type, name, ...props, children:[...]}. Types: frame, text, rectangle, ellipse, line, vector, group, component, instance (with component:"Name", props:{…}, variant:{…}). Props: width/height (number|"hug"|"fill"), layout ("row"|"column"), gap, padding, align, crossAlign, fill/stroke ("#hex", "#hex 50%", "$var"), radius, shadow ("0 4 12 #000000 25%", "inset …"), blur, backgroundBlur, wrap/rowGap (row layouts), constraints ("left-right top", outside auto layout), text, size, weight, font, lineHeight, textAlign, x/y (outside auto layout), opacity, mode.',
       inputSchema: {
         parent: z.string().optional().describe('Parent frame/page id (default: current page)'),
         index: z.number().int().min(0).optional().describe('Position among siblings (default: on top)'),

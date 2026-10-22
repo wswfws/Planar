@@ -42,6 +42,9 @@ export type LayoutMode = 'none' | 'horizontal' | 'vertical';
 export type PrimaryAlign = 'start' | 'center' | 'end' | 'space-between';
 export type CounterAlign = 'start' | 'center' | 'end';
 export type Sizing = 'fixed' | 'hug' | 'fill';
+/** How a layer follows its parent frame when the frame is resized (outside auto layout). */
+export type ConstraintH = 'left' | 'right' | 'left-right' | 'center' | 'scale';
+export type ConstraintV = 'top' | 'bottom' | 'top-bottom' | 'center' | 'scale';
 
 /**
  * One flat node shape for every layer type. Fields that do not apply to a
@@ -104,6 +107,12 @@ export interface SceneNode {
   sizingV: Sizing;
   /** Child opts out of its parent's auto layout. */
   layoutAbsolute: boolean;
+  /** Horizontal auto layout continues on new rows when items do not fit. */
+  layoutWrap: boolean;
+  /** Space between wrapped rows. */
+  counterSpacing: number;
+  constraintH: ConstraintH;
+  constraintV: ConstraintV;
 
   /** Instance: the main component it follows. */
   componentId: string;

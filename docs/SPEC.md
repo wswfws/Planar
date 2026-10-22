@@ -399,8 +399,7 @@ Planar server (see [SELF_HOSTING.md](SELF_HOSTING.md); wire protocol in
 
 ## 13. Out of scope (roadmap)
 
-Variable collections and aliases, wrapping auto layout,
-constraints, boolean operations, Bézier curve editing, gradients, styles, plugins.
+Variable collections and aliases, boolean operations, Bézier curve editing, gradients, styles, plugins.
 
 ## Prototypes and presentation
 
@@ -409,3 +408,7 @@ A layer can link to another top-level frame of its page (`link`, see FILE_FORMAT
 ## Developer export and inspect
 
 Export (properties panel) offers PNG, SVG and PDF. With several layers or screens selected (or nothing selected: every screen of the page), "One file per layer" produces a ZIP, and PDF has one page per layer, sized like it. Inspect shows size, position, radius, gap, padding, font and colours (with variable names) that copy on click, and red distances from the selected layer to the one under the pointer; viewers have it on by default. `GET /api/files/:id/export.zip?format=png|svg|pdf&scale=2&page=<name or id>` returns every screen of a page the same way (PNG and PDF need the optional `@napi-rs/canvas` on the server), for scripts and CI.
+
+## Constraints and wrapping
+
+Layers in a frame without auto layout (or ignoring it) have horizontal and vertical constraints: left, right, left and right (stretch), center, or scale (top, bottom, top and bottom, center, scale vertically). Resizing the frame by handle, in the panel or by an agent moves and stretches its layers accordingly, through nested frames. A resized instance places its layers by their constraints starting from the main component's layout; layers moved or resized inside the instance stay where they were put. The Constraints section shows a pin diagram and two menus. A horizontal auto layout can wrap: items continue on new rows (with their own row spacing) when they do not fit the frame's width; a frame that hugs its width never wraps.

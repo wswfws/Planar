@@ -17,6 +17,7 @@ import {
   type Vec,
 } from './math';
 import { getAncestors, getNode, getParent } from './document';
+import { measureTextNode } from './text';
 import { isFrameLike, type PlanarDocument, type SceneNode } from './types';
 
 export function localMatrix(node: SceneNode): Mat {
@@ -294,13 +295,68 @@ export function isIconFrame(doc: PlanarDocument, n: SceneNode): boolean {
   );
 }
 
-/** Scales what a resized container holds: groups and icon frames. */
+/**
+ * Updates what a resized container holds (sx, sy = new size / old size):
+ * groups and icon frames scale their drawing; other frames move and stretch
+ * their children by the children's constraints.
+ */
 export function scaleContents(doc: PlanarDocument, n: SceneNode, sx: number, sy: number): void {
   if (n.type === 'group') scaleChildren(doc, n.id, sx, sy);
   else if (isIconFrame(doc, n)) {
     scaleChildren(doc, n.id, sx, sy);
     const k = Math.min(Math.abs(sx), Math.abs(sy));
     for (const c of n.children) doc.nodes[c].strokeWidth = Math.round(doc.nodes[c].strokeWidth * k * 100) / 100;
+  } else if (isFrameLike(n) && sx && sy) {
+    applyConstraints(doc, n, n.width / sx, n.height / sy);
+  }
+}
+
+/**
+ * Moves and resizes a frame's children by their constraints after the frame
+ * changed from oldW × oldH to its current size. Children placed by auto layout
+ * are left to it; `keep` skips children whose geometry must not move (e.g.
+ * overridden layers inside an instance).
+ */
+export function applyConstraints(doc: PlanarDocument, frame: SceneNode, oldW: number, oldH: number, keep?: (child: SceneNode) => boolean): void {
+  const dw = frame.width - oldW;
+  const dh = frame.height - oldH;
+  if (Math.abs(dw) < 1e-9 && Math.abs(dh) < 1e-9) return;
+  const auto = frame.layoutMode !== 'none';
+  for (const c of frame.children) {
+    const child = doc.nodes[c];
+    if (!child || (auto && !child.layoutAbsolute) || keep?.(child)) continue;
+    const w0 = child.width;
+    const h0 = child.height;
+    const along = (pos: number, size: number, mode: string, d: number, old: number): [number, number] => {
+      switch (mode) {
+        case 'right':
+        case 'bottom':
+          return [pos + d, size];
+        case 'center':
+          return [pos + d / 2, size];
+        case 'left-right':
+        case 'top-bottom':
+          return [pos, Math.max(0, size + d)];
+        case 'scale': {
+          const k = old > 0 ? (old + d) / old : 1;
+          return [pos * k, size * k];
+        }
+        default:
+          return [pos, size];
+      }
+    };
+    [child.x, child.width] = along(child.x, child.width, child.constraintH, dw, oldW);
+    [child.y, child.height] = along(child.y, child.height, child.constraintV, dh, oldH);
+    if (child.type === 'text' && (child.width !== w0 || child.height !== h0)) {
+      if (child.width !== w0) {
+        child.autoHeight = child.autoWidth || child.autoHeight;
+        child.autoWidth = false;
+      }
+      if (child.height !== h0 && child.width === w0) child.autoHeight = false;
+      if (child.autoHeight) child.height = measureTextNode(child).height;
+    } else if ((child.width !== w0 || child.height !== h0) && w0 > 0 && h0 > 0) {
+      scaleContents(doc, child, child.width / w0, child.height / h0);
+    }
   }
 }
 

@@ -2234,3 +2234,52 @@ select:focus {
   flex: 1;
   min-width: 0;
 }
+
+.constraints {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.constraints .stack {
+  flex: 1;
+  min-width: 0;
+}
+
+.constraints svg {
+  flex: none;
+}
+
+.constraint-frame {
+  fill: none;
+  stroke: var(--border);
+}
+
+.constraint-box {
+  fill: none;
+  stroke: var(--muted);
+}
+
+.constraint-bar {
+  cursor: pointer;
+}
+
+.constraint-bar .hit {
+  fill: transparent;
+}
+
+.constraint-bar line {
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.45;
+}
+
+.constraint-bar:hover line {
+  opacity: 1;
+}
+
+.constraint-bar.active line {
+  stroke: var(--accent);
+  opacity: 1;
+}

@@ -5,7 +5,7 @@ import { propHost, variantAxes, variantSet, variantsOf } from '../core/component
 import { cssEffects } from '../core/effects';
 import { vectorPoints } from '../core/geometry';
 import { cssFontFamily, fontImports } from '../core/fonts';
-import { effectiveSizing } from '../core/layout';
+import { effectiveSizing, wraps } from '../core/layout';
 import { nodePaths } from '../core/paths';
 import { variableValue } from '../core/variables';
 import { isFrameLike, type Paint, type PlanarDocument, type SceneNode, type Variable } from '../core/types';
@@ -160,6 +160,27 @@ function sizeAndPosition(ctx: Ctx, n: SceneNode, css: Record<string, string>, ro
       css.width = 'fit-content';
     }
   }
+  // Constraints keep absolutely placed layers where they belong when the parent resizes.
+  if (!root && !parentAuto && parent && parent.type !== 'page' && parent.type !== 'group') {
+    const pct = (v: number, of: number) => `${Math.round((of ? (v / of) * 100 : 0) * 100) / 100}%`;
+    for (const [mode, start, end, size, pos, len, parentLen] of [
+      [n.constraintH, 'left', 'right', 'width', n.x, n.width, parent.width],
+      [n.constraintV, 'top', 'bottom', 'height', n.y, n.height, parent.height],
+    ] as const) {
+      if (mode === 'right' || mode === 'bottom') {
+        delete css[start];
+        css[end] = px(parentLen - pos - len);
+      } else if (mode === 'left-right' || mode === 'top-bottom') {
+        css[end] = px(parentLen - pos - len);
+        delete css[size];
+      } else if (mode === 'center') {
+        css[start] = `calc(50% + ${px(pos - parentLen / 2)})`;
+      } else if (mode === 'scale') {
+        css[start] = pct(pos, parentLen);
+        css[size] = pct(len, parentLen);
+      }
+    }
+  }
   if (n.rotation) css.transform = `rotate(${Math.round(n.rotation * 100) / 100}deg)`;
   if (n.opacity < 1) css.opacity = String(Math.round(n.opacity * 1000) / 1000);
 }
@@ -303,7 +324,12 @@ function build(ctx: Ctx, n: SceneNode, root = false): El | null {
     if (isFrameLike(n) && n.layoutMode !== 'none') {
       el.css.display = 'flex';
       el.css['flex-direction'] = n.layoutMode === 'horizontal' ? 'row' : 'column';
-      if (n.itemSpacing || n.bindings.itemSpacing) el.css.gap = cssNum(doc, n, 'itemSpacing', n.itemSpacing);
+      if (wraps(doc, n)) {
+        el.css['flex-wrap'] = 'wrap';
+        el.css['align-content'] = 'flex-start';
+        el.css['row-gap'] = px(n.counterSpacing);
+        if (n.itemSpacing || n.bindings.itemSpacing) el.css['column-gap'] = cssNum(doc, n, 'itemSpacing', n.itemSpacing);
+      } else if (n.itemSpacing || n.bindings.itemSpacing) el.css.gap = cssNum(doc, n, 'itemSpacing', n.itemSpacing);
       const pads = [
         ['paddingTop', n.paddingTop],
         ['paddingRight', n.paddingRight],

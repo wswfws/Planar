@@ -11,6 +11,7 @@ import { CodeSection } from './CodeSection';
 import { PrototypeSection } from './PrototypeSection';
 import { InspectSection } from './InspectSection';
 import { EffectsSection } from './EffectsSection';
+import { ConstraintsSection } from './ConstraintsSection';
 import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
@@ -264,6 +265,15 @@ function AutoLayoutSection({ editor, nodes }: { editor: Editor; nodes: SceneNode
                 />
                 Space between
               </label>
+              {frame.layoutMode === 'horizontal' && (
+                <label className="checkbox" title="Start a new row when items do not fit (needs a fixed or fill width)">
+                  <input type="checkbox" checked={frame.layoutWrap} onChange={(e) => set({ layoutWrap: e.target.checked })} />
+                  Wrap
+                </label>
+              )}
+              {frame.layoutMode === 'horizontal' && frame.layoutWrap && (
+                <NumberField label="↕" title="Spacing between rows" value={frame.counterSpacing} min={0} onChange={(v) => set({ counterSpacing: v })} />
+              )}
             </div>
           </div>
           <div className="grid-2">
@@ -595,6 +605,11 @@ export function PropertiesPanel() {
       </Section>
 
       <AutoLayoutSection editor={editor} nodes={nodes} />
+      {nodes.length > 0 &&
+        nodes.every((n) => {
+          const p = n.parentId ? editor.doc.nodes[n.parentId] : null;
+          return isFrameLike(p) && (!isAutoLayout(p) || n.layoutAbsolute);
+        }) && <ConstraintsSection editor={editor} nodes={nodes} />}
 
       <Section title="Layer">
         {parent && isAutoLayout(parent) && single && (

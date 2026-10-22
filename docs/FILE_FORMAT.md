@@ -66,6 +66,10 @@ their default value.
 | `counterAlign` | `start` \| `center` \| `end` | Cross-axis alignment |
 | `sizingH`, `sizingV` | `fixed` \| `hug` \| `fill` | Horizontal / vertical sizing |
 | `layoutAbsolute` | boolean | Child ignores its parent's auto layout |
+| `layoutWrap` | boolean | Horizontal auto layout continues on new rows (not with a hug width) |
+| `counterSpacing` | number | Space between wrapped rows |
+| `constraintH` | `left`, `right`, `left-right`, `center`, `scale` | How the layer follows its parent frame's width when the frame is resized (outside auto layout) |
+| `constraintV` | `top`, `bottom`, `top-bottom`, `center`, `scale` | The same for height |
 | `componentId` | string | Instance: id of its main component |
 | `sourceId` | string | Layer inside an instance: id of the component layer it mirrors |
 | `overrides` | string[] | Instance layers: property names changed locally |

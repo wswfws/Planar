@@ -131,6 +131,8 @@ optional.
 | `clip` | boolean — clip content (frames) |
 | `shadow` | `"x y blur [spread] #RRGGBB [opacity%]"`, `"inset …"` for an inner shadow, several separated by commas; `null` removes all shadows |
 | `blur`, `backgroundBlur` | blur radius in px; `0` or `null` removes it |
+| `wrap`, `rowGap` | boolean; number — row layouts continue on new rows |
+| `constraints` | `"<h> <v>"`, h = left / right / left-right / center / scale, v = top / bottom / top-bottom / center / scale — how the layer follows its parent frame when it is resized (outside auto layout); a single word sets its own axis |
 | `layout` | `"row"`, `"column"` or `"none"` — auto layout |
 | `gap` | number or `"$variable"` |
 | `padding` | `16`, `[12, 24]` (vertical, horizontal) or `[t, r, b, l]` |
@@ -173,6 +175,7 @@ Example — a card in one call:
   `align-items`); *fill* → `flex: 1` / `align-self: stretch`; *hug* → no
   fixed size; layers in frames without auto layout → absolute positioning;
 - fills, strokes, radius, opacity, rotation, clipping, text styles;
+- constraints → `right`/`bottom`, both sides, `calc(50% …)` or percentages; wrapping rows → `flex-wrap: wrap` with `row-gap`;
 - shadows → `box-shadow` (`text-shadow` for text, `filter: drop-shadow()` for vectors), blurs → `filter` / `backdrop-filter`;
 - colours and numbers bound to variables → `var(--token-name)`, matching
   `tokens`;

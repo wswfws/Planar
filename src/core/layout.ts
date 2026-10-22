@@ -60,7 +60,67 @@ function setSize(doc: PlanarDocument, node: SceneNode, axis: Axis, value: number
   if (isAutoLayout(node)) layoutFrame(doc, node, skip);
 }
 
+/** True when a frame lays its items out in wrapping rows (a hug width never wraps). */
+export function wraps(doc: PlanarDocument, frame: SceneNode): boolean {
+  return frame.layoutMode === 'horizontal' && !!frame.layoutWrap && effectiveSizing(doc, frame, 'h') !== 'hug';
+}
+
+/** Horizontal auto layout that starts a new row when the next item does not fit. */
+function layoutWrapped(doc: PlanarDocument, frame: SceneNode, skip: ReadonlySet<string>): void {
+  const sizing = (n: SceneNode, a: Axis) => effectiveSizing(doc, n, a === H ? 'h' : 'v');
+  const items = layoutItems(doc, frame).filter((it) => !skip.has(it.id));
+  const availW = frame.width - frame.paddingLeft - frame.paddingRight;
+  const gap = frame.itemSpacing;
+  const rowGap = Number.isFinite(frame.counterSpacing) ? frame.counterSpacing : gap;
+  // Filling the width means taking a whole row.
+  for (const it of items) if (sizing(it, H) === 'fill') setSize(doc, it, H, availW, skip);
+
+  const rows: SceneNode[][] = [];
+  let row: SceneNode[] = [];
+  let used = 0;
+  for (const it of items) {
+    const w = outerSize(it).w;
+    if (row.length && used + gap + w > availW + 1e-6) {
+      rows.push(row);
+      row = [];
+      used = 0;
+    }
+    used += (row.length ? gap : 0) + w;
+    row.push(it);
+  }
+  if (row.length) rows.push(row);
+
+  const heights = rows.map((r) => r.filter((it) => sizing(it, V) !== 'fill').reduce((m, it) => Math.max(m, outerSize(it).h), 0));
+  rows.forEach((r, i) => r.forEach((it) => sizing(it, V) === 'fill' && setSize(doc, it, V, heights[i], skip)));
+  if (sizing(frame, V) === 'hug') {
+    frame.height = Math.max(0, frame.paddingTop + frame.paddingBottom + heights.reduce((s, h) => s + h, 0) + rowGap * Math.max(0, rows.length - 1));
+  }
+
+  let y = frame.paddingTop;
+  rows.forEach((r, i) => {
+    const rh = heights[i];
+    const total = r.reduce((s, it) => s + outerSize(it).w, 0);
+    const gaps = gap * (r.length - 1);
+    let spacing = gap;
+    let x = frame.paddingLeft;
+    if (frame.primaryAlign === 'space-between' && r.length > 1) spacing = Math.max(0, (availW - total) / (r.length - 1));
+    else if (frame.primaryAlign === 'center') x += (availW - total - gaps) / 2;
+    else if (frame.primaryAlign === 'end') x += availW - total - gaps;
+    for (const it of r) {
+      const o = outerSize(it);
+      let top = y;
+      if (frame.counterAlign === 'center') top += (rh - o.h) / 2;
+      else if (frame.counterAlign === 'end') top += rh - o.h;
+      it.x = x + o.w / 2 - it.width / 2;
+      it.y = top + o.h / 2 - it.height / 2;
+      x += o.w + spacing;
+    }
+    y += rh + rowGap;
+  });
+}
+
 function layoutFrame(doc: PlanarDocument, frame: SceneNode, skip: ReadonlySet<string>): void {
+  if (wraps(doc, frame)) return layoutWrapped(doc, frame, skip);
   const horizontal = frame.layoutMode === 'horizontal';
   const P = horizontal ? H : V;
   const C = horizontal ? V : H;

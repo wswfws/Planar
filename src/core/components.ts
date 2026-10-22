@@ -1,6 +1,7 @@
 import { createNode, getAncestors, newId } from './document';
+import { applyConstraints } from './geometry';
 import { measureTextNode } from './text';
-import type { ComponentProp, ComponentPropType, PlanarDocument, SceneNode } from './types';
+import { isFrameLike, type ComponentProp, type ComponentPropType, type PlanarDocument, type SceneNode } from './types';
 
 /** Fields a layer never takes from the component layer it mirrors. */
 const NEVER_SYNCED = new Set<keyof SceneNode>(['id', 'parentId', 'children', 'sourceId', 'overrides']);
@@ -110,7 +111,14 @@ function mirror(doc: PlanarDocument, target: SceneNode, source: SceneNode, root:
   // Children without a source (should not happen) are dropped too.
   for (const c of target.children) if (!next.includes(c) && doc.nodes[c] && !doc.nodes[c].sourceId) removeSubtree(doc, c);
   target.children = next;
+  // A resized instance (or layer in one) places its children by their constraints,
+  // starting from the component's layout each time; moved or resized layers stay put.
+  if (isFrameLike(target) && (target.width !== source.width || target.height !== source.height)) {
+    applyConstraints(doc, target, source.width, source.height, (c) => c.overrides.some((k) => GEOMETRY.has(k)));
+  }
 }
+
+const GEOMETRY = new Set(['x', 'y', 'width', 'height']);
 
 /** Instances not nested inside another instance, innermost components first. */
 function topLevelInstances(doc: PlanarDocument): SceneNode[] {

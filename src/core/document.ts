@@ -83,6 +83,10 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     sizingH: 'fixed',
     sizingV: 'fixed',
     layoutAbsolute: false,
+    layoutWrap: false,
+    counterSpacing: 10,
+    constraintH: 'left',
+    constraintV: 'top',
     componentId: '',
     sourceId: '',
     overrides: [],
@@ -242,6 +246,8 @@ export function parseDocument(data: unknown): PlanarDocument {
     }
     nodes[id] = { ...createNode(raw.type), ...raw, id };
     nodes[id].effects = sanitizeEffects(raw.effects);
+    if (!['left', 'right', 'left-right', 'center', 'scale'].includes(nodes[id].constraintH)) nodes[id].constraintH = 'left';
+    if (!['top', 'bottom', 'top-bottom', 'center', 'scale'].includes(nodes[id].constraintV)) nodes[id].constraintV = 'top';
   }
   for (const node of Object.values(nodes)) {
     node.children = (Array.isArray(node.children) ? node.children : []).filter((c) => nodes[c]?.parentId === node.id);

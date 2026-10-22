@@ -16,7 +16,7 @@ import { scaleContents } from '../core/geometry';
 import { nodePaths, pathGeometry } from '../core/paths';
 import { insertSvg, parseSvg } from '../core/svg';
 import type { Editor } from '../core/editor';
-import type { Effect, NodeType, Paint, PlanarDocument, SceneNode } from '../core/types';
+import type { ConstraintH, ConstraintV, Effect, NodeType, Paint, PlanarDocument, SceneNode } from '../core/types';
 import { isFrameLike } from '../core/types';
 
 export type Friendly = Record<string, unknown>;
@@ -137,8 +137,14 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
       if (pad !== 0) out.padding = pad;
       if (n.primaryAlign !== 'start') out.align = n.primaryAlign;
       if (n.counterAlign !== 'start') out.crossAlign = n.counterAlign;
+      if (n.layoutMode === 'horizontal' && n.layoutWrap) {
+        out.wrap = true;
+        out.rowGap = round(n.counterSpacing);
+      }
     }
   }
+  const parent = n.parentId ? doc.nodes[n.parentId] : null;
+  if (isFrameLike(parent) && (n.constraintH !== 'left' || n.constraintV !== 'top')) out.constraints = `${n.constraintH} ${n.constraintV}`;
   if (n.type === 'text') {
     out.text = n.characters;
     if (n.fontFamily !== DEFAULT_FONT) out.font = n.fontFamily;
@@ -250,6 +256,22 @@ function parseWeight(value: unknown): number {
   return w;
 }
 
+const H_CONSTRAINTS = ['left', 'right', 'left-right', 'center', 'scale'];
+const V_CONSTRAINTS = ['top', 'bottom', 'top-bottom', 'center', 'scale'];
+
+/** "left-right top", "right bottom", "scale scale" — horizontal first; a single word sets the axis it names. */
+function parseConstraints(value: unknown): [ConstraintH, ConstraintV] {
+  const words = (value === null ? 'left top' : String(value)).trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
+  const bad = () => new PropError(`constraints must be "<${H_CONSTRAINTS.join('|')}> <${V_CONSTRAINTS.join('|')}>", got ${JSON.stringify(value)}`);
+  if (words.length === 2 && H_CONSTRAINTS.includes(words[0]) && V_CONSTRAINTS.includes(words[1])) return words as [ConstraintH, ConstraintV];
+  if (words.length === 1) {
+    if (['left', 'right', 'left-right'].includes(words[0])) return [words[0] as ConstraintH, 'top'];
+    if (['top', 'bottom', 'top-bottom'].includes(words[0])) return ['left', words[0] as ConstraintV];
+    if (words[0] === 'center' || words[0] === 'scale') return [words[0], words[0]];
+  }
+  throw bad();
+}
+
 /** Component or component set by name or id. */
 export function findComponent(doc: PlanarDocument, ref: string): SceneNode | null {
   const byId = doc.nodes[ref];
@@ -269,7 +291,7 @@ const KNOWN = new Set([
   'strokes', 'strokeWidth', 'radius', 'clip', 'layout', 'gap', 'padding', 'align', 'crossAlign', 'absolute', 'text', 'font', 'size',
   'fontSize', 'weight', 'fontWeight', 'lineHeight', 'textAlign', 'textAlignVertical', 'component', 'props', 'variant', 'mode',
   'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg', 'link', 'transition', 'shadow', 'blur',
-  'backgroundBlur',
+  'backgroundBlur', 'constraints', 'wrap', 'rowGap',
 ]);
 
 /**
@@ -383,6 +405,21 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
       const a = String(props.crossAlign);
       if (!['start', 'center', 'end'].includes(a)) throw new PropError('crossAlign must be start, center or end');
       set('counterAlign', a as SceneNode['counterAlign']);
+    }
+
+    if (props.wrap !== undefined) {
+      set('layoutWrap', props.wrap === true);
+      if (n.layoutWrap && n.layoutMode !== 'horizontal') warnings.push('wrap only applies to row layouts');
+    }
+    if (props.rowGap !== undefined) {
+      const g = Number(props.rowGap);
+      if (!Number.isFinite(g)) throw new PropError('rowGap must be a number');
+      set('counterSpacing', g);
+    }
+    if (props.constraints !== undefined) {
+      const [h, v] = parseConstraints(props.constraints);
+      set('constraintH', h);
+      set('constraintV', v);
     }
 
     if (props.text !== undefined) set('characters', String(props.text));
