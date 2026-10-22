@@ -31,6 +31,8 @@ export interface FileInfo {
   deletedAt: number | null;
   linkAccess: LinkAccess;
   members?: Member[];
+  /** Comments by others since you last looked (your files and shared ones). */
+  unreadComments?: number;
 }
 
 export interface ApiKeyInfo {
@@ -99,6 +101,38 @@ export const files = {
   downloadUrl: (id: string) => `/api/files/${id}/download`,
   thumbnailUrl: (id: string, version: number) => `/api/files/${id}/thumbnail.png?v=${version}`,
 };
+
+export interface CommentInfo {
+  id: string;
+  threadId: string | null;
+  pageId: string;
+  nodeId: string | null;
+  x: number;
+  y: number;
+  author: { id: string; name: string; color: string };
+  agent: boolean;
+  text: string;
+  createdAt: number;
+  editedAt: number | null;
+  resolvedAt: number | null;
+}
+
+export const commentsApi = {
+  list: (fileId: string) => api<{ comments: CommentInfo[] }>('GET', `/api/files/${fileId}/comments`).then((r) => r.comments),
+  add: (fileId: string, body: { text: string; threadId?: string; pageId?: string; nodeId?: string; x?: number; y?: number }) =>
+    api<{ comment: CommentInfo }>('POST', `/api/files/${fileId}/comments`, body).then((r) => r.comment),
+  resolve: (fileId: string, id: string, resolved: boolean) => api('PATCH', `/api/files/${fileId}/comments/${id}`, { resolved }),
+  remove: (fileId: string, id: string) => api('DELETE', `/api/files/${fileId}/comments/${id}`),
+  markRead: (fileId: string) => api('POST', `/api/files/${fileId}/comments/read`, {}),
+};
+
+const commentListeners = new Set<() => void>();
+
+/** Calls `fn` when someone changed the comments of the open file. */
+export function onCommentsChanged(fn: () => void): () => void {
+  commentListeners.add(fn);
+  return () => commentListeners.delete(fn);
+}
 
 export type VersionKind = 'auto' | 'named' | 'agent' | 'restore';
 
@@ -239,6 +273,7 @@ export function openServerFile(editor: Editor, fileId: string): () => void {
     guestName: guestName(),
     color: PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)],
     shareUrl: fileLink(fileId),
+    onComments: () => commentListeners.forEach((fn) => fn()),
   });
   current = client;
   client.start();

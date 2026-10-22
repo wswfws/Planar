@@ -10,6 +10,7 @@ import { Toolbar } from './Toolbar';
 import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
 import { VersionsDialog } from './VersionsDialog';
+import { CommentsLayer, CommentsProvider } from './Comments';
 import { watchFonts } from './fontLoader';
 import { looksLikeSvg } from '../core/svg';
 import { openServerFile } from '../collab/session';
@@ -26,6 +27,7 @@ const TOOL_KEYS: Record<string, Tool> = {
   l: 'line',
   p: 'pen',
   t: 'text',
+  c: 'comment',
 };
 
 function isTyping(target: EventTarget | null): boolean {
@@ -225,6 +227,10 @@ function ConnectionOverlay() {
   return <div className="overlay-page">Opening…</div>;
 }
 
+function MaybeComments({ fileId, children }: { fileId?: string; children: React.ReactNode }) {
+  return fileId ? <CommentsProvider fileId={fileId}>{children}</CommentsProvider> : <>{children}</>;
+}
+
 export function App({ fileId }: { fileId?: string }) {
   const editor = useMemo(() => (fileId ? new Editor(createDocument('Loading…'), { autosave: false }) : new Editor()), [fileId]);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -246,6 +252,7 @@ export function App({ fileId }: { fileId?: string }) {
 
   return (
     <EditorContext.Provider value={editor}>
+      <MaybeComments fileId={fileId}>
       <ContextMenuProvider>
       <div className={`app${editor.readOnly ? ' read-only' : ''}`}>
         <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} onHistory={() => setHistoryOpen(true)} onAccount={() => setAccountOpen(true)} />
@@ -253,6 +260,7 @@ export function App({ fileId }: { fileId?: string }) {
           <LayersPanel />
           <main className="stage">
             <Canvas onOpenVariables={() => setVariablesOpen(true)} />
+            {fileId && <CommentsLayer />}
           </main>
           <PropertiesPanel />
         </div>
@@ -275,6 +283,7 @@ export function App({ fileId }: { fileId?: string }) {
         />
       </div>
       </ContextMenuProvider>
+      </MaybeComments>
     </EditorContext.Provider>
   );
 }

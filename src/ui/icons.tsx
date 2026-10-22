@@ -83,6 +83,7 @@ const paths: Record<string, ReactElement> = {
       <circle cx="8" cy="8" r="2" />
     </>
   ),
+  comment: <path d="M2.5 3.5h11v7h-6l-3 3v-3h-2z" />,
   close: <path d="M4 4l8 8M12 4l-8 8" />,
   trash: <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4" />,
 };

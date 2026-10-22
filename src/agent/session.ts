@@ -62,6 +62,20 @@ export interface VersionRow {
   nodes: number;
 }
 
+export interface CommentRow {
+  id: string;
+  threadId: string | null;
+  pageId: string;
+  nodeId: string | null;
+  x: number;
+  y: number;
+  author: { name: string };
+  agent: boolean;
+  text: string;
+  createdAt: number;
+  resolvedAt: number | null;
+}
+
 export interface RemoteFile extends FileRow {
   link: string;
 }
@@ -175,6 +189,24 @@ export class AgentSession {
     await this.request('POST', `${this.versionsRoute()}/${encodeURIComponent(id)}/restore`, {});
     // The server tells open editors to reload; wait until this one has.
     await new Promise((r) => setTimeout(r, 200));
+  }
+
+  private commentsRoute(): string {
+    const id = this.editor?.collab?.fileId;
+    if (!id) throw new Error('Comments need a file from a Planar server; open one first.');
+    return `/api/files/${encodeURIComponent(id)}/comments`;
+  }
+
+  async listComments(): Promise<CommentRow[]> {
+    return (await this.request<{ comments: CommentRow[] }>('GET', this.commentsRoute())).comments;
+  }
+
+  async addComment(body: { text: string; threadId?: string; pageId?: string; nodeId?: string; x?: number; y?: number }): Promise<CommentRow> {
+    return (await this.request<{ comment: CommentRow }>('POST', this.commentsRoute(), body)).comment;
+  }
+
+  async resolveComment(id: string, resolved: boolean): Promise<void> {
+    await this.request('PATCH', `${this.commentsRoute()}/${encodeURIComponent(id)}`, { resolved });
   }
 
   async openFileId(id: string): Promise<string> {

@@ -49,7 +49,7 @@ describe('MCP tools (file mode)', () => {
   it('lists tools and opens a new file', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['code', 'components', 'create', 'delete', 'export', 'files', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables', 'versions'].sort(),
+      ['code', 'components', 'create', 'delete', 'export', 'files', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables', 'versions'].concat(['comments']).sort(),
     );
     // Directories check that every tool says whether it reads or changes data.
     for (const t of tools) expect(t.annotations?.readOnlyHint !== undefined || t.annotations?.destructiveHint !== undefined, t.name).toBe(true);
@@ -287,6 +287,20 @@ describe('remote MCP endpoint (live file)', () => {
     // Put the greeting back so later tests see the same file.
     await call({ action: 'restore', versionId: idOf(textOf(await call({ action: 'list' })), 'With greeting') });
     while (!Object.values(human.doc.nodes).some((n) => n.characters === 'Hello from the agent')) await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it('reads, answers and resolves comments on the canvas', async () => {
+    const call = async (args: Record<string, unknown>) => (await remote.callTool({ name: 'comments', arguments: args })) as ToolResult;
+    const made = await ann.call('POST', `/api/files/${fileId}/comments`, { text: 'Make the text bigger', pageId: human.pageId, x: 10, y: 20 });
+    const listing = textOf(await call({ action: 'list' }));
+    expect(listing).toContain('Make the text bigger');
+    expect(listing).toContain(made.body.comment.id);
+    expect(textOf(await call({ action: 'reply', commentId: made.body.comment.id, text: 'Done, 48px now' }))).toBe('Replied.');
+    expect(textOf(await call({ action: 'list' }))).toContain('Done, 48px now');
+    await call({ action: 'resolve', commentId: made.body.comment.id });
+    expect(textOf(await call({ action: 'list' }))).toBe('No open comments.');
+    expect(textOf(await call({ action: 'list', resolved: true }))).toContain('[resolved]');
+    expect((await call({ action: 'reply', commentId: made.body.comment.id })).isError).toBe(true);
   });
 
   it('cannot touch server files', async () => {

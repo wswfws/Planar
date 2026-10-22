@@ -118,3 +118,7 @@ gets 404.
 Server messages: `{t:'reset', doc, version}` — the whole document was replaced (a version was restored); clients drop pending and unacknowledged changes and show the new document.
 
 HTTP (editors only; viewers get 403): `GET /api/files/:id/versions`, `POST /api/files/:id/versions {label}`, `GET|PATCH /api/files/:id/versions/:vid`, `POST /api/files/:id/versions/:vid/restore`. Snapshots are taken automatically before an agent (API key / OAuth token) starts editing, and after 30 minutes of quiet or hourly while people edit; automatic ones are kept 30 days / 100 per file.
+
+## Comments
+
+Server message `{t:'comments'}` tells open clients to reload the comments of the file. HTTP: `GET|POST /api/files/:id/comments` (POST needs sign-in; `{text, pageId, nodeId?, x, y}` starts a thread, `{text, threadId}` replies), `PATCH|DELETE /api/files/:id/comments/:cid` (`{text}` author only, `{resolved}` author of the thread or an editor), `POST /api/files/:id/comments/read` marks them read. Anyone who can view a file can comment; a reply reopens a resolved thread. The file list reports `unreadComments` per file.

@@ -14,6 +14,7 @@ const TOOLS: { tool: Tool; icon: IconName; label: string; key: string }[] = [
   { tool: 'line', icon: 'line', label: 'Line', key: 'L' },
   { tool: 'pen', icon: 'pen', label: 'Pen', key: 'P' },
   { tool: 'text', icon: 'text', label: 'Text', key: 'T' },
+  { tool: 'comment', icon: 'comment', label: 'Comment', key: 'C' },
 ];
 
 export const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
@@ -164,7 +165,7 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
           ]}
         />
         <div className="tools" role="toolbar" aria-label="Tools">
-          {TOOLS.map((t) => (
+          {TOOLS.filter((t) => t.tool !== 'comment' || editor.collab).map((t) => (
             <button
               key={t.tool}
               type="button"

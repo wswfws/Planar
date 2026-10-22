@@ -61,7 +61,7 @@ import { applyOps, diffDocs, repairTree, type Op } from './ops';
 import { insertSvg, parseSvg } from './svg';
 import { createWelcomeDocument } from './welcome';
 
-export type Tool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'text';
+export type Tool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'text' | 'comment';
 
 export interface Viewport {
   /** Screen position of the world origin. */
@@ -868,7 +868,8 @@ export class Editor {
   // ------------------------------------------------------------- tools
 
   setTool(tool: Tool): void {
-    if (this.readOnly && tool !== 'select' && tool !== 'hand') return;
+    if (this.readOnly && tool !== 'select' && tool !== 'hand' && tool !== 'comment') return;
+    if (tool === 'comment' && !this.collab) return;
     if (this.tool === 'pen' && tool !== 'pen') this.finishPen(false);
     this.finishTextEditing();
     this.tool = tool;

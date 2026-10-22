@@ -135,6 +135,7 @@ function Card({ file, scope, reload, onError }: { file: FileInfo; scope: FileSco
           {file.role && scope === 'shared' ? `${ROLE_LABEL[file.role]} · ` : ''}
           {scope === 'trash' && file.deletedAt ? `Deleted ${ago(file.deletedAt)}` : `Edited ${ago(file.updatedAt)}`}
           {file.linkAccess !== 'none' && scope !== 'trash' ? ' · Link' : ''}
+          {file.unreadComments ? <span className="badge">{file.unreadComments} new comment{file.unreadComments === 1 ? '' : 's'}</span> : null}
         </span>
       </div>
     </div>

@@ -9,6 +9,7 @@ import type { Alerts } from './alerts';
 import type { Metrics } from './metrics';
 import type { Room, RoomStore } from './rooms';
 import type { VersionMeta, VersionStore } from './versions';
+import type { Comment, CommentStore } from './comments';
 
 const COOKIE = 'planar_session';
 const MAX_BODY = 60 * 1024 * 1024;
@@ -35,6 +36,9 @@ export interface ApiContext {
   kickUser: (userId: string, reason: string) => void;
   dataDir: string | null;
   versions: VersionStore;
+  comments: CommentStore;
+  /** Tells open editors to reload the comments of a file. */
+  commentsChanged: (fileId: string) => void;
   /** Tells open editors that the whole document was replaced (restoring a version). */
   reset: (room: Room) => void;
   /** Bearer token for /api/metrics (Prometheus); the endpoint is off without it. */
@@ -310,6 +314,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           updatedAt: f.updatedAt,
           deletedAt: f.deletedAt,
           linkAccess: f.linkAccess,
+          ...(user ? { unreadComments: ctx.comments.unread(user.id, f.id) } : {}),
         };
         if (!detailed) return base;
         const members = can(role, 'share')
@@ -393,6 +398,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
             ctx.accessChanged(rec.id);
             await store.remove(rec.id);
             await ctx.versions.removeFile(rec.id);
+            ctx.comments.removeFile(rec.id);
             thumbs.delete(rec.id);
           } else {
             rec.deletedAt = Date.now();
@@ -457,6 +463,96 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           ctx.accessChanged(rec.id);
         }
         return json(200, { file: view(rec, roleFor(rec, me.id), true) });
+      }
+
+      if (sub === 'comments') {
+        const publicComment = (c: Comment) => ({
+          id: c.id,
+          threadId: c.threadId,
+          pageId: c.pageId,
+          nodeId: c.nodeId,
+          x: c.x,
+          y: c.y,
+          author: { id: c.authorId, name: c.authorName, color: db.users.get(c.authorId)?.color ?? '#7b7bf0' },
+          agent: c.agent,
+          text: c.text,
+          createdAt: c.createdAt,
+          editedAt: c.editedAt,
+          resolvedAt: c.resolvedAt,
+        });
+        const cid = parts[3];
+        if (!cid) {
+          if (method === 'GET') return json(200, { comments: ctx.comments.list(rec.id).map(publicComment) });
+          if (method === 'POST') {
+            const me = need();
+            const body = await readJson(req);
+            const text = str(body.text, 4000);
+            if (!text) throw new HttpError(400, 'Write something first');
+            let root: Comment | undefined;
+            if (body.threadId) {
+              root = ctx.comments.get(String(body.threadId));
+              if (!root || root.fileId !== rec.id || root.threadId) throw new HttpError(404, 'No such thread');
+            }
+            const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+            const comment = ctx.comments.add({
+              fileId: rec.id,
+              threadId: root?.id ?? null,
+              pageId: root?.pageId ?? str(body.pageId, 64),
+              nodeId: root ? root.nodeId : body.nodeId ? str(body.nodeId, 64) : null,
+              x: root ? root.x : num(body.x),
+              y: root ? root.y : num(body.y),
+              authorId: me.id,
+              authorName: me.displayName,
+              agent: viaKey,
+              text,
+              mentions: mentionedUsers(db, text),
+            });
+            if (root?.resolvedAt) {
+              root.resolvedAt = null; // a reply reopens the thread
+              ctx.comments.update(root);
+            }
+            ctx.comments.markRead(me.id, rec.id);
+            ctx.metrics.inc('comments');
+            ctx.commentsChanged(rec.id);
+            return json(200, { comment: publicComment(comment) });
+          }
+          throw new HttpError(405, 'Method not allowed');
+        }
+        if (cid === 'read' && method === 'POST') {
+          ctx.comments.markRead(need().id, rec.id);
+          return json(200, { ok: true });
+        }
+        const c = ctx.comments.get(cid);
+        if (!c || c.fileId !== rec.id) throw new HttpError(404, 'No such comment');
+        const me = need();
+        if (method === 'PATCH') {
+          const body = await readJson(req);
+          if (typeof body.text === 'string') {
+            if (c.authorId !== me.id) throw new HttpError(403, 'Only the author can edit a comment');
+            const text = str(body.text, 4000);
+            if (!text) throw new HttpError(400, 'A comment cannot be empty');
+            c.text = text;
+            c.mentions = mentionedUsers(db, text);
+            c.editedAt = Date.now();
+          }
+          if (typeof body.resolved === 'boolean') {
+            const root = c.threadId ? ctx.comments.get(c.threadId) : c;
+            if (!root) throw new HttpError(404, 'No such thread');
+            if (!(can(role, 'edit') || root.authorId === me.id)) throw new HttpError(403, 'You cannot resolve this thread');
+            root.resolvedAt = body.resolved ? Date.now() : null;
+            ctx.comments.update(root);
+          }
+          ctx.comments.update(c);
+          ctx.commentsChanged(rec.id);
+          return json(200, { comment: publicComment(c) });
+        }
+        if (method === 'DELETE') {
+          if (c.authorId !== me.id && !can(role, 'delete')) throw new HttpError(403, 'Only the author or the owner can delete a comment');
+          ctx.comments.remove(c);
+          ctx.commentsChanged(rec.id);
+          return json(200, { ok: true });
+        }
+        throw new HttpError(405, 'Method not allowed');
       }
 
       if (sub === 'versions') {
@@ -537,6 +633,16 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
     }
     return true;
   }
+}
+
+/** Users named as @username in a comment. */
+function mentionedUsers(db: Db, text: string): string[] {
+  const ids = new Set<string>();
+  for (const m of text.matchAll(/@([a-z0-9_.-]{3,32})/gi)) {
+    const u = db.userByName(m[1]);
+    if (u) ids.add(u.id);
+  }
+  return [...ids];
 }
 
 /** Per-user limits set by the admin. */

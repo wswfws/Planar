@@ -191,3 +191,7 @@ Example — a card in one call:
 ### versions
 
 `versions` — `list`, `save {label}`, `restore {versionId}` for the open server file. A version is saved automatically before an agent starts editing; restoring saves the current state first.
+
+### comments
+
+`comments` — `list` (open threads, `resolved: true` for all), `add {text, nodeId?, x?, y?}`, `reply {commentId, text}`, `resolve {commentId, resolved?}` for the open server file.

@@ -155,6 +155,58 @@ export function registerTools(server: McpServer, session: AgentSession): void {
   );
 
   server.registerTool(
+    'comments',
+    {
+      title: 'Comments',
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      description:
+        'Comment threads pinned on the canvas of the open Planar file. list: open threads with their layer, page and replies (resolved: true to include resolved ones). add: start a thread on a layer (nodeId) or at a point of the current page. reply: answer in a thread. resolve: mark a thread resolved or open again.',
+      inputSchema: {
+        action: z.enum(['list', 'add', 'reply', 'resolve']),
+        text: z.string().optional().describe('add / reply: the comment; @username mentions a person'),
+        nodeId: z.string().optional().describe('add: layer the pin is attached to'),
+        x: z.number().optional().describe('add: x on the page (default 0)'),
+        y: z.number().optional().describe('add: y on the page (default 0)'),
+        commentId: z.string().optional().describe('reply / resolve: id of the thread'),
+        resolved: z.boolean().optional().describe('list: include resolved threads. resolve: false reopens (default true)'),
+      },
+    },
+    guard(async ({ action, text: body, nodeId, x, y, commentId, resolved }) => {
+      const editor = await session.ready();
+      if (action === 'list') {
+        const all = await session.listComments();
+        const roots = all.filter((c) => !c.threadId && (resolved || !c.resolvedAt));
+        if (!roots.length) return text(resolved ? 'No comments.' : 'No open comments.');
+        const nl = String.fromCharCode(10);
+        return text(
+          roots
+            .map((r) => {
+              const where = r.nodeId && editor.doc.nodes[r.nodeId] ? `on "${editor.doc.nodes[r.nodeId].name}" (${r.nodeId})` : `at ${Math.round(r.x)},${Math.round(r.y)}`;
+              const page = editor.doc.nodes[r.pageId]?.name ?? r.pageId;
+              const replies = all.filter((c) => c.threadId === r.id);
+              const line = (c: typeof r) => `${c.author.name}${c.agent ? ' (agent)' : ''}: ${c.text}`;
+              return [`${r.id}  ${r.resolvedAt ? '[resolved] ' : ''}page "${page}" ${where}`, `  ${line(r)}`, ...replies.map((c) => `  ↳ ${line(c)}`)].join(nl);
+            })
+            .join(nl + nl),
+        );
+      }
+      if (action === 'resolve') {
+        if (!commentId) throw new PropError('resolve needs commentId (see list)');
+        await session.resolveComment(commentId, resolved !== false);
+        return text(resolved === false ? 'Thread reopened.' : 'Thread resolved.');
+      }
+      if (!body?.trim()) throw new PropError(`${action} needs text`);
+      if (action === 'reply') {
+        if (!commentId) throw new PropError('reply needs commentId (see list)');
+        await session.addComment({ text: body, threadId: commentId });
+        return text('Replied.');
+      }
+      const c = await session.addComment({ text: body, pageId: editor.pageId, nodeId, x, y });
+      return text(`Added comment ${c.id}.`);
+    }),
+  );
+
+  server.registerTool(
     'overview',
     {
       title: 'Document overview',

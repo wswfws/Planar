@@ -3,6 +3,7 @@ import { getAncestors } from '../core/document';
 import { isAutoLayout } from '../core/layout';
 import { isContainer } from '../core/types';
 import { AssetsPanel } from './AssetsPanel';
+import { CommentsPanel, useComments } from './Comments';
 import { useContextMenu } from './ContextMenu';
 import { selectionMenu } from './menus';
 import { useEditorState } from './EditorContext';
@@ -26,6 +27,12 @@ function InlineRename({ value, onDone }: { value: string; onDone: (v: string | n
       }}
     />
   );
+}
+
+function OpenCount() {
+  const { comments } = useComments();
+  const n = comments.filter((c) => !c.threadId && !c.resolvedAt).length;
+  return n ? <span className="tab-count">{n}</span> : null;
 }
 
 function PagesList() {
@@ -85,7 +92,7 @@ export function LayersPanel() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [dragIds, setDragIds] = useState<string[]>([]);
   const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null);
-  const [tab, setTab] = useState<'layers' | 'assets'>('layers');
+  const [tab, setTab] = useState<'layers' | 'assets' | 'comments'>('layers');
   const openMenu = useContextMenu();
 
   // Rename requests come from the canvas context menu and Ctrl/Cmd+R.
@@ -229,8 +236,16 @@ export function LayersPanel() {
           <button type="button" role="tab" aria-selected={tab === 'assets'} className={tab === 'assets' ? 'active' : ''} onClick={() => setTab('assets')}>
             Assets
           </button>
+          {editor.collab && (
+            <button type="button" role="tab" aria-selected={tab === 'comments'} className={tab === 'comments' ? 'active' : ''} onClick={() => setTab('comments')}>
+              Comments
+              <OpenCount />
+            </button>
+          )}
         </header>
-        {tab === 'layers' ? (
+        {tab === 'comments' && editor.collab ? (
+          <CommentsPanel />
+        ) : tab === 'layers' ? (
           <ul onClick={(e) => e.target === e.currentTarget && editor.select([])}>
             {renderRows(editor.pageId, 0)}
             {!editor.page.children.length && <li className="empty-hint">Pick a tool in the toolbar and draw on the canvas.</li>}

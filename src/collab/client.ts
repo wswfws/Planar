@@ -14,6 +14,8 @@ export interface CollabOptions {
   key?: string;
   /** Link others can open to join. */
   shareUrl: string;
+  /** Called when someone added, changed or removed a comment. */
+  onComments?: () => void;
   /** WebSocket implementation (defaults to the global one). */
   WebSocketImpl?: typeof WebSocket;
 }
@@ -187,6 +189,9 @@ export class CollabClient {
         break;
       case 'reset':
         this.onReset(msg);
+        break;
+      case 'comments':
+        this.opts.onComments?.();
         break;
       case 'presence': {
         const peer = this.peers.get(String(msg.from));
