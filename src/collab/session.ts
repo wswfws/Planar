@@ -30,6 +30,7 @@ export interface FileInfo {
   updatedAt: number;
   deletedAt: number | null;
   linkAccess: LinkAccess;
+  projectId?: string | null;
   members?: Member[];
   /** Comments by others since you last looked (your files and shared ones). */
   unreadComments?: number;
@@ -83,10 +84,31 @@ export const accounts = {
   findUsers: (q: string) => api<{ users: Omit<Me, 'id'>[] }>('GET', `/api/users?q=${encodeURIComponent(q)}`).then((r) => r.users),
 };
 
-export type FileScope = 'mine' | 'shared' | 'trash';
+export type FileScope = 'mine' | 'shared' | 'trash' | 'all';
+
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  role: FileRole | null;
+  owner: Me | null;
+  files: number;
+  members?: Member[];
+}
+
+export const projects = {
+  list: () => api<{ projects: ProjectInfo[] }>('GET', '/api/projects').then((r) => r.projects),
+  get: (id: string) => api<{ project: ProjectInfo }>('GET', `/api/projects/${id}`).then((r) => r.project),
+  create: (name: string) => api<{ project: ProjectInfo }>('POST', '/api/projects', { name }).then((r) => r.project),
+  rename: (id: string, name: string) => api<{ project: ProjectInfo }>('PATCH', `/api/projects/${id}`, { name }).then((r) => r.project),
+  remove: (id: string) => api('DELETE', `/api/projects/${id}`),
+  setMember: (id: string, username: string, role: 'editor' | 'viewer' | null) =>
+    api<{ project: ProjectInfo }>('PUT', `/api/projects/${id}/members`, { username, role }).then((r) => r.project),
+};
 
 export const files = {
-  list: (scope: FileScope) => api<{ files: FileInfo[] }>('GET', `/api/files?scope=${scope}`).then((r) => r.files),
+  list: (scope: FileScope, opts: { q?: string; project?: string } = {}) =>
+    api<{ files: FileInfo[] }>('GET', `/api/files?scope=${scope}&q=${encodeURIComponent(opts.q ?? '')}&project=${encodeURIComponent(opts.project ?? '')}`).then((r) => r.files),
+  move: (id: string, projectId: string | null) => api<{ file: FileInfo }>('PATCH', `/api/files/${id}`, { projectId }).then((r) => r.file),
   create: (body: { name?: string; doc?: PlanarDocument } = {}) => api<{ file: FileInfo }>('POST', '/api/files', body).then((r) => r.file),
   get: (id: string) => api<{ file: FileInfo }>('GET', `/api/files/${id}`).then((r) => r.file),
   rename: (id: string, name: string) => api<{ file: FileInfo }>('PATCH', `/api/files/${id}`, { name }).then((r) => r.file),

@@ -48,3 +48,18 @@ describe('can', () => {
     expect(can(null, 'view')).toBe(false);
   });
 });
+
+describe('roleFor with a project', () => {
+  const project = { ownerId: 'pm', members: { ed: 'editor' as const, vi: 'viewer' as const } };
+  it('gives project people a role on every file in it', () => {
+    expect(roleFor(file(), 'pm', project)).toBe('editor');
+    expect(roleFor(file(), 'ed', project)).toBe('editor');
+    expect(roleFor(file(), 'vi', project)).toBe('viewer');
+    expect(roleFor(file(), 'x', project)).toBeNull();
+    expect(roleFor(file(), 'x', null)).toBeNull();
+  });
+  it('keeps the stronger of file and project roles', () => {
+    expect(roleFor(file({ members: { vi: 'editor' } }), 'vi', project)).toBe('editor');
+    expect(roleFor(file(), 'owner', project)).toBe('owner');
+  });
+});

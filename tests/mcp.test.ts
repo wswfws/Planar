@@ -303,6 +303,20 @@ describe('remote MCP endpoint (live file)', () => {
     expect((await call({ action: 'reply', commentId: made.body.comment.id })).isError).toBe(true);
   });
 
+  it('organises files in projects and finds them by name', async () => {
+    const project = (await ann.call('POST', '/api/projects', { name: 'Agent work' })).body.project;
+    const files = async (args: Record<string, unknown>) => textOf((await remote.callTool({ name: 'files', arguments: args })) as ToolResult);
+    expect(await files({ action: 'projects' })).toContain('Agent work');
+    const made = await files({ action: 'create', name: 'Inside project', project: 'agent WORK' });
+    expect(made).toMatch(/Inside project/);
+    const listed = await files({ action: 'list', project: project.id });
+    expect(listed).toContain('Inside project');
+    expect(listed).not.toContain('Team file');
+    expect(await files({ action: 'list', q: 'team' })).toContain('Team file');
+    const bad = (await remote.callTool({ name: 'files', arguments: { action: 'list', project: 'nope' } })) as ToolResult;
+    expect(bad.isError).toBe(true);
+  });
+
   it('cannot touch server files', async () => {
     const r = (await remote.callTool({ name: 'open', arguments: { file: '/etc/passwd' } })) as ToolResult;
     expect(r.isError).toBe(true);

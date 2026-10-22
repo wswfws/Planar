@@ -199,3 +199,7 @@ Example — a card in one call:
 ### Prototype links
 
 `create` / `update` accept `"link": "<top-level frame name or id>"` (and optionally `"transition": "instant" | "slide" | "dissolve"`) to make a layer open that screen on click in Present mode (`/file/<id>/present?frame=<id>`). `"link": null` removes it; `inspect` returns it.
+
+### Projects and search
+
+`files` also takes `action: "projects"`, and `project` (name or id) and `q` (name search) on `list`, and `project` on `create`.

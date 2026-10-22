@@ -122,3 +122,7 @@ HTTP (editors only; viewers get 403): `GET /api/files/:id/versions`, `POST /api/
 ## Comments
 
 Server message `{t:'comments'}` tells open clients to reload the comments of the file. HTTP: `GET|POST /api/files/:id/comments` (POST needs sign-in; `{text, pageId, nodeId?, x, y}` starts a thread, `{text, threadId}` replies), `PATCH|DELETE /api/files/:id/comments/:cid` (`{text}` author only, `{resolved}` author of the thread or an editor), `POST /api/files/:id/comments/read` marks them read. Anyone who can view a file can comment; a reply reopens a resolved thread. The file list reports `unreadComments` per file.
+
+## Projects and search
+
+A project groups files and is shared as a whole: `GET|POST /api/projects`, `GET|PATCH|DELETE /api/projects/:id`, `PUT /api/projects/:id/members {username, role}`. The project owner and editors can edit every file in it, viewers can view them; a person's role on a file is the strongest of the file's own roles, the link and the project. `PATCH /api/files/:id {projectId}` moves a file (the file's owner, into a project they own or edit; `null` removes it). Deleting a project keeps the files. `GET /api/files?scope=mine|shared|trash|all&q=<text>&project=<id>` filters by name and project.

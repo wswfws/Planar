@@ -153,13 +153,28 @@ export class AgentSession {
   }
 
   /** Files of the key's owner: their own, or those shared with them. */
-  async listFiles(scope: 'mine' | 'shared' = 'mine'): Promise<RemoteFile[]> {
-    const { files } = await this.request<{ files: FileRow[] }>('GET', `/api/files?scope=${scope}`);
+  async listFiles(scope: 'mine' | 'shared' | 'all' = 'mine', opts: { q?: string; project?: string } = {}): Promise<RemoteFile[]> {
+    const project = opts.project ? await this.projectId(opts.project) : '';
+    const { files } = await this.request<{ files: FileRow[] }>('GET', `/api/files?scope=${scope}&q=${encodeURIComponent(opts.q ?? '')}&project=${encodeURIComponent(project)}`);
     return files.map((f) => this.remoteFile(f));
   }
 
-  async createFile(name?: string): Promise<RemoteFile> {
+  /** Projects the key owner belongs to. */
+  async listProjects(): Promise<{ id: string; name: string; role: string | null; files: number }[]> {
+    return (await this.request<{ projects: { id: string; name: string; role: string | null; files: number }[] }>('GET', '/api/projects')).projects;
+  }
+
+  /** Project id from an id or a name. */
+  private async projectId(ref: string): Promise<string> {
+    const all = await this.listProjects();
+    const found = all.find((p) => p.id === ref) ?? all.find((p) => p.name.toLowerCase() === ref.toLowerCase());
+    if (!found) throw new Error(`No project "${ref}". Projects: ${all.map((p) => p.name).join(', ') || 'none'}`);
+    return found.id;
+  }
+
+  async createFile(name?: string, project?: string): Promise<RemoteFile> {
     const { file } = await this.request<{ file: FileRow }>('POST', '/api/files', { name });
+    if (project) await this.request('PATCH', `/api/files/${encodeURIComponent(file.id)}`, { projectId: await this.projectId(project) });
     return this.remoteFile(file);
   }
 

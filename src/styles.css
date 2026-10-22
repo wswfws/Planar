@@ -2157,3 +2157,38 @@ select:focus {
 .present-bar:focus-within {
   opacity: 1;
 }
+
+/* ---- projects and search ---- */
+.home-search {
+  margin-left: auto;
+  width: 220px;
+  max-width: 40%;
+}
+.home-projects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.chip:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+.chip.active {
+  border-color: var(--accent, #5b5bd6);
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+.move-option {
+  margin: 3px;
+}

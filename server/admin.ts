@@ -212,6 +212,13 @@ export async function handleAdmin(
 
       db.dropUserSessions(target.id);
       ctx.kickUser(target.id, 'Your account was deleted');
+      for (const pr of [...db.projects.values()]) {
+        if (pr.ownerId === target.id) {
+          db.projects.delete(pr.id);
+          for (const f of db.files.values()) if (f.projectId === pr.id) f.projectId = null;
+        } else delete pr.members[target.id];
+      }
+      db.touch('projects');
       for (const f of [...db.files.values()]) {
         if (f.ownerId === target.id) {
           if (heir) {

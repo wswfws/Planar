@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { LinkAccess, MemberRole } from './access';
+import { roleFor, type LinkAccess, type MemberRole, type Role } from './access';
 
 export interface User {
   id: string;
@@ -37,6 +37,17 @@ export interface FileRecord {
   deletedAt: number | null;
   linkAccess: LinkAccess;
   members: Record<string, MemberRole>;
+  /** Project the file is organised in (its people get access to the file too). */
+  projectId?: string | null;
+}
+
+/** A group of files that is organised and shared as a whole. */
+export interface Project {
+  id: string;
+  name: string;
+  ownerId: string;
+  members: Record<string, MemberRole>;
+  createdAt: number;
 }
 
 export interface ApiKey {
@@ -91,6 +102,7 @@ export class Db {
   users = new Map<string, User>();
   files = new Map<string, FileRecord>();
   keys = new Map<string, ApiKey>();
+  projects = new Map<string, Project>();
   /** token hash → session */
   sessions = new Map<string, Session>();
   /** Sign-in attempts per address (see api.ts). */
@@ -110,6 +122,7 @@ export class Db {
     for (const u of await this.load<User>('users')) this.users.set(u.id, u);
     for (const f of await this.load<FileRecord>('files')) this.files.set(f.id, f);
     for (const k of await this.load<ApiKey>('keys')) this.keys.set(k.id, k);
+    for (const p of await this.load<Project>('projects')) this.projects.set(p.id, p);
     const now = Date.now();
     for (const [hash, s] of Object.entries(await this.loadObject<Session>('sessions'))) if (s.expires > now) this.sessions.set(hash, s);
     this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadObject<unknown>('settings')) };
@@ -137,7 +150,7 @@ export class Db {
   }
 
   /** Schedules a write of one collection. */
-  touch(name: 'users' | 'files' | 'keys' | 'sessions' | 'settings' | 'stats' | 'oauth'): void {
+  touch(name: 'users' | 'files' | 'keys' | 'projects' | 'sessions' | 'settings' | 'stats' | 'oauth'): void {
     if (!this.dir || this.timers.has(name)) return;
     this.timers.set(
       name,
@@ -156,6 +169,8 @@ export class Db {
           ? [...this.files.values()]
           : name === 'keys'
             ? [...this.keys.values()]
+            : name === 'projects'
+              ? [...this.projects.values()]
             : name === 'settings'
               ? this.settings
               : name === 'stats'
@@ -338,6 +353,17 @@ export class Db {
     f.updatedAt = Date.now();
     if (name !== undefined) f.name = name;
     this.touch('files');
+  }
+
+  /** Role of a person on a file, including what the file's project gives them. */
+  roleFor(file: FileRecord, userId: string | null): Role | null {
+    const project = file.projectId ? this.projects.get(file.projectId) : null;
+    return roleFor(file, userId, project);
+  }
+
+  /** Like roleFor, but ignoring the public link (what "shared with me" is based on). */
+  memberRoleFor(file: FileRecord, userId: string): Role | null {
+    return this.roleFor({ ...file, linkAccess: 'none' }, userId);
   }
 
   createFile(ownerId: string | null, name: string, id = randomFileId()): FileRecord {

@@ -5,7 +5,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { parseDocument } from '../src/core/document';
 import { META_KEYS, type Op } from '../src/core/ops';
 import { initCanvas } from '../src/agent/raster';
-import { can, roleFor, type Role } from './access';
+import { can, type Role } from './access';
 import os from 'node:os';
 import { disk, type LiveState } from './admin';
 import { Alerts, type AlertOptions } from './alerts';
@@ -219,7 +219,7 @@ export async function startServer(
   };
   const peerInfo = (c: Client) => ({ id: c.id, name: c.name, color: c.color, presence: c.presence });
   const roleOf = (rec: FileRecord | undefined, userId: string | null): Role | null =>
-    rec && !rec.deletedAt ? roleFor(rec, userId) : null;
+    rec && !rec.deletedAt ? db.roleFor(rec, userId) : null;
 
   const live = (): LiveState => {
     const files = new Map<string, number>();

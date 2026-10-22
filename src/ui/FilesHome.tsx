@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { files, fileLink, type FileInfo, type FileScope } from '../collab/session';
+import { files, fileLink, projects, type FileInfo, type FileScope, type ProjectInfo } from '../collab/session';
+import { ProjectDialog } from './ProjectDialog';
 import { AccountDialog } from './AccountDialog';
 import { Icon } from './icons';
 import { navigate, useServer } from './router';
@@ -61,7 +62,7 @@ function CardMenu({ items }: { items: ({ label: string; action: () => void; dang
   );
 }
 
-function Card({ file, scope, reload, onError }: { file: FileInfo; scope: FileScope; reload: () => void; onError: (m: string) => void }) {
+function Card({ file, scope, reload, onError, onMove }: { file: FileInfo; scope: FileScope; reload: () => void; onError: (m: string) => void; onMove: (f: FileInfo) => void }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(file.name);
   const [noThumb, setNoThumb] = useState(false);
@@ -85,6 +86,7 @@ function Card({ file, scope, reload, onError }: { file: FileInfo; scope: FileSco
           { label: 'Open in new tab', action: () => window.open(`/file/${file.id}`, '_blank') },
           ...(canEdit ? [{ label: 'Rename', action: () => setRenaming(true) }] : []),
           { label: 'Duplicate', action: () => void attempt(() => files.duplicate(file.id)) },
+          ...(file.role === 'owner' ? [{ label: 'Move to project…', action: () => onMove(file) }] : []),
           { label: 'Copy link', action: () => void navigator.clipboard.writeText(fileLink(file.id)).catch(() => undefined) },
           { label: 'Download .planar.json', action: () => (location.href = files.downloadUrl(file.id)) },
           ...(file.role === 'owner' ? ['-' as const, { label: 'Move to trash', danger: true, action: () => void attempt(() => files.trash(file.id)) }] : []),
@@ -149,6 +151,12 @@ export function FilesHome() {
   const [list, setList] = useState<FileInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [account, setAccount] = useState(false);
+  const [projectList, setProjectList] = useState<ProjectInfo[]>([]);
+  const [project, setProject] = useState<string | null>(null);
+  const [projectDialog, setProjectDialog] = useState<string | null>(null);
+  const [moving, setMoving] = useState<FileInfo | null>(null);
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const importRef = useRef<HTMLInputElement>(null);
   const draft = (() => {
     try {
@@ -158,15 +166,28 @@ export function FilesHome() {
     }
   })();
 
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 200);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const reloadProjects = useCallback(() => {
+    projects.list().then(setProjectList, () => undefined);
+  }, []);
+  useEffect(reloadProjects, [reloadProjects]);
+
   const reload = useCallback(() => {
-    files.list(scope).then(
+    // Searching looks through everything; a project shows its own files.
+    const searching = !!query && scope !== 'trash';
+    files.list(searching || project ? 'all' : scope, { q: query, project: project && !searching ? project : undefined }).then(
       (f) => {
         setList(f);
         setError(null);
       },
       (e: Error) => setError(e.message),
     );
-  }, [scope]);
+    reloadProjects();
+  }, [scope, query, project, reloadProjects]);
   useEffect(() => {
     setList(null);
     reload();
@@ -175,6 +196,7 @@ export function FilesHome() {
   const create = async (body: Parameters<typeof files.create>[0]) => {
     try {
       const f = await files.create(body);
+      if (project && projectList.find((p) => p.id === project && (p.role === 'owner' || p.role === 'editor'))) await files.move(f.id, project).catch(() => undefined);
       navigate(`/file/${f.id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -182,6 +204,18 @@ export function FilesHome() {
   };
 
   const tab = TABS.find((t) => t.scope === scope)!;
+  const current = projectList.find((p) => p.id === project) ?? null;
+  const newProject = async () => {
+    const name = prompt('Project name');
+    if (!name?.trim()) return;
+    try {
+      const p = await projects.create(name.trim());
+      reloadProjects();
+      setProject(p.id);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   return (
     <div className="home">
@@ -225,15 +259,42 @@ export function FilesHome() {
       </header>
       <nav className="home-tabs" role="tablist">
         {TABS.map((t) => (
-          <button key={t.scope} type="button" role="tab" aria-selected={scope === t.scope} className={scope === t.scope ? 'active' : ''} onClick={() => setScope(t.scope)}>
+          <button
+            key={t.scope}
+            type="button"
+            role="tab"
+            aria-selected={!project && scope === t.scope}
+            className={!project && scope === t.scope ? 'active' : ''}
+            onClick={() => {
+              setProject(null);
+              setScope(t.scope);
+            }}
+          >
             {t.label}
           </button>
         ))}
+        <input className="home-search" type="search" placeholder="Search files…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search files" />
       </nav>
+      <div className="home-projects">
+        <span className="hint">Projects</span>
+        {projectList.map((p) => (
+          <button key={p.id} type="button" className={`chip${p.id === project ? ' active' : ''}`} onClick={() => setProject(p.id === project ? null : p.id)}>
+            {p.name} <span className="hint">{p.files}</span>
+          </button>
+        ))}
+        <button type="button" className="chip" onClick={newProject}>
+          + New project
+        </button>
+        {current && (
+          <button type="button" className="small-button" onClick={() => setProjectDialog(current.id)}>
+            {current.role === 'owner' ? 'Share project…' : 'People'}
+          </button>
+        )}
+      </div>
       {error && <p className="share-error home-error">{error}</p>}
       <main className="file-grid">
-        {list?.map((f) => <Card key={f.id} file={f} scope={scope} reload={reload} onError={setError} />)}
-        {list && !list.length && <p className="hint">{tab.empty}</p>}
+        {list?.map((f) => <Card key={f.id} file={f} scope={project || query ? 'mine' : scope} reload={reload} onError={setError} onMove={setMoving} />)}
+        {list && !list.length && <p className="hint">{query ? 'No files match your search.' : project ? 'This project has no files yet. Move files here with “Move to project…”.' : tab.empty}</p>}
         {!list && !error && <p className="hint">Loading…</p>}
       </main>
       <input
@@ -253,6 +314,51 @@ export function FilesHome() {
         }}
       />
       {account && <AccountDialog onClose={() => setAccount(false)} />}
+      {projectDialog && (
+        <ProjectDialog
+          id={projectDialog}
+          onClose={() => setProjectDialog(null)}
+          onChanged={() => {
+            reloadProjects();
+            reload();
+          }}
+          onDeleted={() => {
+            setProject(null);
+            setProjectDialog(null);
+            reloadProjects();
+          }}
+        />
+      )}
+      {moving && (
+        <div className="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && setMoving(null)}>
+          <div className="dialog share-dialog" role="dialog" aria-label="Move to project">
+            <header className="dialog-header">
+              <h2>Move “{moving.name}”</h2>
+            </header>
+            <div className="dialog-body share-body">
+              {[null, ...projectList.filter((p) => p.role === 'owner' || p.role === 'editor')].map((p) => (
+                <button
+                  key={p?.id ?? 'none'}
+                  type="button"
+                  className={`chip move-option${(moving.projectId ?? null) === (p?.id ?? null) ? ' active' : ''}`}
+                  onClick={() => {
+                    const file = moving;
+                    setMoving(null);
+                    void files.move(file.id, p?.id ?? null).then(reload, (e: Error) => setError(e.message));
+                  }}
+                >
+                  {p ? p.name : 'No project'}
+                </button>
+              ))}
+            </div>
+            <footer className="dialog-footer">
+              <button type="button" className="small-button" onClick={() => setMoving(null)}>
+                Cancel
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

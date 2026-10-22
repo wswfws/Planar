@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createDocument, parseDocument } from '../src/core/document';
 import { canRender, renderPng } from '../src/agent/raster';
 import type { PlanarDocument } from '../src/core/types';
-import { can, roleFor, type LinkAccess, type MemberRole, type Role } from './access';
-import { Db, SESSION_DAYS, USERNAME, type FileRecord, type User } from './db';
+import { can, type LinkAccess, type MemberRole, type Role } from './access';
+import { Db, randomFileId, SESSION_DAYS, USERNAME, type FileRecord, type Project, type User } from './db';
 import { handleAdmin, handleMetrics, type LiveState } from './admin';
 import type { Alerts } from './alerts';
 import type { Metrics } from './metrics';
@@ -301,6 +301,88 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
       return json(200, { users });
     }
 
+    // ---- projects --------------------------------------------------------
+    if (parts[0] === 'projects') {
+      const me = need();
+      const projectRole = (p: Project): Role | null => (p.ownerId === me.id ? 'owner' : (p.members[me.id] ?? null));
+      const projectView = (p: Project, detailed: boolean) => {
+        const owner = db.users.get(p.ownerId);
+        const base = {
+          id: p.id,
+          name: p.name,
+          role: projectRole(p),
+          owner: owner ? publicUser(owner) : null,
+          files: [...db.files.values()].filter((f) => f.projectId === p.id && !f.deletedAt).length,
+        };
+        if (!detailed) return base;
+        const members = Object.entries(p.members).flatMap(([uid, r]) => {
+          const u = db.users.get(uid);
+          return u ? [{ ...publicUser(u), role: r }] : [];
+        });
+        return { ...base, members };
+      };
+      /** Files in a project may have changed access: tell open editors. */
+      const refresh = (p: Project) => {
+        for (const f of db.files.values()) if (f.projectId === p.id) ctx.accessChanged(f.id);
+      };
+      if (!parts[1]) {
+        if (method === 'GET') {
+          const list = [...db.projects.values()].filter((p) => projectRole(p)).sort((a, b) => a.name.localeCompare(b.name));
+          return json(200, { projects: list.map((p) => projectView(p, false)) });
+        }
+        if (method === 'POST') {
+          const body = await readJson(req);
+          const name = str(body.name, 80);
+          if (!name) throw new HttpError(400, 'Give the project a name');
+          if ([...db.projects.values()].filter((p) => p.ownerId === me.id).length >= 100) throw new HttpError(403, 'Too many projects');
+          const p: Project = { id: randomFileId(), name, ownerId: me.id, members: {}, createdAt: Date.now() };
+          db.projects.set(p.id, p);
+          db.touch('projects');
+          return json(200, { project: projectView(p, true) });
+        }
+        throw new HttpError(405, 'Method not allowed');
+      }
+      const p = db.projects.get(parts[1]);
+      const role = p ? projectRole(p) : null;
+      if (!p || !role) throw new HttpError(404, 'No such project');
+      if (!parts[2]) {
+        if (method === 'GET') return json(200, { project: projectView(p, true) });
+        if (role !== 'owner') throw new HttpError(403, 'Only the owner can change a project');
+        if (method === 'PATCH') {
+          const body = await readJson(req);
+          if (typeof body.name === 'string') p.name = str(body.name, 80) || p.name;
+          db.touch('projects');
+          return json(200, { project: projectView(p, true) });
+        }
+        if (method === 'DELETE') {
+          // Files stay with their owners, just outside the project.
+          for (const f of db.files.values()) if (f.projectId === p.id) f.projectId = null;
+          db.projects.delete(p.id);
+          db.touch('projects');
+          db.touch('files');
+          for (const f of db.files.values()) ctx.accessChanged(f.id);
+          return json(200, { ok: true });
+        }
+        throw new HttpError(405, 'Method not allowed');
+      }
+      if (parts[2] === 'members' && method === 'PUT') {
+        const body = await readJson(req);
+        const target = db.userByName(str(body.username, 64));
+        if (!target) throw new HttpError(404, 'No user with this username');
+        const next = body.role === null ? null : (String(body.role) as MemberRole);
+        if (next !== null && next !== 'editor' && next !== 'viewer') throw new HttpError(400, 'Role must be editor, viewer or null');
+        const leaving = target.id === me.id && next === null;
+        if (role !== 'owner' && !leaving) throw new HttpError(403, 'Only the owner can change who has access');
+        if (target.id === p.ownerId) throw new HttpError(400, 'The owner always has full access');
+        if (next === null) delete p.members[target.id];
+        else p.members[target.id] = next;
+        db.touch('projects');
+        refresh(p);
+        return json(200, { project: projectView(p, true) });
+      }
+      throw new HttpError(404, 'Not found');
+    }
+
     // ---- files -----------------------------------------------------------
     if (parts[0] === 'files') {
       const view = (f: FileRecord, role: Role | null, detailed: boolean) => {
@@ -314,6 +396,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           updatedAt: f.updatedAt,
           deletedAt: f.deletedAt,
           linkAccess: f.linkAccess,
+          projectId: f.projectId ?? null,
           ...(user ? { unreadComments: ctx.comments.unread(user.id, f.id) } : {}),
         };
         if (!detailed) return base;
@@ -330,11 +413,26 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
         if (method === 'GET') {
           const me = need();
           const scope = url.searchParams.get('scope') ?? 'mine';
+          const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+          const projectFilter = url.searchParams.get('project') || '';
           const list: unknown[] = [];
           for (const f of [...db.files.values()].sort((a, b) => b.updatedAt - a.updatedAt)) {
             const mine = f.ownerId === me.id;
-            const show = scope === 'trash' ? mine && !!f.deletedAt : scope === 'shared' ? !mine && !!f.members[me.id] && !f.deletedAt : mine && !f.deletedAt;
-            if (show) list.push(view(f, roleFor(f, me.id), false));
+            const member = !mine && !!db.memberRoleFor(f, me.id);
+            // all: everything the person can open by owning or being invited (search); project: one project's files
+            const show =
+              scope === 'trash'
+                ? mine && !!f.deletedAt
+                : f.deletedAt
+                  ? false
+                  : projectFilter
+                    ? f.projectId === projectFilter && (mine || member)
+                    : scope === 'shared'
+                      ? member
+                      : scope === 'all'
+                        ? mine || member
+                        : mine;
+            if (show && (!query || f.name.toLowerCase().includes(query))) list.push(view(f, db.roleFor(f, me.id), false));
           }
           return json(200, { files: list });
         }
@@ -358,7 +456,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
       }
 
       const rec = db.files.get(parts[1]);
-      const role = rec ? roleFor(rec, user?.id ?? null) : null;
+      const role = rec ? db.roleFor(rec, user?.id ?? null) : null;
       // Trashed files are visible to their owner only; unknown and forbidden files look the same.
       if (!rec || !can(role, 'view') || (rec.deletedAt && role !== 'owner')) {
         throw new HttpError(user ? 404 : 401, user ? 'No such file' : 'Sign in to open this file');
@@ -379,6 +477,19 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
               db.touch('files');
             }
           }
+          if (body.projectId !== undefined) {
+            const me = need();
+            if (!can(role, 'delete')) throw new HttpError(403, 'Only the owner can move a file to a project');
+            if (body.projectId === null) {
+              rec.projectId = null;
+            } else {
+              const target = db.projects.get(String(body.projectId));
+              if (!target || (target.ownerId !== me.id && target.members[me.id] !== 'editor')) throw new HttpError(404, 'No such project, or you cannot add files to it');
+              rec.projectId = target.id;
+            }
+            db.touch('files');
+            ctx.accessChanged(rec.id);
+          }
           if (body.linkAccess !== undefined) {
             need();
             if (!can(role, 'share')) throw new HttpError(403, 'You cannot change sharing');
@@ -387,7 +498,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
             db.touch('files');
             ctx.accessChanged(rec.id);
           }
-          return json(200, { file: view(rec, roleFor(rec, user?.id ?? null), true) });
+          return json(200, { file: view(rec, db.roleFor(rec, user?.id ?? null), true) });
         }
         if (method === 'DELETE') {
           need();
@@ -446,7 +557,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
         else rec.members[target.id] = next;
         db.touch('files');
         ctx.accessChanged(rec.id);
-        return json(200, { file: view(rec, roleFor(rec, me.id), true) });
+        return json(200, { file: view(rec, db.roleFor(rec, me.id), true) });
       }
 
       if (sub === 'transfer' && method === 'POST') {
@@ -462,7 +573,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           db.touch('files');
           ctx.accessChanged(rec.id);
         }
-        return json(200, { file: view(rec, roleFor(rec, me.id), true) });
+        return json(200, { file: view(rec, db.roleFor(rec, me.id), true) });
       }
 
       if (sub === 'comments') {

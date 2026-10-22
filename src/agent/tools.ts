@@ -101,22 +101,28 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       title: 'Planar files',
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       description:
-        'Files on the Planar server for the signed-in user. list: files you own (scope mine) or that others shared with you (scope shared), with your role. create: a new empty file. duplicate: copy any file you can view into your own files.',
+        'Files on the Planar server for the signed-in user. list: files you own (scope mine), that others shared with you (scope shared) or both (scope all), optionally in one project or matching a name search, with your role. projects: projects you belong to. create: a new empty file, optionally inside a project. duplicate: copy any file you can view into your own files.',
       inputSchema: {
-        action: z.enum(['list', 'create', 'duplicate']),
-        scope: z.enum(['mine', 'shared']).optional().describe('list: which files (default mine)'),
+        action: z.enum(['list', 'projects', 'create', 'duplicate']),
+        scope: z.enum(['mine', 'shared', 'all']).optional().describe('list: which files (default mine)'),
+        project: z.string().optional().describe('list / create: project name or id'),
+        q: z.string().optional().describe('list: only files whose name contains this text'),
         name: z.string().optional().describe('create: file name'),
         fileId: z.string().optional().describe('duplicate: the file to copy'),
       },
     },
-    guard(async ({ action, scope, name, fileId }) => {
+    guard(async ({ action, scope, name, fileId, project, q }) => {
+      if (action === 'projects') {
+        const list = await session.listProjects();
+        return text(list.length ? list.map((p) => `${p.id}  "${p.name}"  ${p.role ?? ''}  ${p.files} files`).join(String.fromCharCode(10)) : 'No projects yet.');
+      }
       if (action === 'list') {
-        const list = await session.listFiles(scope ?? 'mine');
+        const list = await session.listFiles(project || q ? (scope ?? 'all') : (scope ?? 'mine'), { q, project });
         if (!list.length) return text(scope === 'shared' ? 'Nothing is shared with you yet.' : 'No files yet. Use files create.');
         return text(list.map((f) => `${f.id}  "${f.name}"  ${f.role ?? ''}${f.owner ? ` (owner ${f.owner.username})` : ''}  ${f.link}`).join('\n'));
       }
       if (action === 'create') {
-        const f = await session.createFile(name);
+        const f = await session.createFile(name, project);
         return text(`Created "${f.name}" — id ${f.id}. Open it with open fileId=${f.id}.\n${f.link}`);
       }
       if (!fileId) throw new PropError('duplicate needs fileId');
