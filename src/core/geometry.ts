@@ -18,7 +18,7 @@ import {
 } from './math';
 import { getAncestors, getNode, getParent } from './document';
 import { measureTextNode } from './text';
-import { isFrameLike, type PlanarDocument, type SceneNode } from './types';
+import { isFrameLike, type PlanarDocument, type SceneNode, paintOrder } from './types';
 
 export function localMatrix(node: SceneNode): Mat {
   if (node.type === 'page') return [...IDENTITY];
@@ -146,8 +146,9 @@ export function hitTest(
 ): string | null {
   const parent = doc.nodes[parentId];
   if (!parent) return null;
-  for (let i = parent.children.length - 1; i >= 0; i--) {
-    const id = parent.children[i];
+  const order = paintOrder(parent);
+  for (let i = order.length - 1; i >= 0; i--) {
+    const id = order[i];
     const node = doc.nodes[id];
     if (!node || !node.visible || exclude.has(id)) continue;
     const local = apply(invert(worldMatrix(doc, id)), point);

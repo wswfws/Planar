@@ -90,6 +90,11 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     layoutAbsolute: false,
     layoutWrap: false,
     counterSpacing: 10,
+    gridColumns: 2,
+    gridRows: 0,
+    strokesIncluded: false,
+    reverseStacking: false,
+    lockAspect: false,
     constraintH: 'left',
     constraintV: 'top',
     componentId: '',
@@ -262,6 +267,9 @@ export function parseDocument(data: unknown): PlanarDocument {
     else delete nodes[id].note;
     if (!['left', 'right', 'left-right', 'center', 'scale'].includes(nodes[id].constraintH)) nodes[id].constraintH = 'left';
     if (!['top', 'bottom', 'top-bottom', 'center', 'scale'].includes(nodes[id].constraintV)) nodes[id].constraintV = 'top';
+    if (!['none', 'horizontal', 'vertical', 'grid'].includes(nodes[id].layoutMode)) nodes[id].layoutMode = 'none';
+    nodes[id].gridColumns = Math.max(1, Math.min(100, Math.round(Number(nodes[id].gridColumns)) || 1));
+    nodes[id].gridRows = Math.max(0, Math.min(100, Math.round(Number(nodes[id].gridRows)) || 0));
   }
   for (const node of Object.values(nodes)) {
     node.children = (Array.isArray(node.children) ? node.children : []).filter((c) => nodes[c]?.parentId === node.id);

@@ -7,7 +7,7 @@ import { drawNode } from './render';
 import { pdfFromJpegs } from './pdf';
 import { uniqueNames, zipFiles } from './zip';
 import { baselineInLine, lineHeightPx, nodeLines, verticalOffset } from './text';
-import { isFrameLike, type PlanarDocument, type SceneNode } from './types';
+import { isFrameLike, type PlanarDocument, type SceneNode, paintOrder } from './types';
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -144,7 +144,7 @@ function nodeToSvg(doc: PlanarDocument, id: string): string {
       parts.push(`<clipPath id="${cid}">${shapeElement(node, '')}</clipPath>`);
       open = `<g clip-path="url(#${cid})">`;
     }
-    parts.push(open, ...node.children.map((c) => nodeToSvg(doc, c)), '</g>');
+    parts.push(open, ...paintOrder(node).map((c) => nodeToSvg(doc, c)), '</g>');
   }
 
   if (node.type !== 'group' && node.type !== 'text' && node.strokeWidth > 0) {

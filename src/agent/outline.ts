@@ -30,7 +30,7 @@ export function summary(doc: PlanarDocument, n: SceneNode): string {
   if (!d.absolute && n.parentId && doc.nodes[n.parentId]?.layoutMode === 'none') parts.push(`at ${fmt(d.x)},${fmt(d.y)}`);
   else if (d.absolute) parts.push(`absolute at ${fmt(d.x)},${fmt(d.y)}`);
   if (d.layout) {
-    let l = `${d.layout} gap ${fmt(d.gap)}`;
+    let l = d.layout === 'grid' ? `grid ${fmt(d.columns)} cols${d.rows ? ` × ${fmt(d.rows)} rows` : ''} gap ${fmt(d.gap)}/${fmt(d.rowGap)}` : `${d.layout} gap ${fmt(d.gap)}`;
     if (d.padding !== undefined) l += ` pad ${fmt(d.padding)}`;
     if (d.align) l += ` align ${d.align}`;
     if (d.crossAlign) l += ` cross ${d.crossAlign}`;

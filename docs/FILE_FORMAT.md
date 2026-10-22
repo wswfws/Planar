@@ -60,7 +60,7 @@ their default value.
 | `closed` | boolean | Vector is a closed polygon |
 | `paths` | {d, fillRule}[] | Vector paths (SVG path data using M, L, C, Q, Z in absolute coordinates); when present, `points` is ignored |
 | `pathBox` | {w, h} | Size of the box the path coordinates refer to; paths are scaled from it to `width` × `height` |
-| `layoutMode` | `none` \| `horizontal` \| `vertical` | Frame auto layout direction |
+| `layoutMode` | `none` \| `horizontal` \| `vertical` \| `grid` | Frame auto layout: a row, a column or a grid |
 | `itemSpacing` | number | Gap between auto-layout items |
 | `paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft` | number | Auto-layout padding |
 | `primaryAlign` | `start` \| `center` \| `end` \| `space-between` | Main-axis alignment |
@@ -68,7 +68,12 @@ their default value.
 | `sizingH`, `sizingV` | `fixed` \| `hug` \| `fill` | Horizontal / vertical sizing |
 | `layoutAbsolute` | boolean | Child ignores its parent's auto layout |
 | `layoutWrap` | boolean | Horizontal auto layout continues on new rows (not with a hug width) |
-| `counterSpacing` | number | Space between wrapped rows |
+| `counterSpacing` | number | Space between wrapped rows and between grid rows (`itemSpacing` is the column gap in a grid) |
+| `gridColumns` | number | Grid: columns, 1–100 (default 2). Items fill cells row by row; columns share the width equally, or fit their widest item when the frame hugs |
+| `gridRows` | number | Grid: rows, 0–100; `0` = as many as the items need, each as tall as its tallest item; a set count shares a fixed height equally |
+| `strokesIncluded` | boolean | Auto layout: strokes take up space — the frame's inner half of its stroke adds to the padding and each item's stroke to its size |
+| `reverseStacking` | boolean | Auto layout: the first item is drawn (and picked) on top |
+| `lockAspect` | boolean | Resizing keeps the width-to-height ratio |
 | `constraintH` | `left`, `right`, `left-right`, `center`, `scale` | How the layer follows its parent frame's width when the frame is resized (outside auto layout) |
 | `constraintV` | `top`, `bottom`, `top-bottom`, `center`, `scale` | The same for height |
 | `textStyleId`, `effectStyleId` | string | Style the layer follows (`''` = none); see Styles |

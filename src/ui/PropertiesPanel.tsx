@@ -18,7 +18,7 @@ import { StylePicker } from './Styles';
 import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
-import type { IconName } from './icons';
+import { Icon, type IconName } from './icons';
 
 const SYSTEM_FONTS = [
   { label: 'System UI', value: 'system-ui, sans-serif' },
@@ -197,7 +197,7 @@ function bindFor(editor: Editor, nodes: SceneNode[], field: string): BindProps {
 const ALIGN_STEPS = ['start', 'center', 'end'] as const;
 
 function AlignGrid({ frame, editor }: { frame: SceneNode; editor: Editor }) {
-  const horizontal = frame.layoutMode === 'horizontal';
+  const horizontal = frame.layoutMode !== 'vertical';
   const between = frame.primaryAlign === 'space-between';
   return (
     <div className="align-grid" role="group" aria-label="Alignment">
@@ -226,8 +226,44 @@ function AlignGrid({ frame, editor }: { frame: SceneNode; editor: Editor }) {
   );
 }
 
-function AutoLayoutSection({ editor, nodes }: { editor: Editor; nodes: SceneNode[] }) {
+/** W and H fields with the aspect-ratio lock. */
+function SizeFields({ editor, nodes, setSize, disabled }: { editor: Editor; nodes: SceneNode[]; setSize: (key: 'width' | 'height', v: number) => void; disabled: boolean }) {
+  const locked = nodes.every((n) => n.lockAspect);
+  return (
+    <div className="size-fields">
+      <NumberField label="W" disabled={disabled} value={common(nodes, (n) => n.width)} min={0} onChange={(v) => setSize('width', v)} bind={bindFor(editor, nodes, 'width')} />
+      <NumberField label="H" disabled={disabled} value={common(nodes, (n) => n.height)} min={0} onChange={(v) => setSize('height', v)} bind={bindFor(editor, nodes, 'height')} />
+      <IconButton
+        icon={locked ? 'link' : 'unlink'}
+        title={locked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+        active={locked}
+        disabled={disabled}
+        onClick={() => editor.updateNodes(nodes.map((n) => n.id), { lockAspect: !locked })}
+      />
+    </div>
+  );
+}
+
+const LAYOUT_BUTTONS = [
+  { mode: 'vertical', icon: 'layoutV', title: 'Vertical layout' },
+  { mode: 'horizontal', icon: 'layoutH', title: 'Horizontal layout' },
+  { mode: 'grid', icon: 'layoutGrid', title: 'Grid layout' },
+] as const;
+
+/** One value for a pair of paddings, or null when they differ. */
+const pairValue = (a: number, b: number) => (a === b ? a : null);
+
+function AutoLayoutSection({
+  editor,
+  nodes,
+  setSize,
+}: {
+  editor: Editor;
+  nodes: SceneNode[];
+  setSize: (key: 'width' | 'height', v: number) => void;
+}) {
   const frame = nodes.length === 1 && isAutoLayout(nodes[0]) ? nodes[0] : null;
+  const [sides, setSides] = useState(false);
   const anyOn = nodes.some((n) => isAutoLayout(n));
   const set = (patch: Partial<SceneNode>) => {
     if (frame) editor.updateNodes([frame.id], patch);
@@ -245,46 +281,136 @@ function AutoLayoutSection({ editor, nodes }: { editor: Editor; nodes: SceneNode
     >
       {frame && (
         <>
+          <div className="layout-modes">
+            <div className="segmented" role="group" aria-label="Layout direction">
+              {LAYOUT_BUTTONS.map((b) => (
+                <button
+                  key={b.mode}
+                  type="button"
+                  className={frame.layoutMode === b.mode ? 'active' : ''}
+                  title={b.title}
+                  aria-label={b.title}
+                  onClick={() => set({ layoutMode: b.mode })}
+                >
+                  <Icon name={b.icon} />
+                </button>
+              ))}
+            </div>
+            <IconButton
+              icon="wrap"
+              title={frame.layoutMode === 'horizontal' ? 'Wrap: start a new row when items do not fit' : 'Wrap applies to horizontal layouts'}
+              active={frame.layoutMode === 'horizontal' && frame.layoutWrap}
+              disabled={frame.layoutMode !== 'horizontal'}
+              onClick={() => set({ layoutWrap: !frame.layoutWrap })}
+            />
+          </div>
+
+          <div className="subhead">Dimensions</div>
+          <SizeFields editor={editor} nodes={[frame]} setSize={setSize} disabled={isInInstance(editor.doc, frame.id)} />
+          <SizingRow editor={editor} node={frame} labels={['↔', '↕']} />
+
+          {frame.layoutMode === 'grid' && (
+            <div className="grid-2">
+              <NumberField label="Columns" title="Columns" value={frame.gridColumns} min={1} max={100} precision={0} onChange={(v) => set({ gridColumns: Math.round(v) })} />
+              <NumberField
+                label="Rows"
+                title="Rows (empty = as many as the items need)"
+                value={frame.gridRows || null}
+                placeholder="Auto"
+                min={0}
+                max={100}
+                precision={0}
+                onChange={(v) => set({ gridRows: Math.round(v) })}
+              />
+            </div>
+          )}
           <div className="auto-layout">
             <AlignGrid frame={frame} editor={editor} />
             <div className="stack">
-              <div className="row">
-                <IconButton icon="layoutH" title="Horizontal" active={frame.layoutMode === 'horizontal'} onClick={() => set({ layoutMode: 'horizontal' })} />
-                <IconButton icon="layoutV" title="Vertical" active={frame.layoutMode === 'vertical'} onClick={() => set({ layoutMode: 'vertical' })} />
-              </div>
-              <NumberField
-                label={frame.layoutMode === 'horizontal' ? '↔' : '↕'}
-                title="Spacing between items"
-                value={frame.itemSpacing}
-                min={0}
-                onChange={(v) => set({ itemSpacing: v })}
-                bind={bindFor(editor, [frame], 'itemSpacing')}
-              />
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={frame.primaryAlign === 'space-between'}
-                  onChange={(e) => set({ primaryAlign: e.target.checked ? 'space-between' : 'start' })}
-                />
-                Space between
-              </label>
-              {frame.layoutMode === 'horizontal' && (
-                <label className="checkbox" title="Start a new row when items do not fit (needs a fixed or fill width)">
-                  <input type="checkbox" checked={frame.layoutWrap} onChange={(e) => set({ layoutWrap: e.target.checked })} />
-                  Wrap
-                </label>
-              )}
-              {frame.layoutMode === 'horizontal' && frame.layoutWrap && (
-                <NumberField label="↕" title="Spacing between rows" value={frame.counterSpacing} min={0} onChange={(v) => set({ counterSpacing: v })} />
+              {frame.layoutMode === 'grid' ? (
+                <>
+                  <NumberField label={<Icon name="gapH" size={14} />} title="Gap between columns" value={frame.itemSpacing} min={0} onChange={(v) => set({ itemSpacing: v })} bind={bindFor(editor, [frame], 'itemSpacing')} />
+                  <NumberField label={<Icon name="gapV" size={14} />} title="Gap between rows" value={frame.counterSpacing} min={0} onChange={(v) => set({ counterSpacing: v })} />
+                </>
+              ) : (
+                <>
+                  <NumberField
+                    label={<Icon name={frame.layoutMode === 'horizontal' ? 'gapH' : 'gapV'} size={14} />}
+                    title="Gap between items"
+                    value={frame.primaryAlign === 'space-between' ? null : frame.itemSpacing}
+                    placeholder="Auto"
+                    disabled={frame.primaryAlign === 'space-between'}
+                    min={0}
+                    onChange={(v) => set({ itemSpacing: v })}
+                    bind={bindFor(editor, [frame], 'itemSpacing')}
+                  />
+                  <select
+                    aria-label="Gap mode"
+                    value={frame.primaryAlign === 'space-between' ? 'auto' : 'fixed'}
+                    onChange={(e) => set({ primaryAlign: e.target.value === 'auto' ? 'space-between' : 'start' })}
+                  >
+                    <option value="fixed">Fixed gap</option>
+                    <option value="auto">Auto (space between)</option>
+                  </select>
+                  {frame.layoutMode === 'horizontal' && frame.layoutWrap && (
+                    <NumberField label={<Icon name="gapV" size={14} />} title="Gap between rows" value={frame.counterSpacing} min={0} onChange={(v) => set({ counterSpacing: v })} />
+                  )}
+                </>
               )}
             </div>
           </div>
-          <div className="grid-2">
-            <NumberField label="L" title="Padding left" value={frame.paddingLeft} min={0} onChange={(v) => set({ paddingLeft: v })} bind={bindFor(editor, [frame], 'paddingLeft')} />
-            <NumberField label="T" title="Padding top" value={frame.paddingTop} min={0} onChange={(v) => set({ paddingTop: v })} bind={bindFor(editor, [frame], 'paddingTop')} />
-            <NumberField label="R" title="Padding right" value={frame.paddingRight} min={0} onChange={(v) => set({ paddingRight: v })} bind={bindFor(editor, [frame], 'paddingRight')} />
-            <NumberField label="B" title="Padding bottom" value={frame.paddingBottom} min={0} onChange={(v) => set({ paddingBottom: v })} bind={bindFor(editor, [frame], 'paddingBottom')} />
+
+          <div className="padding-row">
+            {sides ? (
+              <div className="grid-2">
+                <NumberField label="L" title="Padding left" value={frame.paddingLeft} min={0} onChange={(v) => set({ paddingLeft: v })} bind={bindFor(editor, [frame], 'paddingLeft')} />
+                <NumberField label="T" title="Padding top" value={frame.paddingTop} min={0} onChange={(v) => set({ paddingTop: v })} bind={bindFor(editor, [frame], 'paddingTop')} />
+                <NumberField label="R" title="Padding right" value={frame.paddingRight} min={0} onChange={(v) => set({ paddingRight: v })} bind={bindFor(editor, [frame], 'paddingRight')} />
+                <NumberField label="B" title="Padding bottom" value={frame.paddingBottom} min={0} onChange={(v) => set({ paddingBottom: v })} bind={bindFor(editor, [frame], 'paddingBottom')} />
+              </div>
+            ) : (
+              <div className="grid-2">
+                <NumberField
+                  label={<Icon name="padH" size={14} />}
+                  title="Horizontal padding (left and right)"
+                  value={pairValue(frame.paddingLeft, frame.paddingRight)}
+                  placeholder="Mixed"
+                  min={0}
+                  onChange={(v) => set({ paddingLeft: v, paddingRight: v })}
+                />
+                <NumberField
+                  label={<Icon name="padV" size={14} />}
+                  title="Vertical padding (top and bottom)"
+                  value={pairValue(frame.paddingTop, frame.paddingBottom)}
+                  placeholder="Mixed"
+                  min={0}
+                  onChange={(v) => set({ paddingTop: v, paddingBottom: v })}
+                />
+              </div>
+            )}
+            <IconButton icon="padSides" title={sides ? 'Same padding on opposite sides' : 'Padding for each side'} active={sides} onClick={() => setSides(!sides)} />
           </div>
+
+          <div className="grid-2 captioned">
+            <label>
+              <span>Strokes</span>
+              <select value={frame.strokesIncluded ? 'in' : 'out'} onChange={(e) => set({ strokesIncluded: e.target.value === 'in' })}>
+                <option value="out">Excluded</option>
+                <option value="in">Included</option>
+              </select>
+            </label>
+            <label>
+              <span>Canvas stacking</span>
+              <select value={frame.reverseStacking ? 'first' : 'last'} onChange={(e) => set({ reverseStacking: e.target.value === 'first' })}>
+                <option value="last">Last on top</option>
+                <option value="first">First on top</option>
+              </select>
+            </label>
+          </div>
+          <label className="checkbox">
+            <input type="checkbox" checked={frame.clipContent} onChange={(e) => set({ clipContent: e.target.checked })} />
+            Clip content
+          </label>
         </>
       )}
     </Section>
@@ -328,7 +454,7 @@ const TEXT_SIZING: { mode: TextSizing; label: string; title: string; patch: Part
 
 const SIZING_LABEL: Record<Sizing, string> = { fixed: 'Fixed', hug: 'Hug', fill: 'Fill' };
 
-function SizingRow({ editor, node }: { editor: Editor; node: SceneNode }) {
+function SizingRow({ editor, node, labels = ['W', 'H'] }: { editor: Editor; node: SceneNode; labels?: [string, string] }) {
   const { doc } = editor;
   const laidOut = isLaidOut(doc, node);
   const options = (): Sizing[] => {
@@ -380,8 +506,8 @@ function SizingRow({ editor, node }: { editor: Editor; node: SceneNode }) {
     );
   return (
     <div className="grid-2">
-      {select('h', h, 'W')}
-      {select('v', v, 'H')}
+      {select('h', h, labels[0])}
+      {select('v', v, labels[1])}
     </div>
   );
 }
@@ -542,12 +668,23 @@ export function PropertiesPanel() {
   const paintable = nodes.filter((n) => n.type !== 'group');
 
   const allLaidOut = nodes.every((n) => isLaidOut(editor.doc, n));
+  // A single auto-layout frame shows its size in the Auto layout section.
+  const alFrame = single && isAutoLayout(single) ? single : null;
   const setSize = (key: 'width' | 'height', v: number) =>
     editor.updateNodes(ids, (n) => {
       const old = n[key];
+      const other = key === 'width' ? 'height' : 'width';
+      const oldOther = n[other];
       n[key] = Math.max(0, v);
       if (key === 'width') n.sizingH = 'fixed';
       else n.sizingV = 'fixed';
+      if (n.lockAspect && old > 0) {
+        n[other] = (oldOther * n[key]) / old;
+        if (other === 'width') n.sizingH = 'fixed';
+        else n.sizingV = 'fixed';
+        if (oldOther > 0) scaleContents(editor.doc, n, n.width / (key === 'width' ? old : oldOther), n.height / (key === 'height' ? old : oldOther));
+        return;
+      }
       if (n.type === 'text' && key === 'width') {
         n.autoHeight = n.autoWidth || n.autoHeight;
         n.autoWidth = false;
@@ -588,8 +725,6 @@ export function PropertiesPanel() {
         <div className="grid-2">
           <NumberField label="X" disabled={allLaidOut || locked} value={common(nodes, (n) => n.x)} onChange={(v) => editor.updateNodes(ids, { x: v })} />
           <NumberField label="Y" disabled={allLaidOut || locked} value={common(nodes, (n) => n.y)} onChange={(v) => editor.updateNodes(ids, { y: v })} />
-          <NumberField label="W" disabled={locked} value={common(nodes, (n) => n.width)} min={0} onChange={(v) => setSize('width', v)} bind={bindFor(editor, nodes, 'width')} />
-          <NumberField label="H" disabled={locked} value={common(nodes, (n) => n.height)} min={0} onChange={(v) => setSize('height', v)} bind={bindFor(editor, nodes, 'height')} />
           <NumberField
             label="↻"
             title="Rotation"
@@ -609,8 +744,9 @@ export function PropertiesPanel() {
             />
           )}
         </div>
-        {single && !locked && <SizingRow editor={editor} node={single} />}
-        {frames.length > 0 && (
+        {!alFrame && <SizeFields editor={editor} nodes={nodes} setSize={setSize} disabled={locked} />}
+        {single && !locked && !alFrame && <SizingRow editor={editor} node={single} />}
+        {frames.length > 0 && !alFrame && (
           <label className="checkbox">
             <input
               type="checkbox"
@@ -622,7 +758,7 @@ export function PropertiesPanel() {
         )}
       </Section>
 
-      <AutoLayoutSection editor={editor} nodes={nodes} />
+      <AutoLayoutSection key={single?.id} editor={editor} nodes={nodes} setSize={setSize} />
       {nodes.length > 0 &&
         nodes.every((n) => {
           const p = n.parentId ? editor.doc.nodes[n.parentId] : null;

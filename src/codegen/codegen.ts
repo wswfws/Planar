@@ -150,6 +150,12 @@ function sizeAndPosition(ctx: Ctx, n: SceneNode, css: Record<string, string>, ro
   const parent = n.parentId ? doc.nodes[n.parentId] : null;
   const parentAuto = !root && !n.layoutAbsolute && isFrameLike(parent) && parent!.layoutMode !== 'none';
   const main = parent?.layoutMode === 'horizontal' ? 'h' : 'v';
+  const inGrid = parentAuto && parent!.layoutMode === 'grid';
+  if (parentAuto && parent!.reverseStacking) {
+    // "First on top": earlier items paint over later ones.
+    css.position = 'relative';
+    css['z-index'] = String(parent!.children.length - parent!.children.indexOf(n.id));
+  }
 
   if (!root && !parentAuto) {
     css.position = 'absolute';
@@ -160,7 +166,10 @@ function sizeAndPosition(ctx: Ctx, n: SceneNode, css: Record<string, string>, ro
     const prop = axis === 'h' ? 'width' : 'height';
     const sizing = effectiveSizing(doc, n, axis);
     const value = axis === 'h' ? n.width : n.height;
-    if (sizing === 'fill' && parentAuto) {
+    if (sizing === 'fill' && inGrid) {
+      css[axis === 'h' ? 'justify-self' : 'align-self'] = 'stretch';
+      css[axis === 'h' ? 'min-width' : 'min-height'] = '0';
+    } else if (sizing === 'fill' && parentAuto) {
       if (axis === main) {
         css.flex = '1 1 0';
         css[axis === 'h' ? 'min-width' : 'min-height'] = '0';
@@ -340,7 +349,20 @@ function build(ctx: Ctx, n: SceneNode, root = false): El | null {
     return el;
   }
   if (isFrameLike(n) || n.type === 'group') {
-    if (isFrameLike(n) && n.layoutMode !== 'none') {
+    if (isFrameLike(n) && n.layoutMode === 'grid') {
+      el.css.display = 'grid';
+      const hug = effectiveSizing(doc, n, 'h') === 'hug';
+      el.css['grid-template-columns'] = `repeat(${n.gridColumns}, ${hug ? 'auto' : 'minmax(0, 1fr)'})`;
+      if (n.gridRows > 0 && effectiveSizing(doc, n, 'v') !== 'hug') el.css['grid-template-rows'] = `repeat(${n.gridRows}, minmax(0, 1fr))`;
+      if (n.itemSpacing || n.bindings.itemSpacing) el.css['column-gap'] = cssNum(doc, n, 'itemSpacing', n.itemSpacing);
+      if (n.counterSpacing) el.css['row-gap'] = px(n.counterSpacing);
+      const pads = [n.paddingTop, n.paddingRight, n.paddingBottom, n.paddingLeft];
+      if (pads.some((v) => v)) el.css.padding = pads.map(px).join(' ');
+      const h = n.primaryAlign === 'space-between' ? 'start' : n.primaryAlign;
+      if (h !== 'start') el.css['justify-items'] = ALIGN[h];
+      el.css['align-items'] = ALIGN[n.counterAlign];
+      if (n.children.some((c) => doc.nodes[c]?.layoutAbsolute)) el.css.position = el.css.position ?? 'relative';
+    } else if (isFrameLike(n) && n.layoutMode !== 'none') {
       el.css.display = 'flex';
       el.css['flex-direction'] = n.layoutMode === 'horizontal' ? 'row' : 'column';
       if (wraps(doc, n)) {

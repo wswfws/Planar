@@ -137,7 +137,11 @@ optional.
 | `textStyle`, `effectStyle` | a style name from the `styles` tool; `null` detaches (the layer keeps its look) |
 | `wrap`, `rowGap` | boolean; number — row layouts continue on new rows |
 | `constraints` | `"<h> <v>"`, h = left / right / left-right / center / scale, v = top / bottom / top-bottom / center / scale — how the layer follows its parent frame when it is resized (outside auto layout); a single word sets its own axis |
-| `layout` | `"row"`, `"column"` or `"none"` — auto layout |
+| `layout` | `"row"`, `"column"`, `"grid"` or `"none"` — auto layout |
+| `columns`, `rows` | grid: number of columns (1–100) and rows (`0` = as many as needed); `gap` is the column gap, `rowGap` the row gap; `align` / `crossAlign` place items inside their cells |
+| `strokesIncluded` | boolean — auto layout: strokes take up space |
+| `stacking` | `"last-on-top"` (default) or `"first-on-top"` — auto layout |
+| `lockAspect` | boolean — resizing keeps the ratio |
 | `gap` | number or `"$variable"` |
 | `padding` | `16`, `[12, 24]` (vertical, horizontal) or `[t, r, b, l]` |
 | `align` | `"start"`, `"center"`, `"end"`, `"space-between"` — along the layout direction |

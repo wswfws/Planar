@@ -571,7 +571,9 @@ export class Interaction {
     const ay = alt || hy === 0 ? h0 / 2 : hy === -1 ? h0 : 0;
     let sw = hx ? (p.x - ax) * hx * (alt ? 2 : 1) : w0;
     let sh = hy ? (p.y - ay) * hy * (alt ? 2 : 1) : h0;
-    if (shift && w0 > 0 && h0 > 0) {
+    // A locked aspect ratio behaves like holding Shift.
+    const keepRatio = shift !== (drag.ids.length === 1 && !!this.doc.nodes[drag.ids[0]]?.lockAspect);
+    if (keepRatio && w0 > 0 && h0 > 0) {
       if (hx && hy) {
         const s = Math.max(Math.abs(sw) / w0, Math.abs(sh) / h0);
         sw = Math.sign(sw || 1) * s * w0;

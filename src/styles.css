@@ -2586,3 +2586,52 @@ select:focus {
   align-items: center;
   gap: 6px;
 }
+
+/* Auto layout section */
+.layout-modes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-modes .segmented {
+  flex: 0 0 auto;
+}
+
+.layout-modes .segmented button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+}
+
+.subhead {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.size-fields,
+.padding-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.padding-row {
+  grid-template-columns: 1fr auto;
+}
+
+.captioned label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.captioned select,
+.auto-layout .stack select {
+  width: 100%;
+  min-width: 0;
+}

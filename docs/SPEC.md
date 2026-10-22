@@ -436,3 +436,7 @@ The notes button in the toolbar adds annotation layers in the middle of the view
 ## Agents and annotations
 
 Mentioning @ai in a chat message or a note leaves a request for AI agents connected to the file: the MCP `notes` tool lists open requests (`inbox`), and an agent answers in the chat (`post`), which closes the request. Agents add sticky notes, descriptions, checklists and callouts of their own, tick checklist items, and see the notes around a screen when they read its context. See MCP.md.
+
+## Auto layout panel and grids
+
+For a frame with auto layout, the Auto layout section holds everything about it: direction (vertical, horizontal, grid) and Wrap; dimensions (W, H with an aspect-ratio lock, and Fixed / Hug / Fill on each axis); a 3×3 alignment grid; the gap with "Fixed gap" or "Auto" (space between); paddings as horizontal and vertical pairs, or per side; whether strokes take up space (Strokes: Included / Excluded); which item is on top (Canvas stacking: Last on top / First on top); and Clip content. A grid lays items out row by row in a set number of columns (and optionally rows) with column and row gaps; arrow keys move an item by a cell or a row, and dragged layers drop in reading order. Code export uses CSS grid. The aspect-ratio lock also applies to resize handles (Shift then frees the ratio).

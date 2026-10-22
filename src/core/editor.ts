@@ -599,7 +599,11 @@ export class Editor {
         }
         // Inside auto layout, arrows along the main axis re-order.
         const parent = doc.nodes[node.parentId!];
-        const step = Math.sign(parent.layoutMode === 'horizontal' ? dx : dy);
+        // In a grid, up and down move by a whole row.
+        const step =
+          parent.layoutMode === 'grid'
+            ? Math.sign(dx) || Math.sign(dy) * Math.max(1, parent.gridColumns)
+            : Math.sign(parent.layoutMode === 'horizontal' ? dx : dy);
         const i = parent.children.indexOf(id);
         const j = i + step;
         if (!step || j < 0 || j >= parent.children.length) continue;

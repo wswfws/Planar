@@ -143,10 +143,23 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
     const e = n.effects.find((x) => x.type === type);
     if (e) out[key] = e.visible ? round(e.radius) : `${round(e.radius)} hidden`;
   }
+  if (n.lockAspect) out.lockAspect = true;
   if (isFrameLike(n)) {
+    if (n.layoutMode !== 'none' && n.strokesIncluded) out.strokesIncluded = true;
+    if (n.layoutMode !== 'none' && n.reverseStacking) out.stacking = 'first-on-top';
     if (n.type === 'frame' && !n.clipContent) out.clip = false;
     if (n.type !== 'frame' && n.clipContent) out.clip = true;
-    if (n.layoutMode !== 'none') {
+    if (n.layoutMode === 'grid') {
+      out.layout = 'grid';
+      out.columns = n.gridColumns;
+      if (n.gridRows) out.rows = n.gridRows;
+      out.gap = num('itemSpacing', n.itemSpacing);
+      out.rowGap = round(n.counterSpacing);
+      const pad = compactPadding(n);
+      if (pad !== 0) out.padding = pad;
+      if (n.primaryAlign !== 'start' && n.primaryAlign !== 'space-between') out.align = n.primaryAlign;
+      if (n.counterAlign !== 'start') out.crossAlign = n.counterAlign;
+    } else if (n.layoutMode !== 'none') {
       out.layout = n.layoutMode === 'horizontal' ? 'row' : 'column';
       out.gap = num('itemSpacing', n.itemSpacing);
       const pad = compactPadding(n);
@@ -378,7 +391,8 @@ const KNOWN = new Set([
   'strokes', 'strokeWidth', 'radius', 'clip', 'layout', 'gap', 'padding', 'align', 'crossAlign', 'absolute', 'text', 'font', 'size',
   'fontSize', 'weight', 'fontWeight', 'lineHeight', 'textAlign', 'textAlignVertical', 'component', 'props', 'variant', 'mode',
   'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg', 'link', 'transition', 'shadow', 'blur',
-  'backgroundBlur', 'constraints', 'wrap', 'rowGap', 'textStyle', 'effectStyle', 'context',
+  'backgroundBlur', 'constraints', 'wrap', 'rowGap', 'textStyle', 'effectStyle', 'context', 'columns', 'rows', 'strokesIncluded', 'stacking',
+  'lockAspect',
 ]);
 
 /**
@@ -476,7 +490,7 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
 
     if (props.layout !== undefined) {
       const l = String(props.layout);
-      set('layoutMode', l === 'row' || l === 'horizontal' ? 'horizontal' : l === 'column' || l === 'vertical' ? 'vertical' : 'none');
+      set('layoutMode', l === 'row' || l === 'horizontal' ? 'horizontal' : l === 'column' || l === 'vertical' ? 'vertical' : l === 'grid' ? 'grid' : 'none');
       if (n.layoutMode !== 'none' && !isFrameLike(n)) warnings.push(`layout only applies to frames, components and instances (${n.type})`);
     }
     if (props.gap !== undefined) numOrVar('gap', 'itemSpacing', props.gap, n);
@@ -498,6 +512,23 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
     if (props.wrap !== undefined) {
       set('layoutWrap', props.wrap === true);
       if (n.layoutWrap && n.layoutMode !== 'horizontal') warnings.push('wrap only applies to row layouts');
+    }
+    for (const [key, field, min] of [
+      ['columns', 'gridColumns', 1],
+      ['rows', 'gridRows', 0],
+    ] as const) {
+      if (props[key] === undefined) continue;
+      const v = Math.round(Number(props[key]));
+      if (!Number.isFinite(v) || v < min || v > 100) throw new PropError(`${key} must be a whole number from ${min} to 100`);
+      set(field, v);
+      if (n.layoutMode !== 'grid') warnings.push(`${key} only applies to grid layouts`);
+    }
+    if (props.strokesIncluded !== undefined) set('strokesIncluded', props.strokesIncluded === true);
+    if (props.lockAspect !== undefined) set('lockAspect', props.lockAspect === true);
+    if (props.stacking !== undefined) {
+      const s = String(props.stacking);
+      if (s !== 'first-on-top' && s !== 'last-on-top') throw new PropError('stacking must be "first-on-top" or "last-on-top"');
+      set('reverseStacking', s === 'first-on-top');
     }
     if (props.rowGap !== undefined) {
       const g = Number(props.rowGap);

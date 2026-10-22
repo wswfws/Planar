@@ -236,6 +236,21 @@ export function figmaToPlanar(file: FNode, images: Record<string, string> = {}):
     node.layoutAbsolute = n.layoutPositioning === 'ABSOLUTE';
     node.sizingH = sizing(n, parent, 'H');
     node.sizingV = sizing(n, parent, 'V');
+    if (n.layoutMode === 'GRID') {
+      node.layoutMode = 'grid';
+      node.gridColumns = Math.max(1, Math.round(num(n.gridColumnCount, 1)));
+      node.gridRows = Math.max(0, Math.round(num(n.gridRowCount, 0)));
+      node.itemSpacing = num(n.gridColumnGap);
+      node.counterSpacing = num(n.gridRowGap);
+      node.paddingTop = num(n.paddingTop);
+      node.paddingRight = num(n.paddingRight);
+      node.paddingBottom = num(n.paddingBottom);
+      node.paddingLeft = num(n.paddingLeft);
+    }
+    if (n.layoutMode && n.layoutMode !== 'NONE') {
+      node.strokesIncluded = n.strokesIncludedInLayout === true;
+      node.reverseStacking = n.itemReverseZIndex === true;
+    }
     if (n.layoutMode === 'HORIZONTAL' || n.layoutMode === 'VERTICAL') {
       if (type === 'group') note('auto layout on groups');
       node.layoutMode = n.layoutMode === 'HORIZONTAL' ? 'horizontal' : 'vertical';

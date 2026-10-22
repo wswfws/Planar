@@ -76,6 +76,26 @@ const paths: Record<string, ReactElement> = {
   component: <path d="M8 1.8 10.2 4 8 6.2 5.8 4zM4 5.8 6.2 8 4 10.2 1.8 8zM12 5.8 14.2 8 12 10.2 9.8 8zM8 9.8l2.2 2.2L8 14.2 5.8 12z" />,
   instance: <path d="M8 1.5 14.5 8 8 14.5 1.5 8z" />,
   variable: <path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5z M8 1.8v6.2m0 0 5.5-3m-5.5 3-5.5-3M8 8v6.2" />,
+  layoutGrid: (
+    <>
+      <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="0.5" />
+      <rect x="9" y="2.5" width="4.5" height="4.5" rx="0.5" />
+      <rect x="2.5" y="9" width="4.5" height="4.5" rx="0.5" />
+      <rect x="9" y="9" width="4.5" height="4.5" rx="0.5" />
+    </>
+  ),
+  wrap: <path d="M2.5 4.5h9a2.5 2.5 0 0 1 0 5H5M7 7.5l-2 2 2 2M2.5 13h4" />,
+  padH: <path d="M2.5 3v10M13.5 3v10M5.5 8h5" />,
+  padV: <path d="M3 2.5h10M3 13.5h10M8 5.5v5" />,
+  padSides: (
+    <>
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1" />
+      <path d="M5.5 5.5h5v5h-5z" />
+    </>
+  ),
+  gapH: <path d="M3.5 3v10M12.5 3v10M6 8h4M7 6.5 5.5 8 7 9.5M9 6.5l1.5 1.5L9 9.5" />,
+  gapV: <path d="M3 3.5h10M3 12.5h10M8 6v4M6.5 7 8 5.5 9.5 7M6.5 9 8 10.5 9.5 9" />,
+  unlink: <path d="M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1M3 3l10 10" />,
   link: <path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1" />,
   target: (
     <>

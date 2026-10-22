@@ -2,7 +2,7 @@ import { drawNote } from './noteRender';
 import { localMatrix, vectorPoints } from './geometry';
 import { nodePaths } from './paths';
 import { baselineInLine, fontString, lineHeightPx, nodeLines, verticalOffset } from './text';
-import { isFrameLike, type Effect, type ImagePaint, type Paint, type PlanarDocument, type SceneNode } from './types';
+import { isFrameLike, type Effect, type ImagePaint, type Paint, type PlanarDocument, type SceneNode, paintOrder } from './types';
 
 const images = new Map<string, HTMLImageElement>();
 let onImageLoad: (() => void) | null = null;
@@ -320,7 +320,7 @@ export function drawNode(ctx: CanvasRenderingContext2D, doc: PlanarDocument, id:
       shapePath(ctx, node);
       ctx.clip();
     }
-    for (const c of node.children) drawNode(ctx, doc, c, opts);
+    for (const c of paintOrder(node)) drawNode(ctx, doc, c, opts);
     ctx.restore();
   }
   if (!opts.hidden?.has(id)) strokeNode(ctx, node);

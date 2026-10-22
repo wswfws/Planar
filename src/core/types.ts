@@ -38,7 +38,7 @@ export interface Effect {
 export type TextAlign = 'left' | 'center' | 'right';
 export type TextAlignVertical = 'top' | 'middle' | 'bottom';
 
-export type LayoutMode = 'none' | 'horizontal' | 'vertical';
+export type LayoutMode = 'none' | 'horizontal' | 'vertical' | 'grid';
 export type PrimaryAlign = 'start' | 'center' | 'end' | 'space-between';
 export type CounterAlign = 'start' | 'center' | 'end';
 export type Sizing = 'fixed' | 'hug' | 'fill';
@@ -109,8 +109,18 @@ export interface SceneNode {
   layoutAbsolute: boolean;
   /** Horizontal auto layout continues on new rows when items do not fit. */
   layoutWrap: boolean;
-  /** Space between wrapped rows. */
+  /** Space between wrapped rows (and between grid rows). */
   counterSpacing: number;
+  /** Grid layout: number of columns (at least 1). */
+  gridColumns: number;
+  /** Grid layout: number of rows; 0 = as many as the items need. */
+  gridRows: number;
+  /** Auto layout: strokes take up space (the frame's inside half, children's whole width). */
+  strokesIncluded: boolean;
+  /** Auto layout: the first item is drawn on top instead of the last. */
+  reverseStacking: boolean;
+  /** Resizing keeps the width-to-height ratio. */
+  lockAspect: boolean;
   constraintH: ConstraintH;
   constraintV: ConstraintV;
 
@@ -273,6 +283,11 @@ export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 
 /** Frames, components and instances share frame behaviour. */
 export function isFrameLike(node: SceneNode | null | undefined): boolean {
   return !!node && (node.type === 'frame' || node.type === 'component' || node.type === 'componentSet' || node.type === 'instance');
+}
+
+/** Children in painting order, bottom first ("first on top" auto layouts reverse it). */
+export function paintOrder(node: SceneNode): string[] {
+  return node.reverseStacking && isFrameLike(node) && node.layoutMode !== 'none' ? [...node.children].reverse() : node.children;
 }
 
 export function isContainer(node: SceneNode): boolean {
