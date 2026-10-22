@@ -186,3 +186,8 @@ Example — a card in one call:
 - The remote endpoint never reads or writes files on the server.
 - Every change an agent makes is a normal edit: it can be undone with
   `undo`, and in a room it is visible to everyone immediately.
+
+
+### versions
+
+`versions` — `list`, `save {label}`, `restore {versionId}` for the open server file. A version is saved automatically before an agent starts editing; restoring saves the current state first.

@@ -125,6 +125,36 @@ export function registerTools(server: McpServer, session: AgentSession): void {
   );
 
   server.registerTool(
+    'versions',
+    {
+      title: 'Version history',
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      description:
+        'Restore points of the open Planar file. list: saved versions, newest first (a version is saved automatically before an agent starts editing). save: store the file as it is now under a label. restore: put the file back to a version; the current state is saved first, so a restore can be undone the same way.',
+      inputSchema: {
+        action: z.enum(['list', 'save', 'restore']),
+        label: z.string().optional().describe('save: what to call this version'),
+        versionId: z.string().optional().describe('restore: id from list'),
+      },
+    },
+    guard(async ({ action, label, versionId }) => {
+      await session.ready();
+      if (action === 'list') {
+        const list = await session.listVersions();
+        if (!list.length) return text('No saved versions yet.');
+        return text(list.map((v) => `${v.id}  ${new Date(v.createdAt).toISOString().slice(0, 16).replace('T', ' ')}  ${v.kind}  "${v.label}"${v.authorName ? `  by ${v.authorName}` : ''}  ${v.nodes} layers`).join(String.fromCharCode(10)));
+      }
+      if (action === 'save') {
+        const v = await session.saveVersion(label?.trim() || 'Saved by agent');
+        return text(`Saved version ${v.id} "${v.label}".`);
+      }
+      if (!versionId) throw new PropError('restore needs versionId (see list)');
+      await session.restoreVersion(versionId);
+      return text(`Restored version ${versionId}. The previous state was saved as a version too.`);
+    }),
+  );
+
+  server.registerTool(
     'overview',
     {
       title: 'Document overview',

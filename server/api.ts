@@ -8,6 +8,7 @@ import { handleAdmin, handleMetrics, type LiveState } from './admin';
 import type { Alerts } from './alerts';
 import type { Metrics } from './metrics';
 import type { Room, RoomStore } from './rooms';
+import type { VersionMeta, VersionStore } from './versions';
 
 const COOKIE = 'planar_session';
 const MAX_BODY = 60 * 1024 * 1024;
@@ -33,6 +34,9 @@ export interface ApiContext {
   /** Closes every open connection of a user (after blocking or deleting). */
   kickUser: (userId: string, reason: string) => void;
   dataDir: string | null;
+  versions: VersionStore;
+  /** Tells open editors that the whole document was replaced (restoring a version). */
+  reset: (room: Room) => void;
   /** Bearer token for /api/metrics (Prometheus); the endpoint is off without it. */
   metricsToken?: string;
 }
@@ -388,6 +392,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
             db.touch('files');
             ctx.accessChanged(rec.id);
             await store.remove(rec.id);
+            await ctx.versions.removeFile(rec.id);
             thumbs.delete(rec.id);
           } else {
             rec.deletedAt = Date.now();
@@ -452,6 +457,50 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
           ctx.accessChanged(rec.id);
         }
         return json(200, { file: view(rec, roleFor(rec, me.id), true) });
+      }
+
+      if (sub === 'versions') {
+        // History shows earlier content, so it is for people who may edit the file.
+        const me = need();
+        if (!can(role, 'edit')) throw new HttpError(403, 'Version history is for people who can edit this file');
+        const publicVersion = (v: VersionMeta) => ({ id: v.id, createdAt: v.createdAt, label: v.label, kind: v.kind, authorName: v.authorName, nodes: v.nodes, bytes: v.bytes });
+        const room = await store.get(rec.id);
+        if (!room) throw new HttpError(404, 'The document is missing on the server');
+        const vid = parts[3];
+        if (!vid) {
+          if (method === 'GET') return json(200, { versions: (await ctx.versions.list(rec.id)).map(publicVersion) });
+          if (method === 'POST') {
+            const body = await readJson(req);
+            const label = str(body.label, 120) || 'Saved version';
+            const meta = await ctx.versions.save(rec.id, room.doc, { kind: 'named', label, authorId: me.id, authorName: me.displayName }, true);
+            return json(200, { version: publicVersion(meta!) });
+          }
+          throw new HttpError(405, 'Method not allowed');
+        }
+        if (parts[4] === 'restore' && method === 'POST') {
+          const target = await ctx.versions.load(rec.id, vid);
+          if (!target) throw new HttpError(404, 'No such version');
+          // Keep a way back to the state being replaced.
+          const when = new Date(target.meta.createdAt).toISOString().slice(0, 16).replace('T', ' ');
+          await ctx.versions.save(rec.id, room.doc, { kind: 'restore', label: `Before restoring ${target.meta.label || when}`, authorId: me.id, authorName: me.displayName });
+          target.doc.name = room.doc.name;
+          room.replace(target.doc);
+          ctx.reset(room);
+          ctx.metrics.inc('version_restores');
+          return json(200, { ok: true, version: room.version });
+        }
+        if (!parts[4] && method === 'GET') {
+          const found = await ctx.versions.load(rec.id, vid);
+          if (!found) throw new HttpError(404, 'No such version');
+          return json(200, { version: publicVersion(found.meta), doc: found.doc });
+        }
+        if (!parts[4] && method === 'PATCH') {
+          const body = await readJson(req);
+          const meta = await ctx.versions.name(rec.id, vid, str(body.label, 120));
+          if (!meta) throw new HttpError(404, 'No such version');
+          return json(200, { version: publicVersion(meta) });
+        }
+        throw new HttpError(405, 'Method not allowed');
       }
 
       if (sub === 'download' && method === 'GET') {

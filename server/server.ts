@@ -15,6 +15,7 @@ import { handleOAuth } from './oauth';
 import { Db, type FileRecord, type User } from './db';
 import { createMcpHandler } from './mcp-http';
 import { ROOM_ID, RoomStore, type Room } from './rooms';
+import { VersionStore } from './versions';
 
 export interface ServerOptions {
   port: number;
@@ -56,7 +57,16 @@ interface Client {
   name: string;
   color: string;
   presence: Presence | null;
+  /** Signed in with an API key or OAuth token: an AI agent or script. */
+  viaKey: boolean;
 }
+
+/** An agent gets a fresh restore point when it starts editing after this long without one. */
+const AGENT_GAP_MS = 10 * 60_000;
+/** A person's first edit after this much quiet saves the state they found. */
+const AUTO_QUIET_MS = 30 * 60_000;
+/** While people keep editing, a snapshot at least this often. */
+const AUTO_EVERY_MS = 60 * 60_000;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -115,6 +125,7 @@ export async function startServer(
   await db.init();
   const store = new RoomStore(opts.dataDir ? path.join(opts.dataDir, 'files') : null);
   await store.init();
+  const versions = new VersionStore(opts.dataDir ? path.join(opts.dataDir, 'versions') : null);
   if (opts.dataDir) await migrateLegacy(opts.dataDir, db);
   if (opts.legacyOwner) {
     const owner = db.userByName(opts.legacyOwner);
@@ -180,6 +191,29 @@ export async function startServer(
     const json = JSON.stringify(msg);
     for (const c of members.get(room.id) ?? []) if (c !== except && c.socket.readyState === c.socket.OPEN) c.socket.send(json);
   };
+  /**
+   * Keeps restore points: before an agent starts editing (so its work can be
+   * undone as a whole), and automatically while people work.
+   */
+  const snapshotBefore = async (room: Room, client: Client): Promise<void> => {
+    const now = Date.now();
+    try {
+      if (client.viaKey) {
+        const last = await versions.latest(room.id, 'agent');
+        if (!last || now - last.createdAt > AGENT_GAP_MS) {
+          await versions.save(room.id, room.doc, { kind: 'agent', label: `Before ${client.name}`, authorId: client.user?.id ?? null, authorName: client.name });
+          return;
+        }
+      }
+      const last = await versions.latest(room.id);
+      const quiet = room.lastEditAt ? now - room.lastEditAt > AUTO_QUIET_MS : true;
+      if (!last || (quiet && now - last.createdAt > AUTO_QUIET_MS) || now - last.createdAt > AUTO_EVERY_MS) {
+        await versions.save(room.id, room.doc, { kind: 'auto', label: '', authorId: null, authorName: '' });
+      }
+    } catch (e) {
+      console.error('[planar] could not snapshot', room.id, e);
+    }
+  };
   const peerInfo = (c: Client) => ({ id: c.id, name: c.name, color: c.color, presence: c.presence });
   const roleOf = (rec: FileRecord | undefined, userId: string | null): Role | null =>
     rec && !rec.deletedAt ? roleFor(rec, userId) : null;
@@ -206,6 +240,11 @@ export async function startServer(
     admins: new Set((opts.admins ?? []).map((a) => a.trim().toLowerCase()).filter(Boolean)),
     live,
     dataDir: opts.dataDir,
+    versions,
+    reset: (room: Room) => {
+      broadcast(room, { t: 'reset', doc: room.doc, version: room.version });
+      db.fileEdited(room.id, room.doc.name);
+    },
     metricsToken: opts.metricsToken || undefined,
     kickUser: (userId: string, reason: string) => {
       for (const set of members.values()) {
@@ -261,7 +300,7 @@ export async function startServer(
   const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: opts.maxMessageBytes ?? 50 * 1024 * 1024 });
 
   wss.on('connection', (socket, req) => {
-    const client: Client = { id: String(nextId++), socket, room: null, user: null, role: null, name: 'Guest', color: '#7b7bf0', presence: null };
+    const client: Client = { id: String(nextId++), socket, room: null, user: null, role: null, name: 'Guest', color: '#7b7bf0', presence: null, viaKey: false };
     const fail = (message: string) => {
       send(client, { t: 'error', message, fatal: true });
       socket.close(4000, message.slice(0, 120));
@@ -284,7 +323,12 @@ export async function startServer(
     const auth = authenticate(req, db);
     client.user = auth.user;
 
-    socket.on('message', async (raw) => {
+    // Messages of one connection are handled one after another (snapshots and loads are async).
+    let chain: Promise<void> = Promise.resolve();
+    socket.on('message', (raw) => {
+      chain = chain.then(() => handle(raw)).catch((e) => console.error('[planar] message error:', e));
+    });
+    const handle = async (raw: unknown): Promise<void> => {
       let msg: Record<string, unknown>;
       try {
         msg = JSON.parse(String(raw));
@@ -300,6 +344,7 @@ export async function startServer(
           if (!keyUser) return fail('Unknown or revoked API key');
           client.user = keyUser;
           viaKey = true;
+          client.viaKey = true;
         }
         const fileId = String(msg.file ?? '');
         if (!ROOM_ID.test(fileId)) return fail('Invalid file id');
@@ -359,6 +404,7 @@ export async function startServer(
           return;
         }
         const ops = Array.isArray(msg.ops) ? msg.ops.filter(isOp) : [];
+        if (ops.length) await snapshotBefore(room, client);
         const version = ops.length ? room.apply(ops) : room.version;
         send(client, { t: 'ack', seq: msg.seq, version });
         if (ops.length) {
@@ -375,7 +421,7 @@ export async function startServer(
         };
         broadcast(room, { t: 'presence', from: client.id, ...client.presence }, client);
       }
-    });
+    };
 
     socket.on('close', () => {
       const room = client.room;
@@ -459,6 +505,7 @@ export async function startServer(
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => http.close(() => resolve()));
       await store.saveAll();
+      await versions.flush();
       await db.flush();
     },
   };

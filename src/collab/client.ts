@@ -185,6 +185,9 @@ export class CollabClient {
       case 'role':
         this.onRole(msg.role as FileRole);
         break;
+      case 'reset':
+        this.onReset(msg);
+        break;
       case 'presence': {
         const peer = this.peers.get(String(msg.from));
         if (peer) {
@@ -268,6 +271,16 @@ export class CollabClient {
     }
     // Losing edit rights: reconnect so unsent changes are dropped and the server's copy shown.
     if (role === 'viewer' && was !== 'viewer') this.ws?.close();
+  }
+
+  /** The whole document was replaced on the server (an earlier version was restored). */
+  private onReset(msg: Record<string, unknown>): void {
+    this.pending.clear();
+    this.unacked.clear();
+    this.editor.setAutosave(false);
+    this.editor.replaceDocument(parseDocument(msg.doc), { keepView: true });
+    this.tracker.reset(this.editor.doc);
+    this.editor.notify('An earlier version of this file was restored');
   }
 
   private onRemoteOps(ops: Op[]): void {

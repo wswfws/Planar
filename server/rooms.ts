@@ -9,6 +9,8 @@ export const ROOM_ID = /^[A-Za-z0-9_-]{6,64}$/;
 /** One shared document and the version of its latest change. */
 export class Room {
   version = 0;
+  /** When the document last changed in this process (0 = not since the server started). */
+  lastEditAt = 0;
   private saveTimer: NodeJS.Timeout | null = null;
   private saving: Promise<void> = Promise.resolve();
 
@@ -21,6 +23,16 @@ export class Room {
   apply(ops: Op[]): number {
     applyOps(this.doc, ops);
     this.version++;
+    this.lastEditAt = Date.now();
+    this.scheduleSave();
+    return this.version;
+  }
+
+  /** Replaces the whole document (restoring a version). */
+  replace(doc: PlanarDocument): number {
+    this.doc = doc;
+    this.version++;
+    this.lastEditAt = Date.now();
     this.scheduleSave();
     return this.version;
   }

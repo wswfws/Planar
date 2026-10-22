@@ -53,6 +53,15 @@ interface FileRow {
 /** How long an agent keeps pointing at what it last changed. */
 const AGENT_PRESENCE_MS = 60_000;
 
+export interface VersionRow {
+  id: string;
+  createdAt: number;
+  label: string;
+  kind: 'auto' | 'named' | 'agent' | 'restore';
+  authorName: string;
+  nodes: number;
+}
+
 export interface RemoteFile extends FileRow {
   link: string;
 }
@@ -143,6 +152,29 @@ export class AgentSession {
   async duplicateFile(id: string): Promise<RemoteFile> {
     const { file } = await this.request<{ file: FileRow }>('POST', `/api/files/${encodeURIComponent(id)}/duplicate`, {});
     return this.remoteFile(file);
+  }
+
+  /** Restore points of the open server file. */
+  private versionsRoute(): string {
+    const id = this.editor?.collab?.fileId;
+    if (!id) throw new Error('Version history needs a file from a Planar server; open one first.');
+    return `/api/files/${encodeURIComponent(id)}/versions`;
+  }
+
+  async listVersions(): Promise<VersionRow[]> {
+    return (await this.request<{ versions: VersionRow[] }>('GET', this.versionsRoute())).versions;
+  }
+
+  async saveVersion(label: string): Promise<VersionRow> {
+    await new Promise((r) => setTimeout(r, 150)); // let unsent edits reach the server
+    return (await this.request<{ version: VersionRow }>('POST', this.versionsRoute(), { label })).version;
+  }
+
+  async restoreVersion(id: string): Promise<void> {
+    await new Promise((r) => setTimeout(r, 150));
+    await this.request('POST', `${this.versionsRoute()}/${encodeURIComponent(id)}/restore`, {});
+    // The server tells open editors to reload; wait until this one has.
+    await new Promise((r) => setTimeout(r, 200));
   }
 
   async openFileId(id: string): Promise<string> {

@@ -100,6 +100,26 @@ export const files = {
   thumbnailUrl: (id: string, version: number) => `/api/files/${id}/thumbnail.png?v=${version}`,
 };
 
+export type VersionKind = 'auto' | 'named' | 'agent' | 'restore';
+
+export interface VersionInfo {
+  id: string;
+  createdAt: number;
+  label: string;
+  kind: VersionKind;
+  authorName: string;
+  nodes: number;
+  bytes: number;
+}
+
+export const versions = {
+  list: (fileId: string) => api<{ versions: VersionInfo[] }>('GET', `/api/files/${fileId}/versions`).then((r) => r.versions),
+  get: (fileId: string, id: string) => api<{ version: VersionInfo; doc: PlanarDocument }>('GET', `/api/files/${fileId}/versions/${id}`),
+  save: (fileId: string, label: string) => api<{ version: VersionInfo }>('POST', `/api/files/${fileId}/versions`, { label }).then((r) => r.version),
+  rename: (fileId: string, id: string, label: string) => api<{ version: VersionInfo }>('PATCH', `/api/files/${fileId}/versions/${id}`, { label }).then((r) => r.version),
+  restore: (fileId: string, id: string) => api('POST', `/api/files/${fileId}/versions/${id}/restore`, {}),
+};
+
 // ---- admin --------------------------------------------------------------------
 
 export interface AdminSettings {

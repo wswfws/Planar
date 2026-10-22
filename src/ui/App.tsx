@@ -9,6 +9,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { Toolbar } from './Toolbar';
 import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
+import { VersionsDialog } from './VersionsDialog';
 import { watchFonts } from './fontLoader';
 import { looksLikeSvg } from '../core/svg';
 import { openServerFile } from '../collab/session';
@@ -230,6 +231,7 @@ export function App({ fileId }: { fileId?: string }) {
   const openFile = useMemo(() => () => fileInput.current?.click(), []);
   const [variablesOpen, setVariablesOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
 
   // A file on the server is edited live.
@@ -246,7 +248,7 @@ export function App({ fileId }: { fileId?: string }) {
     <EditorContext.Provider value={editor}>
       <ContextMenuProvider>
       <div className={`app${editor.readOnly ? ' read-only' : ''}`}>
-        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} onAccount={() => setAccountOpen(true)} />
+        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} onHistory={() => setHistoryOpen(true)} onAccount={() => setAccountOpen(true)} />
         <div className="workspace">
           <LayersPanel />
           <main className="stage">
@@ -259,6 +261,7 @@ export function App({ fileId }: { fileId?: string }) {
         {accountOpen && <AccountDialog onClose={() => setAccountOpen(false)} />}
         {variablesOpen && <VariablesDialog onClose={() => setVariablesOpen(false)} />}
         {shareOpen && fileId && <ShareDialog onClose={() => setShareOpen(false)} />}
+        {historyOpen && fileId && <VersionsDialog onClose={() => setHistoryOpen(false)} />}
         <input
           ref={fileInput}
           type="file"

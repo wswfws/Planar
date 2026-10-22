@@ -108,7 +108,7 @@ function Collaborators({ onShare }: { onShare: () => void }) {
   );
 }
 
-export function Toolbar({ onOpen, onVariables, onShare, onAccount }: { onOpen: () => void; onVariables: () => void; onShare: () => void; onAccount: () => void }) {
+export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: { onOpen: () => void; onVariables: () => void; onShare: () => void; onHistory: () => void; onAccount: () => void }) {
   const editor = useEditorState();
   const server = useServer();
   const [name, setName] = useState(editor.doc.name);
@@ -151,6 +151,7 @@ export function Toolbar({ onOpen, onVariables, onShare, onAccount }: { onOpen: (
             '-',
             { label: 'Variables…', action: onVariables },
             ...(server ? [{ label: 'Share…', action: onShare }] : []),
+            ...(server && fileId && !editor.readOnly ? [{ label: 'Version history…', action: onHistory }] : []),
             { label: 'Create component', shortcut: `${MOD}Alt+K`, action: () => editor.createComponent(), disabled: !editor.selection.length || editor.readOnly },
             '-',
             { label: 'Undo', shortcut: `${MOD}Z`, action: () => editor.undo(), disabled: !editor.canUndo },
@@ -197,6 +198,11 @@ export function Toolbar({ onOpen, onVariables, onShare, onAccount }: { onOpen: (
       <div className="toolbar-right">
         {editor.readOnly && <span className="badge" title="You can look at this file but not change it">View only</span>}
         <Collaborators onShare={onShare} />
+        {server && fileId && !editor.readOnly && (
+          <button type="button" className="small-button" title="Earlier versions of this file" onClick={onHistory}>
+            History
+          </button>
+        )}
         {server && (
           <button type="button" className="share-button" title="Invite people and set link access" onClick={onShare}>
             Share

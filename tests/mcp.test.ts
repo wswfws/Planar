@@ -49,7 +49,7 @@ describe('MCP tools (file mode)', () => {
   it('lists tools and opens a new file', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['code', 'components', 'create', 'delete', 'export', 'files', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables'].sort(),
+      ['code', 'components', 'create', 'delete', 'export', 'files', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables', 'versions'].sort(),
     );
     // Directories check that every tool says whether it reads or changes data.
     for (const t of tools) expect(t.annotations?.readOnlyHint !== undefined || t.annotations?.destructiveHint !== undefined, t.name).toBe(true);
@@ -269,6 +269,24 @@ describe('remote MCP endpoint (live file)', () => {
     }
     // The agent shows up as a participant pointing at its work.
     while (!human.collab?.peers.some((p) => p.name === 'Agent' && p.presence?.selection.length)) await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it('has a restore point from before the agent edited, and can go back to it', async () => {
+    const call = async (args: Record<string, string>) => (await remote.callTool({ name: 'versions', arguments: args })) as ToolResult;
+    const idOf = (listing: string, label: string) => listing.split(String.fromCharCode(10)).find((l) => l.includes(label))!.split(' ')[0];
+    const list = textOf(await call({ action: 'list' }));
+    expect(list).toContain('"Before Agent"');
+    expect(textOf(await call({ action: 'save', label: 'With greeting' }))).toMatch(/Saved version/);
+    const restored = await call({ action: 'restore', versionId: idOf(list, 'Before Agent') });
+    expect(restored.isError).toBeFalsy();
+    const start = Date.now();
+    while (Object.values(human.doc.nodes).some((n) => n.characters === 'Hello from the agent')) {
+      if (Date.now() - start > 3000) throw new Error('the human still has the agent text');
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    // Put the greeting back so later tests see the same file.
+    await call({ action: 'restore', versionId: idOf(textOf(await call({ action: 'list' })), 'With greeting') });
+    while (!Object.values(human.doc.nodes).some((n) => n.characters === 'Hello from the agent')) await new Promise((r) => setTimeout(r, 20));
   });
 
   it('cannot touch server files', async () => {

@@ -111,3 +111,10 @@ gets 404.
 | `GET /api/metrics` | Prometheus text format; needs `Authorization: Bearer <METRICS_TOKEN>` |
 
 `/mcp` is the Model Context Protocol endpoint for agents (see [MCP.md](MCP.md)).
+
+
+## Version history
+
+Server messages: `{t:'reset', doc, version}` — the whole document was replaced (a version was restored); clients drop pending and unacknowledged changes and show the new document.
+
+HTTP (editors only; viewers get 403): `GET /api/files/:id/versions`, `POST /api/files/:id/versions {label}`, `GET|PATCH /api/files/:id/versions/:vid`, `POST /api/files/:id/versions/:vid/restore`. Snapshots are taken automatically before an agent (API key / OAuth token) starts editing, and after 30 minutes of quiet or hourly while people edit; automatic ones are kept 30 days / 100 per file.

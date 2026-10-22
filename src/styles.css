@@ -1882,3 +1882,84 @@ select:focus {
 .auth-privacy {
   text-align: center;
 }
+
+/* ---- version history ---- */
+.versions-dialog {
+  width: min(900px, 100%);
+}
+.versions-body {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+}
+.version-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.version-item:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+.version-item.selected {
+  border-color: var(--accent, #5b5bd6);
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+.version-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.versions-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow: auto;
+}
+.version-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  max-height: 340px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: repeating-conic-gradient(rgba(127, 127, 127, 0.1) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+  overflow: hidden;
+}
+.version-preview img {
+  max-width: 100%;
+  max-height: 340px;
+}
+.version-line {
+  margin: 2px 0;
+}
+@media (max-width: 720px) {
+  .versions-body {
+    grid-template-columns: 1fr;
+  }
+  .versions-list {
+    max-height: 200px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
