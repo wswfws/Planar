@@ -51,14 +51,32 @@ function apiKey(req: IncomingMessage): string {
 
 export function createMcpHandler(opts: { db: Db; localServer: () => string; publicUrl?: string }) {
   const sessions = new Map<string, Entry>();
+  // Some clients (ChatGPT) start a fresh MCP session per tool call, so the open file lives per API key.
+  const shared = new Map<string, { session: AgentSession; refs: number }>();
+
+  const acquire = (key: string, req: IncomingMessage): AgentSession => {
+    let s = shared.get(key);
+    if (!s) {
+      s = { session: new AgentSession({ allowFiles: false, localServer: opts.localServer(), key, name: 'Agent', publicUrl: publicBase(req, opts.publicUrl) }), refs: 0 };
+      shared.set(key, s);
+    }
+    s.refs++;
+    return s.session;
+  };
+
+  const release = (key: string): void => {
+    const s = shared.get(key);
+    if (!s || --s.refs > 0) return;
+    s.session.close();
+    shared.delete(key);
+  };
 
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const [id, e] of sessions) {
       if (now - e.lastSeen > IDLE_MS) {
-        e.session.close();
-        void e.transport.close();
         sessions.delete(id);
+        void e.transport.close(); // onclose releases the session
       }
     }
   }, 60_000);
@@ -90,7 +108,8 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string; publ
         res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: sessionId ? 'Unknown session' : 'Start with an initialize request' }, id: null }));
         return;
       }
-      const session = new AgentSession({ allowFiles: false, localServer: opts.localServer(), key, name: 'Agent', publicUrl: publicBase(req, opts.publicUrl) });
+      const session = acquire(key, req);
+      let released = false;
       const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
@@ -99,7 +118,10 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string; publ
       });
       transport.onclose = () => {
         if (transport.sessionId) sessions.delete(transport.sessionId);
-        session.close();
+        if (!released) {
+          released = true;
+          release(key);
+        }
       };
       const server = new McpServer({ name: 'planar', version: '0.2.0' }, { instructions: INSTRUCTIONS });
       registerTools(server, session);
@@ -116,11 +138,10 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string; publ
     count: () => sessions.size,
     close: () => {
       clearInterval(sweep);
-      for (const e of sessions.values()) {
-        e.session.close();
-        void e.transport.close();
-      }
+      for (const e of sessions.values()) void e.transport.close();
       sessions.clear();
+      for (const s of shared.values()) s.session.close();
+      shared.clear();
     },
   };
 }
