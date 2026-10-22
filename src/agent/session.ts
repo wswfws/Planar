@@ -108,6 +108,11 @@ export class AgentSession {
     return 'nothing open';
   }
 
+  /** Name on the chat messages and notes the agent writes. */
+  get agentName(): string {
+    return this.opts.name ?? 'Agent';
+  }
+
   close(): void {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.client?.stop();

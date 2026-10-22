@@ -7,6 +7,8 @@ import { variableValue } from '../core/variables';
 import { libraryOf, visiblePageIds } from '../core/library';
 import type { PlanarDocument, SceneNode } from '../core/types';
 import { describe } from './props';
+import { noteSummary } from '../core/notes';
+import { inbox } from './notes';
 
 function fmt(v: unknown): string {
   if (Array.isArray(v)) return v.map(fmt).join(',');
@@ -23,6 +25,7 @@ export function summary(doc: PlanarDocument, n: SceneNode): string {
   const d = describe(doc, n);
   const parts = [`${d.type} ${quote(n.name)} #${n.id}`];
   if (n.type === 'page') return `${parts[0]} (${n.children.length} layers)${n.context ? `  context ${quote(n.context, 60)}` : ''}`;
+  if (n.type === 'note') return `note:${n.note?.kind ?? 'sticky'} ${quote(n.name)} #${n.id}  ${fmt(n.width)}×${fmt(n.height)} at ${fmt(n.x)},${fmt(n.y)}  ${quote(noteSummary(n), 80)}`;
   parts.push(`${fmt(d.width)}×${fmt(d.height)}`);
   if (!d.absolute && n.parentId && doc.nodes[n.parentId]?.layoutMode === 'none') parts.push(`at ${fmt(d.x)},${fmt(d.y)}`);
   else if (d.absolute) parts.push(`absolute at ${fmt(d.x)},${fmt(d.y)}`);
@@ -127,6 +130,11 @@ export function overview(editor: Editor): string {
     out.push('File context (brief):', doc.context.trim(), '');
   } else {
     out.push('File context: none yet (write a brief with the context tool once you know what the file is for).', '');
+  }
+  const notes = Object.values(doc.nodes).filter((n) => n.type === 'note').length;
+  if (notes) {
+    const open = inbox(doc).length;
+    out.push(`Annotations: ${notes} note${notes === 1 ? '' : 's'} (notes list)${open ? ` — ${open} open request${open === 1 ? '' : 's'} mentioning @ai: notes inbox` : ''}`, '');
   }
   out.push('Pages and top-level layers:');
   for (const pid of pages) {

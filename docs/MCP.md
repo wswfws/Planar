@@ -97,7 +97,8 @@ tool. `--key` (or `PLANAR_KEY`) is the API key and `--server` (or
 | `overview` | all | Pages, top-level frames, components, variables, selection, people |
 | `tree` | all | Outline of a page or layer (depth-limited) |
 | `find` | all | Find layers by name, text content, context notes or type |
-| `context` | all | Read everything written about a layer (file brief → page → parents → component → layer), write the file brief or a layer's notes |
+| `context` | all | Read everything written about a layer (file brief → page → parents → component → layer, plus the notes around its screen), write the file brief or a layer's notes |
+| `notes` | all | Requests for the agent (`inbox`: chat messages and notes mentioning @ai), list/read notes, add sticky notes, descriptions, chats, checklists and callouts, post in chats, tick checklist items |
 | `inspect` | all | Full properties of layers, in create/update vocabulary |
 | `screenshot` | all | PNG of a layer or page |
 | `create` | design | Create layers from a nested description (frames, text, shapes, instances…) |
@@ -220,6 +221,18 @@ Example — a card in one call:
 ### Context
 
 `context` keeps the reasons behind a design next to it. `action: "get"` with a layer id returns, as markdown sections, the file brief, the page's notes, the notes of every enclosing layer, the main component's notes (documentation) and the layer's own; without an id it returns the file brief. `action: "set"` replaces the notes of a layer, or the file brief when `id` is omitted; `append: true` adds a paragraph instead. `overview` starts with the file brief, `tree` and `find` show a short excerpt of a layer's notes, and `find` takes `context` to search them. Generated React code puts a component's notes in a JSDoc comment.
+
+### Notes, chats and requests
+
+Annotation layers (sticky notes, markdown descriptions, chats, checklists and callouts) are how people and agents talk on the canvas. `notes` with:
+
+- `action: "inbox"` lists open requests: chat messages that mention `@ai` (also `@agent`, `@claude`) with no agent message after them, and other notes whose text mentions `@ai`. `overview` says how many there are.
+- `list` (current page, or `within: "all"`) and `read` (`id` or `ids`; a chat with its messages, a checklist with its items).
+- `add` with `kind` (`sticky` default, `doc`, `chat`, `checklist`, `callout`), `text`, `title` and `items` (chats and checklists), `target` (a layer id: a callout points at it, other notes are placed beside its screen), `color`, `x`/`y`. Without a position a note goes right of the page content, below notes already there. Sticky notes and messages are signed with the agent's name and marked as written by AI.
+- `post` (`id`, `text`) answers in a chat; the request then leaves the inbox.
+- `set` changes `text`, `title`, `color`, a callout's `target`, replaces checklist `items`, or ticks items with `check: [{item, done}]` (item id, 1-based number or text).
+
+`inspect`, `tree`, `find` (`type: "note"`) and `screenshot` include annotations; `export` and `code` leave them out. `context get` lists the notes on and around a layer's screen and the callouts pointing into it.
 
 ### Team libraries
 

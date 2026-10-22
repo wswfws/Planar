@@ -5,13 +5,15 @@ import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { generateCode, generateTokens } from '../codegen/codegen';
-import { getPageOf } from '../core/document';
+import { descendants, getPageOf, insertNode, solid } from '../core/document';
 import type { Editor } from '../core/editor';
 import { exportSvg } from '../core/export';
 import type { VariableType } from '../core/types';
 import { variableValue } from '../core/variables';
 import { find, outline, overview, summary } from './outline';
 import { contextChain, formatContext, sanitizeContext } from '../core/context';
+import { createNote, MAX_ITEMS, newItem } from '../core/notes';
+import { formatInbox, formatNote, freeSpot, inbox, relatedNotes } from './notes';
 import { shadowToString } from '../core/effects';
 import { visiblePageIds } from '../core/library';
 import { applyProps, applyStyleSpec, createLayers, describe, PropError, type Friendly } from './props';
@@ -35,7 +37,8 @@ Workflow:
 4. Design: create builds whole nested layouts in one call (frames with layout/gap/padding, text, shapes, component instances). update restyles or moves many layers in one call. Prefer auto layout ("layout": "column"/"row") over absolute x/y.
 5. Check visually with screenshot.
 6. Prototypes: update a layer with "link": "<top-level frame name>" (optional "transition": "slide" | "dissolve") to make it go to that screen on click in Present mode; "link": null removes it.
-7. Context: write decisions, intent and open questions with context set (the file brief, or notes on a layer) so people and later agents know them.
+7. Notes: notes inbox lists chat messages and notes that mention @ai — requests people left for you on the canvas; answer in the chat with notes post. Leave findings and to-dos as notes (sticky, doc, checklist, or a callout pointing at a layer).
+   Context: write decisions, intent and open questions with context set (the file brief, or notes on a layer) so people and later agents know them.
 8. Developers: code gives React (components with typed props/variants) or HTML/CSS; tokens exports variables.
 Colours: "#RRGGBB", "#RRGGBB 50%", or "$variableName". Sizes: number, "hug" or "fill". Every change is undoable with undo.`;
 
@@ -257,7 +260,7 @@ export function registerTools(server: McpServer, session: AgentSession): void {
         name: z.string().optional(),
         text: z.string().optional().describe('Match text layer content'),
         context: z.string().optional().describe('Match the context notes written on layers'),
-        type: z.string().optional().describe('frame, text, rectangle, ellipse, vector, group, component, componentSet, instance'),
+        type: z.string().optional().describe('frame, text, rectangle, ellipse, vector, group, component, componentSet, instance, note'),
         within: z.string().optional().describe('Layer or page id, or "all" for every page (default: current page)'),
         limit: z.number().int().min(1).max(500).optional(),
       },
@@ -318,7 +321,10 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       if (id && !editor.doc.nodes[id]) throw new PropError(`No layer with id ${id}`);
       if (action === 'get') {
         const chain = id ? contextChain(editor.doc, id) : contextChain(editor.doc, '').filter((e) => e.source === 'file');
-        return text(chain.length ? formatContext(chain) : id ? 'Nothing is written about this layer, its parents or the file yet.' : 'The file has no brief yet.');
+        const notes = id ? relatedNotes(editor.doc, id) : [];
+        const parts = [chain.length ? formatContext(chain) : id ? 'Nothing is written about this layer, its parents or the file yet.' : 'The file has no brief yet.'];
+        if (notes.length) parts.push(`# Annotations on and around this screen\n\n${notes.map((n) => formatNote(editor.doc, n, 10)).join('\n\n')}`);
+        return text(parts.join('\n\n'));
       }
       if (body === undefined) throw new PropError('set needs text');
       const join = (old: string) => sanitizeContext(append && old.trim() ? `${old.trimEnd()}\n\n${body.trim()}` : body.trim());
@@ -328,6 +334,133 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       });
       await session.committed(id ? [id] : []);
       return text(id ? `Context of "${editor.doc.nodes[id].name}" saved.` : 'File brief saved.');
+    }),
+  );
+
+  const noteKinds = ['sticky', 'doc', 'chat', 'checklist', 'callout'] as const;
+  const itemSpec = z.union([z.string(), z.object({ text: z.string(), done: z.boolean().optional() })]);
+
+  server.registerTool(
+    'notes',
+    {
+      title: 'Notes, chats and checklists',
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      description:
+        'Annotation layers people and agents leave on the canvas: sticky notes, text descriptions (markdown), chats, checklists and callouts (a label with an arrow to a layer). They are not part of the design (not exported or turned into code). ' +
+        'inbox: requests for you — chat messages and notes that mention @ai and have no agent reply yet; check it when you start and after you finish a task. ' +
+        'list: every note on the current page (within: "all" for every page) with its text. read: full contents of notes (ids), a chat with its messages. ' +
+        'add: a new note (kind, text; title and items for chats/checklists; target: a layer id to point a callout at or to place the note beside; x/y on the page; color "#RRGGBB"). ' +
+        'post: write a message in a chat (id, text) — your answer to a request there. set: change a note (text, title, items to replace a checklist, check: [{item, done}] to tick items by id, number or text, target, color). Delete notes with delete.',
+      inputSchema: {
+        action: z.enum(['inbox', 'list', 'read', 'add', 'post', 'set']),
+        id: z.string().optional().describe('read / post / set: the note'),
+        ids: z.array(z.string()).optional().describe('read: several notes'),
+        kind: z.enum(noteKinds).optional().describe('add: what to add (default sticky)'),
+        text: z.string().optional().describe('add / set: the note text (markdown for doc); post: the message'),
+        title: z.string().optional().describe('chat / checklist title'),
+        items: z.array(itemSpec).optional().describe('checklist items (add / set replaces them)'),
+        check: z.array(z.object({ item: z.union([z.string(), z.number()]), done: z.boolean() })).optional().describe('set: tick or untick checklist items by id, 1-based number or text'),
+        target: z.string().optional().describe('add / set: layer id a callout points at (add: other notes are placed beside it)'),
+        color: z.string().optional().describe('add / set: background colour #RRGGBB'),
+        x: z.number().optional(),
+        y: z.number().optional(),
+        within: z.string().optional().describe('list: "all" for every page (default: current page)'),
+      },
+    },
+    guard(async (a) => {
+      const editor = await session.ready();
+      const { doc } = editor;
+      const noteOf = (id: string | undefined) => {
+        if (!id) throw new PropError(`${a.action} needs id (see notes list)`);
+        const n = doc.nodes[id];
+        if (n?.type !== 'note') throw new PropError(`No note with id ${id}`);
+        return n;
+      };
+      if (a.action === 'inbox') return text(formatInbox(doc, inbox(doc)));
+      if (a.action === 'list') {
+        const pages = a.within === 'all' ? visiblePageIds(doc) : [editor.pageId];
+        const lines: string[] = [];
+        for (const pid of pages) {
+          const notes = descendants(doc, pid).map((id) => doc.nodes[id]).filter((n) => n?.type === 'note');
+          if (!notes.length) continue;
+          lines.push(`page ${JSON.stringify(doc.nodes[pid].name)} #${pid}:`, ...notes.map((n) => `- ${summary(doc, n)}`));
+        }
+        return text(lines.length ? lines.join('\n') : 'No notes yet. Add one with notes add.');
+      }
+      if (a.action === 'read') {
+        const ids = a.ids ?? (a.id ? [a.id] : []);
+        if (!ids.length) throw new PropError('read needs id or ids');
+        return text(ids.map((id) => formatNote(doc, noteOf(id), 200)).join('\n\n'));
+      }
+      const checkHex = (c: string | undefined) => {
+        if (c !== undefined && !/^#[0-9a-f]{6}$/i.test(c)) throw new PropError('color must be "#RRGGBB"');
+        return c?.toUpperCase();
+      };
+      const toItems = (list: z.infer<typeof itemSpec>[]) => list.slice(0, MAX_ITEMS).map((i) => (typeof i === 'string' ? newItem(i) : newItem(i.text, i.done === true)));
+      if (a.target && !doc.nodes[a.target]) throw new PropError(`No layer with id ${a.target}`);
+      if (a.action === 'post') {
+        const n = noteOf(a.id);
+        if (n.note?.kind !== 'chat') throw new PropError('post writes in a chat; use set to change other notes');
+        if (!a.text?.trim()) throw new PropError('post needs text');
+        await edit(session, (ed) => ed.postMessage(n.id, a.text!, session.agentName, true));
+        await session.committed([n.id]);
+        return text(`Posted in ${JSON.stringify(n.characters || 'Chat')}.`);
+      }
+      if (a.action === 'add') {
+        const kind = a.kind ?? 'sticky';
+        const color = checkHex(a.color);
+        const id = await edit(session, (ed) => {
+          const note = createNote(kind);
+          if (a.text !== undefined && kind !== 'chat' && kind !== 'checklist') note.characters = a.text;
+          if (a.title !== undefined && (kind === 'chat' || kind === 'checklist')) note.characters = a.title;
+          if (kind === 'checklist' && a.items) note.note = { ...note.note!, items: toItems(a.items) };
+          if (kind === 'callout' && a.target) note.note = { ...note.note!, targetId: a.target };
+          if (kind === 'sticky') note.note = { ...note.note!, author: session.agentName };
+          if (color) note.fills = [solid(color)];
+          const pageId = a.target ? getPageOf(ed.doc, a.target)?.id ?? ed.pageId : ed.pageId;
+          const at = a.x !== undefined && a.y !== undefined ? { x: a.x, y: a.y } : freeSpot(ed.doc, pageId, note, a.target);
+          note.x = at.x;
+          note.y = at.y;
+          ed.change((d) => insertNode(d, note, pageId));
+          if (kind === 'chat' && a.text?.trim()) ed.postMessage(note.id, a.text, session.agentName, true);
+          return note.id;
+        });
+        await session.committed([id]);
+        const ed = await session.ready();
+        return text(`Added ${summary(ed.doc, ed.doc.nodes[id])}`);
+      }
+      // set
+      const n = noteOf(a.id);
+      const color = checkHex(a.color);
+      await edit(session, (ed) => {
+        const kind = n.note?.kind ?? 'sticky';
+        ed.updateNodes([n.id], (node) => {
+          if (a.text !== undefined && kind !== 'chat' && kind !== 'checklist') node.characters = a.text;
+          if (a.title !== undefined && (kind === 'chat' || kind === 'checklist')) node.characters = a.title;
+          if (color) node.fills = [solid(color)];
+          const data = { ...node.note! };
+          if (a.target !== undefined && kind === 'callout') data.targetId = a.target;
+          if (kind === 'checklist') {
+            let items = a.items ? toItems(a.items) : [...(data.items ?? [])];
+            for (const c of a.check ?? []) {
+              const ref = String(c.item);
+              const i =
+                items.findIndex((x) => x.id === ref) >= 0
+                  ? items.findIndex((x) => x.id === ref)
+                  : /^\d+$/.test(ref) && Number(ref) >= 1 && Number(ref) <= items.length
+                    ? Number(ref) - 1
+                    : items.findIndex((x) => x.text.toLowerCase() === ref.toLowerCase());
+              if (i < 0) throw new PropError(`No checklist item "${ref}"`);
+              items = items.map((x, k) => (k === i ? { ...x, done: c.done } : x));
+            }
+            data.items = items;
+          } else if (a.items || a.check) throw new PropError('items and check apply to checklists');
+          node.note = data;
+        });
+      });
+      await session.committed([n.id]);
+      const ed = await session.ready();
+      return text(`Updated ${summary(ed.doc, ed.doc.nodes[n.id])}`);
     }),
   );
 

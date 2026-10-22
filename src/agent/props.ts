@@ -85,6 +85,18 @@ function compactPadding(n: SceneNode): unknown {
 /** A layer in the shared vocabulary (only meaningful, non-default keys). */
 export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
   const out: Friendly = { id: n.id, type: n.type === 'vector' && n.points.length === 2 && !n.closed ? 'line' : n.type, name: n.name };
+  if (n.type === 'note') {
+    // Annotations: read and written with the notes tool.
+    const kind = n.note?.kind ?? 'sticky';
+    Object.assign(out, { kind, x: round(n.x), y: round(n.y), width: round(n.width), height: round(n.height) });
+    if (kind === 'chat' || kind === 'checklist') out.title = n.characters;
+    else out.text = n.characters;
+    if (kind === 'chat') out.messages = (n.note?.messages ?? []).filter((m) => !m.deleted).length;
+    if (kind === 'checklist') out.items = (n.note?.items ?? []).map((i) => ({ text: i.text, done: i.done }));
+    if (kind === 'callout' && n.note?.targetId) out.target = n.note.targetId;
+    if (n.note?.author) out.author = n.note.author;
+    return out;
+  }
   if (n.type === 'page') {
     out.children = n.children.length;
     const bg = n.fills[0];
@@ -689,7 +701,7 @@ export function createLayers(
   let at = index;
   for (const spec of specs) {
     const kind = TYPE_ALIASES[String(spec.type ?? 'frame').toLowerCase()];
-    if (!kind) throw new PropError(`Unknown type "${spec.type}". Use frame, text, rectangle, ellipse, line, vector, group, component or instance.`);
+    if (!kind) throw new PropError(`Unknown type "${spec.type}". Use frame, text, rectangle, ellipse, line, vector, group, component or instance${String(spec.type).toLowerCase() === 'note' ? ' (notes, chats, checklists and callouts are added with the notes tool)' : ''}.`);
     let node: SceneNode;
     if (kind === 'svg') {
       if (typeof spec.svg !== 'string') throw new PropError('type "svg" needs svg: "<svg ...>...</svg>"');

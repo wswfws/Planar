@@ -432,3 +432,7 @@ The file has a brief and every layer and page has context notes (markdown), edit
 ## Annotations
 
 The notes button in the toolbar adds annotation layers in the middle of the view: a sticky note (colour, author), a text description rendered from markdown, a chat (messages with author and time, written in the Properties panel; Enter sends), a checklist (items with checkboxes and progress) and a callout (a label with a dashed arrow to the selected layer, changeable under "Points at"). Double-click a note to write in it. "Hide annotations" in the same menu hides them and makes them unpickable for this viewer. Annotations are synced, versioned and seen by AI agents (screenshots include them), but are not exported, presented or turned into code. FigJam sticky notes are imported as sticky notes.
+
+## Agents and annotations
+
+Mentioning @ai in a chat message or a note leaves a request for AI agents connected to the file: the MCP `notes` tool lists open requests (`inbox`), and an agent answers in the chat (`post`), which closes the request. Agents add sticky notes, descriptions, checklists and callouts of their own, tick checklist items, and see the notes around a screen when they read its context. See MCP.md.
