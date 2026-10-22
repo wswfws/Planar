@@ -368,7 +368,11 @@ export function scaleChildren(doc: PlanarDocument, id: string, sx: number, sy: n
     child.y *= sy;
     child.width *= Math.abs(sx);
     child.height *= Math.abs(sy);
-    if (child.type === 'text') child.fontSize = Math.max(1, child.fontSize * Math.min(Math.abs(sx), Math.abs(sy)));
+    if (child.type === 'text') {
+      child.fontSize = Math.max(1, child.fontSize * Math.min(Math.abs(sx), Math.abs(sy)));
+      // Scaled text no longer matches its style.
+      if (sx !== 1 || sy !== 1) child.textStyleId = '';
+    }
     scaleChildren(doc, c, sx, sy);
   }
 }

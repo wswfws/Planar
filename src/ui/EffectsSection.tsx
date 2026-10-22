@@ -2,6 +2,7 @@ import type { Editor } from '../core/editor';
 import { defaultEffect, EFFECT_LABELS, EFFECT_TYPES, isShadow } from '../core/effects';
 import type { Effect, EffectType, SceneNode } from '../core/types';
 import { ColorField, IconButton, NumberField, Section } from './controls';
+import { StylePicker } from './Styles';
 
 /** Shadows and blurs of the selected layers. */
 export function EffectsSection({ editor, nodes }: { editor: Editor; nodes: SceneNode[] }) {
@@ -14,7 +15,12 @@ export function EffectsSection({ editor, nodes }: { editor: Editor; nodes: Scene
   return (
     <Section
       title="Effects"
-      actions={<IconButton icon="plus" title="Add drop shadow" onClick={() => setEffects([...(mixed ? [] : effects), defaultEffect('drop-shadow')])} />}
+      actions={
+        <>
+          {(effects.length > 0 || editor.doc.styles.some((s) => s.type === 'effect')) && <StylePicker editor={editor} nodes={nodes} kind="effect" />}
+          <IconButton icon="plus" title="Add drop shadow" onClick={() => setEffects([...(mixed ? [] : effects), defaultEffect('drop-shadow')])} />
+        </>
+      }
     >
       {mixed ? (
         <p className="hint">Mixed — click + to replace for all selected layers.</p>

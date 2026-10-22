@@ -2283,3 +2283,59 @@ select:focus {
   stroke: var(--accent);
   opacity: 1;
 }
+
+.style-picker {
+  max-width: 120px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 1px 2px;
+}
+
+.style-picker:hover,
+.style-picker:focus {
+  border-color: var(--border);
+}
+
+.style-picker.bound {
+  color: var(--accent);
+}
+
+.style-group h4 {
+  margin: 12px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.style-preview {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.06));
+  color: var(--text);
+}
+
+.style-preview.effect {
+  width: 18px;
+  height: 18px;
+  margin: 5px;
+  background: #fff;
+}
+
+.style-asset .asset-actions {
+  margin-left: auto;
+  display: flex;
+  opacity: 0;
+}
+
+.style-asset:hover .asset-actions {
+  opacity: 1;
+}

@@ -131,6 +131,7 @@ optional.
 | `clip` | boolean — clip content (frames) |
 | `shadow` | `"x y blur [spread] #RRGGBB [opacity%]"`, `"inset …"` for an inner shadow, several separated by commas; `null` removes all shadows |
 | `blur`, `backgroundBlur` | blur radius in px; `0` or `null` removes it |
+| `textStyle`, `effectStyle` | a style name from the `styles` tool; `null` detaches (the layer keeps its look) |
 | `wrap`, `rowGap` | boolean; number — row layouts continue on new rows |
 | `constraints` | `"<h> <v>"`, h = left / right / left-right / center / scale, v = top / bottom / top-bottom / center / scale — how the layer follows its parent frame when it is resized (outside auto layout); a single word sets its own axis |
 | `layout` | `"row"`, `"column"` or `"none"` — auto layout |
@@ -209,3 +210,7 @@ Example — a card in one call:
 ### Projects and search
 
 `files` also takes `action: "projects"`, and `project` (name or id) and `q` (name search) on `list`, and `project` on `create`.
+
+### Styles
+
+`styles` creates or updates text and effect styles in one call — `set: [{name, type: "text", font, size, weight, lineHeight}]`, `set: [{name, type: "effect", shadow, blur, backgroundBlur}]`, or `{name, from: "<layer id>"}` to copy a layer's settings — and `remove: [names]`; with no arguments it lists them with how many layers use each. Layers follow a style through the props `textStyle` and `effectStyle`. `tokens` exports text styles as `--font-<name>` (for `font: var(…)`) and shadow styles as `--shadow-<name>`; generated code uses those variables for styled layers.

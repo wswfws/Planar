@@ -70,6 +70,7 @@ their default value.
 | `counterSpacing` | number | Space between wrapped rows |
 | `constraintH` | `left`, `right`, `left-right`, `center`, `scale` | How the layer follows its parent frame's width when the frame is resized (outside auto layout) |
 | `constraintV` | `top`, `bottom`, `top-bottom`, `center`, `scale` | The same for height |
+| `textStyleId`, `effectStyleId` | string | Style the layer follows (`''` = none); see Styles |
 | `componentId` | string | Instance: id of its main component |
 | `sourceId` | string | Layer inside an instance: id of the component layer it mirrors |
 | `overrides` | string[] | Instance layers: property names changed locally |
@@ -146,3 +147,12 @@ followed by its own.
 | `background-blur` | `radius` | Blurs what is behind the layer's shape (CSS `backdrop-filter: blur(radius / 2)`) |
 
 Unknown types and invalid values are dropped or replaced by defaults when a file is opened.
+
+## Styles
+
+The document's `styles` list holds named text and effect styles:
+
+- `{id, name, type: "text", fontFamily, fontSize, fontWeight, lineHeight}`
+- `{id, name, type: "effect", effects: Effect[]}`
+
+A layer whose `textStyleId` / `effectStyleId` names a style takes those values from it whenever the document changes; editing one of them on the layer clears the id. A reference to a missing style is dropped. Names may use slashes for grouping (`Heading/H1`).

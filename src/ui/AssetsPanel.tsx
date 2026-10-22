@@ -6,6 +6,7 @@ import { invert } from '../core/math';
 import { drawNode } from '../core/render';
 import type { SceneNode } from '../core/types';
 import { useEditorState } from './EditorContext';
+import { StylesAssets } from './Styles';
 
 export const COMPONENT_DRAG_TYPE = 'application/x-planar-component';
 
@@ -75,6 +76,7 @@ export function AssetsPanel() {
           No components yet. Select layers and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>K</kbd> to create one.
         </p>
       )}
+      <StylesAssets />
     </div>
   );
 }

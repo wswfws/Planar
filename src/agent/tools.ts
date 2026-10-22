@@ -11,7 +11,8 @@ import { exportSvg } from '../core/export';
 import type { VariableType } from '../core/types';
 import { variableValue } from '../core/variables';
 import { find, outline, overview, summary } from './outline';
-import { applyProps, createLayers, describe, PropError, type Friendly } from './props';
+import { shadowToString } from '../core/effects';
+import { applyProps, applyStyleSpec, createLayers, describe, PropError, type Friendly } from './props';
 import { renderPng } from './raster';
 import { parseLink, type AgentSession } from './session';
 
@@ -523,6 +524,55 @@ export function registerTools(server: McpServer, session: AgentSession): void {
   );
 
   server.registerTool(
+    'styles',
+    {
+      title: 'Text and effect styles',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      description:
+        'Create or update named styles in one step; layers using a style follow its changes. set: [{name, type (text|effect; needed for new ones), font, size, weight, lineHeight (text) or shadow, blur, backgroundBlur (effect; same forms as layer props), or from: a layer id to copy them from}]. remove: style names to delete (layers keep their look). With nothing given, lists the styles. Apply with the layer props textStyle / effectStyle: "Name".',
+      inputSchema: {
+        set: z
+          .array(
+            z.object({
+              name: z.string(),
+              type: z.enum(['text', 'effect']).optional(),
+              from: z.string().optional(),
+              font: z.string().optional(),
+              size: z.number().optional(),
+              weight: z.union([z.number(), z.string()]).optional(),
+              lineHeight: z.union([z.number(), z.literal('auto')]).optional(),
+              shadow: z.union([z.string(), z.array(z.string()), z.null()]).optional(),
+              blur: z.number().optional(),
+              backgroundBlur: z.number().optional(),
+            }),
+          )
+          .optional(),
+        remove: z.array(z.string()).optional(),
+      },
+    },
+    guard(async ({ set, remove }) => {
+      if (set?.length || remove?.length) {
+        await edit(session, (editor) => {
+          for (const s of set ?? []) applyStyleSpec(editor, s);
+          for (const name of remove ?? []) {
+            const style = editor.doc.styles.find((x) => x.name === name);
+            if (style) editor.deleteStyle(style.id);
+          }
+        });
+        await session.committed([]);
+      }
+      const { doc } = await session.ready();
+      const used = (id: string) => Object.values(doc.nodes).filter((n) => n.textStyleId === id || n.effectStyleId === id).length;
+      const lines = doc.styles.map((s) =>
+        s.type === 'text'
+          ? `- text "${s.name}": ${s.fontFamily} ${s.fontWeight} ${s.fontSize}px, line height ${s.lineHeight || 'auto'} (${used(s.id)} layers)`
+          : `- effect "${s.name}": ${s.effects.map((e) => (e.type === 'drop-shadow' || e.type === 'inner-shadow' ? shadowToString(e) : `${e.type} ${e.radius}`)).join(', ') || 'none'} (${used(s.id)} layers)`,
+      );
+      return text(lines.length ? `Styles:\n${lines.join('\n')}` : 'This document has no styles.');
+    }),
+  );
+
+  server.registerTool(
     'pages',
     {
       title: 'Pages',
@@ -630,13 +680,13 @@ export function registerTools(server: McpServer, session: AgentSession): void {
     'tokens',
     {
       title: 'Design tokens',
-      description: 'Export variables for code: css (custom properties, one block per mode via [data-mode]), json, or ts.',
+      description: 'Export variables and styles for code: css (custom properties, one block per mode via [data-mode]; text styles as --font-* for font:, shadow styles as --shadow-*), json, or ts (variables only).',
       inputSchema: { format: z.enum(['css', 'json', 'ts']).optional().describe('Default css') },
       annotations: { readOnlyHint: true },
     },
     guard(async ({ format }) => {
       const editor = await session.ready();
-      if (!editor.doc.variables.length) return text('This document has no variables.');
+      if (!editor.doc.variables.length && !editor.doc.styles.length) return text('This document has no variables or styles.');
       const f = format ?? 'css';
       return text('```' + (f === 'ts' ? 'ts' : f) + '\n' + generateTokens(editor.doc, f) + '\n```');
     }),

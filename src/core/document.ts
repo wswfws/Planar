@@ -1,4 +1,5 @@
 import { sanitizeEffects } from './effects';
+import { sanitizeStyles } from './styles';
 import type { NodeType, Paint, PlanarDocument, SceneNode, SolidPaint } from './types';
 
 let counter = 0;
@@ -92,6 +93,8 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     overrides: [],
     bindings: {},
     variableMode: '',
+    textStyleId: '',
+    effectStyleId: '',
     componentProps: [],
     propBindings: {},
     propValues: {},
@@ -110,6 +113,7 @@ export function createDocument(name = 'Untitled'): PlanarDocument {
     nodes: { [page.id]: page },
     variables: [],
     modes: [{ id: newId(), name: 'Mode 1' }],
+    styles: [],
   };
 }
 
@@ -272,5 +276,6 @@ export function parseDocument(data: unknown): PlanarDocument {
     nodes,
     variables,
     modes,
+    styles: sanitizeStyles(d.styles),
   };
 }

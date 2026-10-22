@@ -12,6 +12,7 @@ import { PrototypeSection } from './PrototypeSection';
 import { InspectSection } from './InspectSection';
 import { EffectsSection } from './EffectsSection';
 import { ConstraintsSection } from './ConstraintsSection';
+import { StylePicker } from './Styles';
 import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
@@ -635,7 +636,7 @@ export function PropertiesPanel() {
       </Section>
 
       {texts.length > 0 && (
-        <Section title="Text">
+        <Section title="Text" actions={<StylePicker editor={editor} nodes={texts} kind="text" />}>
           <div className="row">
             <FontField
               value={common(texts, (n) => n.fontFamily)}

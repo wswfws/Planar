@@ -55,7 +55,8 @@ import {
 import { applyAutoLayout, isAutoLayout, isLaidOut } from './layout';
 import { apply, applyLinear, invert, rectCenter, rectFromPoints, rectsIntersect, type Rect, type Vec } from './math';
 import { measureTextNode } from './text';
-import type { ComponentProp, ComponentPropType, PlanarDocument, SceneNode, VariableType } from './types';
+import { applyStyles, TEXT_STYLE_FIELDS, textStyleValues } from './styles';
+import type { ComponentProp, ComponentPropType, EffectStyle, PlanarDocument, SceneNode, TextStyle, VariableType } from './types';
 import { coerce, defaultValue, resolveVariables, unbindVariable } from './variables';
 import { applyOps, diffDocs, repairTree, type Op } from './ops';
 import { insertSvg, parseSvg } from './svg';
@@ -341,6 +342,7 @@ export class Editor {
     // Order matters: variables feed sizes, groups and layout feed the
     // components that instances copy, and instances then lay out themselves.
     resolveVariables(doc);
+    applyStyles(doc);
     for (const p of doc.pageIds) fitGroups(doc, p);
     for (const p of doc.pageIds) applyAutoLayout(doc, p, this.layoutSkip);
     syncInstances(doc);
@@ -755,6 +757,15 @@ export class Editor {
         // Editing a bound property by hand detaches it from its variable.
         const unbind = changed.filter((k) => k !== 'bindings' && k in node.bindings);
         if (unbind.length) node.bindings = Object.fromEntries(Object.entries(node.bindings).filter(([k]) => !unbind.includes(k as keyof SceneNode)));
+        // Editing what a style sets by hand detaches the layer from the style.
+        if (node.textStyleId && !changed.includes('textStyleId') && changed.some((k) => (TEXT_STYLE_FIELDS as readonly string[]).includes(k))) {
+          node.textStyleId = '';
+          changed.push('textStyleId');
+        }
+        if (node.effectStyleId && !changed.includes('effectStyleId') && changed.includes('effects')) {
+          node.effectStyleId = '';
+          changed.push('effectStyleId');
+        }
         if (tracksOverrides(node)) {
           // Text sizes follow from content, so they are not overrides themselves.
           const derived = node.type === 'text' ? [...(node.autoWidth || node.autoHeight ? ['height'] : []), ...(node.autoWidth ? ['width'] : [])] : [];
@@ -1297,6 +1308,67 @@ export class Editor {
     this.change((doc) => {
       unbindVariable(doc, id);
       doc.variables = doc.variables.filter((v) => v.id !== id);
+    });
+  }
+
+  /** A new text style from a layer's font settings; the layer then uses it. Returns its id. */
+  createTextStyle(name: string, fromId: string): string | null {
+    const from = this.doc.nodes[fromId];
+    const trimmed = name.trim();
+    if (!from || !trimmed) return null;
+    const id = newId();
+    this.change((doc) => {
+      doc.styles.push({ id, name: trimmed, type: 'text', ...textStyleValues(from) });
+      for (const n of this.selection.map((s) => doc.nodes[s])) if (n?.type === 'text') n.textStyleId = id;
+      doc.nodes[fromId].textStyleId = id;
+    });
+    return id;
+  }
+
+  /** A new effect style from a layer's effects; the selected layers then use it. Returns its id. */
+  createEffectStyle(name: string, fromId: string): string | null {
+    const from = this.doc.nodes[fromId];
+    const trimmed = name.trim();
+    if (!from || !trimmed) return null;
+    const id = newId();
+    this.change((doc) => {
+      doc.styles.push({ id, name: trimmed, type: 'effect', effects: structuredClone(from.effects) });
+      for (const n of [fromId, ...this.selection].map((s) => doc.nodes[s])) if (n && n.type !== 'page') n.effectStyleId = id;
+    });
+    return id;
+  }
+
+  /** Applies a style to layers ('' detaches them, keeping their current values). */
+  applyStyle(ids: string[], kind: 'text' | 'effect', styleId: string): void {
+    const field = kind === 'text' ? 'textStyleId' : 'effectStyleId';
+    this.updateNodes(ids, (n) => {
+      if (kind === 'text' && n.type !== 'text') return;
+      n[field] = styleId;
+      if (styleId && kind === 'text') {
+        // A style wins over variables bound to the same fields.
+        n.bindings = Object.fromEntries(Object.entries(n.bindings).filter(([k]) => !(TEXT_STYLE_FIELDS as readonly string[]).includes(k)));
+      }
+    });
+  }
+
+  /** Changes a style's values (every layer using it follows) or its name. */
+  updateStyle(id: string, patch: Partial<Omit<TextStyle, 'id' | 'type'>> | Partial<Omit<EffectStyle, 'id' | 'type'>>): void {
+    this.change((doc) => {
+      const s = doc.styles.find((x) => x.id === id);
+      if (!s) return;
+      Object.assign(s, structuredClone(patch));
+      s.name = s.name.trim() || 'Style';
+    });
+  }
+
+  /** Deletes a style; layers keep its values but no longer follow it. */
+  deleteStyle(id: string): void {
+    this.change((doc) => {
+      doc.styles = doc.styles.filter((s) => s.id !== id);
+      for (const n of Object.values(doc.nodes)) {
+        if (n.textStyleId === id) n.textStyleId = '';
+        if (n.effectStyleId === id) n.effectStyleId = '';
+      }
     });
   }
 

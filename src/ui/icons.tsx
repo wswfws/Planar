@@ -86,6 +86,7 @@ const paths: Record<string, ReactElement> = {
   comment: <path d="M2.5 3.5h11v7h-6l-3 3v-3h-2z" />,
   close: <path d="M4 4l8 8M12 4l-8 8" />,
   trash: <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4" />,
+  refresh: <path d="M13 3v3.5H9.5M3 13V9.5h3.5M12.6 6.5A5 5 0 0 0 3.6 5.5M3.4 9.5a5 5 0 0 0 9 1" />,
 };
 
 export type IconName = keyof typeof paths;

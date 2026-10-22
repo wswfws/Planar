@@ -153,6 +153,8 @@ export function overview(editor: Editor): string {
       out.push(`- $${v.name} (${v.type}) ${doc.modes.map((m) => `${m.name}=${JSON.stringify(variableValue(doc, v, m.id))}`).join(' ')}`);
     }
   }
+  const styles = doc.styles ?? [];
+  if (styles.length) out.push(`Styles: ${styles.map((s) => `${s.type} "${s.name}"`).join(', ')} (details: styles)`);
 
   out.push('');
   out.push(editor.selection.length ? `Selection: ${editor.selection.map((id) => summary(doc, doc.nodes[id])).join('\n  ')}` : 'Selection: none');

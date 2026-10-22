@@ -2,13 +2,15 @@
 // design tokens. Pure functions — usable from the editor and the agent tools.
 
 import { propHost, variantAxes, variantSet, variantsOf } from '../core/components';
+import { createNode } from '../core/document';
 import { cssEffects } from '../core/effects';
+import { effectStyleOf, textStyleOf } from '../core/styles';
 import { vectorPoints } from '../core/geometry';
 import { cssFontFamily, fontImports } from '../core/fonts';
 import { effectiveSizing, wraps } from '../core/layout';
 import { nodePaths } from '../core/paths';
 import { variableValue } from '../core/variables';
-import { isFrameLike, type Paint, type PlanarDocument, type SceneNode, type Variable } from '../core/types';
+import { isFrameLike, type Paint, type PlanarDocument, type SceneNode, type Style, type TextStyle, type Variable } from '../core/types';
 
 export type CodeFormat = 'react' | 'html' | 'css';
 
@@ -129,6 +131,18 @@ function paintStyles(ctx: Ctx, n: SceneNode, css: Record<string, string>): void 
   if (n.type === 'ellipse') css['border-radius'] = '50%';
   else if (n.cornerRadius > 0 || n.bindings.cornerRadius) css['border-radius'] = cssNum(doc, n, 'cornerRadius', n.cornerRadius);
   Object.assign(css, cssEffects(n));
+  const fx = effectStyleOf(doc, n.effectStyleId);
+  if (fx && css['box-shadow']) css['box-shadow'] = `var(${styleToken(fx)})`;
+}
+
+/** CSS custom property a style is exported as by `tokens` (see generateTokens). */
+export function styleToken(s: Style): string {
+  return `--${s.type === 'text' ? 'font' : 'shadow'}-${slug(s.name)}`;
+}
+
+/** CSS `font` shorthand for a text style. */
+function fontShorthand(s: TextStyle): string {
+  return `${s.fontWeight} ${Math.round(s.fontSize * 100) / 100}px/${s.lineHeight > 0 ? s.lineHeight : 'normal'} ${cssFontFamily(s.fontFamily)}`;
 }
 
 function sizeAndPosition(ctx: Ctx, n: SceneNode, css: Record<string, string>, root: boolean): void {
@@ -188,10 +202,15 @@ function sizeAndPosition(ctx: Ctx, n: SceneNode, css: Record<string, string>, ro
 function textStyles(ctx: Ctx, n: SceneNode, css: Record<string, string>): void {
   const { doc } = ctx;
   css.margin = '0';
-  css['font-family'] = cssFontFamily(n.fontFamily);
-  css['font-size'] = cssNum(doc, n, 'fontSize', n.fontSize);
-  if (n.fontWeight !== 400) css['font-weight'] = String(n.fontWeight);
-  css['line-height'] = n.lineHeight > 0 ? String(n.lineHeight) : 'normal';
+  const style = textStyleOf(doc, n.textStyleId);
+  if (style) {
+    css.font = `var(${styleToken(style)})`;
+  } else {
+    css['font-family'] = cssFontFamily(n.fontFamily);
+    css['font-size'] = cssNum(doc, n, 'fontSize', n.fontSize);
+    if (n.fontWeight !== 400) css['font-weight'] = String(n.fontWeight);
+    css['line-height'] = n.lineHeight > 0 ? String(n.lineHeight) : 'normal';
+  }
   const fill = n.fills.find((p) => p.visible && p.type === 'solid');
   const color = fill ? cssColor(doc, fill) : null;
   if (color) css.color = color;
@@ -539,7 +558,8 @@ export function generateTokens(doc: PlanarDocument, format: TokenFormat): string
   if (format === 'json') {
     const out: Record<string, Record<string, unknown>> = {};
     for (const m of modes) out[m.name] = Object.fromEntries(doc.variables.map((v) => [v.name, value(v, m.id)]));
-    return JSON.stringify({ modes: out }, null, 2);
+    const styles = (doc.styles ?? []).map(({ id: _id, ...s }) => s);
+    return JSON.stringify(styles.length ? { modes: out, styles } : { modes: out }, null, 2);
   }
   if (format === 'ts') {
     const body = modes
@@ -556,5 +576,13 @@ export function generateTokens(doc: PlanarDocument, format: TokenFormat): string
     const selector = i === 0 ? `:root,\n[data-mode="${slug(m.name)}"]` : `[data-mode="${slug(m.name)}"]`;
     return `${selector} {\n${doc.variables.map((v) => decl(v, m.id)).join('\n')}\n}`;
   });
+  const styles = (doc.styles ?? [])
+    .map((s) => {
+      if (s.type === 'text') return `  ${styleToken(s)}: ${fontShorthand(s)};`;
+      const shadow = cssEffects({ ...createNode('rectangle'), effects: s.effects })['box-shadow'];
+      return shadow ? `  ${styleToken(s)}: ${shadow};` : null;
+    })
+    .filter(Boolean);
+  if (styles.length) blocks.push(`/* Text styles (use as font: var(--font-…)) and shadow styles (box-shadow: var(--shadow-…)) */\n:root {\n${styles.join('\n')}\n}`);
   return `/* Design tokens — modes: ${modes.map((m) => m.name).join(', ')}. Numbers are unitless; use calc(var(--x) * 1px). */\n${blocks.join('\n\n')}\n`;
 }

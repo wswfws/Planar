@@ -124,6 +124,10 @@ export interface SceneNode {
   bindings: Record<string, string>;
   /** Variable mode chosen for this subtree ('' = inherit). */
   variableMode: string;
+  /** Text style the font settings come from ('' = none). */
+  textStyleId: string;
+  /** Effect style the effects come from ('' = none). */
+  effectStyleId: string;
 
   /** Component: declared properties. */
   componentProps: ComponentProp[];
@@ -169,6 +173,27 @@ export interface VariableMode {
   name: string;
 }
 
+/** A named text style: the font settings text layers share. */
+export interface TextStyle {
+  id: string;
+  name: string;
+  type: 'text';
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: number;
+  lineHeight: number;
+}
+
+/** A named set of shadows and blurs. */
+export interface EffectStyle {
+  id: string;
+  name: string;
+  type: 'effect';
+  effects: Effect[];
+}
+
+export type Style = TextStyle | EffectStyle;
+
 export interface PlanarDocument {
   format: 'planar';
   version: 1;
@@ -177,6 +202,7 @@ export interface PlanarDocument {
   nodes: Record<string, SceneNode>;
   variables: Variable[];
   modes: VariableMode[];
+  styles: Style[];
 }
 
 export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 'component', 'componentSet', 'instance', 'group']);

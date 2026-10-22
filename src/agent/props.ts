@@ -10,13 +10,13 @@ import {
   variantsOf,
   wouldCycle,
 } from '../core/components';
-import { createNode, getPageOf, insertNode } from '../core/document';
+import { createNode, getPageOf, insertNode, newId } from '../core/document';
 import { defaultEffect, isShadow, parseShadows, shadowToString } from '../core/effects';
 import { scaleContents } from '../core/geometry';
 import { nodePaths, pathGeometry } from '../core/paths';
 import { insertSvg, parseSvg } from '../core/svg';
 import type { Editor } from '../core/editor';
-import type { ConstraintH, ConstraintV, Effect, NodeType, Paint, PlanarDocument, SceneNode } from '../core/types';
+import type { ConstraintH, ConstraintV, Effect, NodeType, Paint, PlanarDocument, SceneNode, TextStyle } from '../core/types';
 import { isFrameLike } from '../core/types';
 
 export type Friendly = Record<string, unknown>;
@@ -118,6 +118,8 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
     }
   }
   if ((n.type === 'rectangle' || isFrameLike(n)) && (n.cornerRadius || vars.cornerRadius)) out.radius = num('cornerRadius', n.cornerRadius);
+  const effectStyle = n.effectStyleId ? doc.styles.find((s) => s.id === n.effectStyleId) : null;
+  if (effectStyle) out.effectStyle = effectStyle.name;
   const shadows = n.effects.filter(isShadow);
   if (shadows.length) out.shadow = shadows.map(shadowToString).join(', ');
   for (const [key, type] of [
@@ -147,6 +149,8 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
   if (isFrameLike(parent) && (n.constraintH !== 'left' || n.constraintV !== 'top')) out.constraints = `${n.constraintH} ${n.constraintV}`;
   if (n.type === 'text') {
     out.text = n.characters;
+    const textStyle = n.textStyleId ? doc.styles.find((s) => s.id === n.textStyleId) : null;
+    if (textStyle) out.textStyle = textStyle.name;
     if (n.fontFamily !== DEFAULT_FONT) out.font = n.fontFamily;
     out.size = num('fontSize', n.fontSize);
     if (n.fontWeight !== 400) out.weight = n.fontWeight;
@@ -272,6 +276,74 @@ function parseConstraints(value: unknown): [ConstraintH, ConstraintV] {
   throw bad();
 }
 
+function findStyle(doc: PlanarDocument, ref: string, type: 'text' | 'effect'): string {
+  const s = doc.styles.find((x) => x.type === type && (x.name === ref || x.id === ref)) ?? doc.styles.find((x) => x.type === type && x.name.toLowerCase() === ref.toLowerCase());
+  if (!s) {
+    const known = doc.styles.filter((x) => x.type === type).map((x) => `"${x.name}"`);
+    throw new PropError(`Unknown ${type} style "${ref}". Known: ${known.join(', ') || 'none'} (create one with the styles tool)`);
+  }
+  return s.id;
+}
+
+export interface StyleSpec {
+  name: string;
+  type?: 'text' | 'effect';
+  from?: string;
+  font?: string;
+  size?: number;
+  weight?: number | string;
+  lineHeight?: number | 'auto';
+  shadow?: string | string[] | null;
+  blur?: number;
+  backgroundBlur?: number;
+}
+
+/** Creates or updates one style from the agent's description (see the styles tool). */
+export function applyStyleSpec(editor: Editor, spec: StyleSpec): void {
+  const doc = editor.doc;
+  const existing = doc.styles.find((s) => s.name === spec.name);
+  const type = existing?.type ?? spec.type;
+  if (!type) throw new PropError(`New style "${spec.name}" needs a type (text or effect)`);
+  if (spec.type && existing && existing.type !== spec.type) throw new PropError(`"${spec.name}" is a ${existing.type} style`);
+  const from = spec.from ? doc.nodes[spec.from] : null;
+  if (spec.from && !from) throw new PropError(`from: no layer with id ${spec.from}`);
+  if (type === 'text') {
+    const base: Omit<TextStyle, 'id' | 'name' | 'type'> = existing?.type === 'text' ? { ...existing } : { fontFamily: DEFAULT_FONT, fontSize: 16, fontWeight: 400, lineHeight: 0 };
+    if (from) Object.assign(base, { fontFamily: from.fontFamily, fontSize: from.fontSize, fontWeight: from.fontWeight, lineHeight: from.lineHeight });
+    if (spec.font !== undefined) base.fontFamily = spec.font;
+    if (spec.size !== undefined) base.fontSize = Math.max(1, spec.size);
+    if (spec.weight !== undefined) base.fontWeight = parseWeight(spec.weight);
+    if (spec.lineHeight !== undefined) base.lineHeight = spec.lineHeight === 'auto' ? 0 : Math.max(0, spec.lineHeight);
+    const values = { fontFamily: base.fontFamily, fontSize: base.fontSize, fontWeight: base.fontWeight, lineHeight: base.lineHeight };
+    if (existing) editor.updateStyle(existing.id, values);
+    else editor.change((d) => void d.styles.push({ id: newId(), name: spec.name, type: 'text', ...values }));
+    return;
+  }
+  let effects: Effect[] = existing?.type === 'effect' ? structuredClone(existing.effects) : [];
+  if (from) effects = structuredClone(from.effects);
+  if (spec.shadow !== undefined) {
+    const list = spec.shadow === null ? [] : Array.isArray(spec.shadow) ? spec.shadow : [spec.shadow];
+    let shadows: Effect[];
+    try {
+      shadows = list.flatMap(parseShadows);
+    } catch (e) {
+      throw new PropError((e as Error).message);
+    }
+    effects = [...shadows, ...effects.filter((e) => !isShadow(e))];
+  }
+  for (const [key, t] of [
+    ['blur', 'layer-blur'],
+    ['backgroundBlur', 'background-blur'],
+  ] as const) {
+    const r = spec[key];
+    if (r === undefined) continue;
+    effects = effects.filter((e) => e.type !== t);
+    if (r > 0) effects.push({ ...defaultEffect(t), radius: r });
+  }
+  if (existing) editor.updateStyle(existing.id, { effects });
+  else editor.change((d) => void d.styles.push({ id: newId(), name: spec.name, type: 'effect', effects }));
+}
+
 /** Component or component set by name or id. */
 export function findComponent(doc: PlanarDocument, ref: string): SceneNode | null {
   const byId = doc.nodes[ref];
@@ -291,7 +363,7 @@ const KNOWN = new Set([
   'strokes', 'strokeWidth', 'radius', 'clip', 'layout', 'gap', 'padding', 'align', 'crossAlign', 'absolute', 'text', 'font', 'size',
   'fontSize', 'weight', 'fontWeight', 'lineHeight', 'textAlign', 'textAlignVertical', 'component', 'props', 'variant', 'mode',
   'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg', 'link', 'transition', 'shadow', 'blur',
-  'backgroundBlur', 'constraints', 'wrap', 'rowGap',
+  'backgroundBlur', 'constraints', 'wrap', 'rowGap', 'textStyle', 'effectStyle',
 ]);
 
 /**
@@ -501,6 +573,19 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
       if (props.width === undefined && props.w === undefined) n.width = n.pathBox.w;
       if (props.height === undefined && props.h === undefined) n.height = n.pathBox.h;
       if (!n.fills.length && !n.strokes.length) n.fills = [{ type: 'solid', color: '#000000', opacity: 1, visible: true }];
+    }
+
+    // Styles last: they set fonts and effects themselves.
+    if (props.textStyle !== undefined) {
+      if (n.type !== 'text') warnings.push(`textStyle only applies to text (${n.type})`);
+      else if (props.textStyle === null || props.textStyle === '') set('textStyleId', '');
+      else {
+        set('textStyleId', findStyle(doc, String(props.textStyle), 'text'));
+        n.bindings = Object.fromEntries(Object.entries(n.bindings).filter(([k]) => !['fontFamily', 'fontSize', 'fontWeight', 'lineHeight'].includes(k)));
+      }
+    }
+    if (props.effectStyle !== undefined) {
+      set('effectStyleId', props.effectStyle === null || props.effectStyle === '' ? '' : findStyle(doc, String(props.effectStyle), 'effect'));
     }
 
     if (props.mode !== undefined) {
