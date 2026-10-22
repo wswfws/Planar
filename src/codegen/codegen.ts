@@ -2,6 +2,7 @@
 // design tokens. Pure functions — usable from the editor and the agent tools.
 
 import { propHost, variantAxes, variantSet, variantsOf } from '../core/components';
+import { cssEffects } from '../core/effects';
 import { vectorPoints } from '../core/geometry';
 import { cssFontFamily, fontImports } from '../core/fonts';
 import { effectiveSizing } from '../core/layout';
@@ -127,6 +128,7 @@ function paintStyles(ctx: Ctx, n: SceneNode, css: Record<string, string>): void 
   if (strokeColor && n.strokeWidth > 0) css.border = `${cssNum(doc, n, 'strokeWidth', n.strokeWidth)} solid ${strokeColor}`;
   if (n.type === 'ellipse') css['border-radius'] = '50%';
   else if (n.cornerRadius > 0 || n.bindings.cornerRadius) css['border-radius'] = cssNum(doc, n, 'cornerRadius', n.cornerRadius);
+  Object.assign(css, cssEffects(n));
 }
 
 function sizeAndPosition(ctx: Ctx, n: SceneNode, css: Record<string, string>, root: boolean): void {
@@ -272,6 +274,7 @@ function build(ctx: Ctx, n: SceneNode, root = false): El | null {
   if (n.type === 'text') {
     el.tag = 'p';
     textStyles(ctx, n, el.css);
+    Object.assign(el.css, cssEffects(n));
     const textProp = n.propBindings.characters && ctx.propNames.get(n.propBindings.characters);
     if (textProp) el.textExpr = textProp;
     else el.text = n.characters;
@@ -280,6 +283,12 @@ function build(ctx: Ctx, n: SceneNode, root = false): El | null {
   if (n.type === 'vector') {
     el.raw = svgFor(ctx, n);
     el.css.display = 'block';
+    // Box shadows would follow the box, not the drawing.
+    const fx = cssEffects(n);
+    const drops = n.effects.filter((e) => e.visible && e.type === 'drop-shadow');
+    if (drops.length) fx.filter = [...drops.map((e) => `drop-shadow(${e.x}px ${e.y}px ${e.radius}px ${e.opacity < 1 ? `color-mix(in srgb, ${e.color} ${Math.round(e.opacity * 100)}%, transparent)` : e.color})`), fx.filter].filter(Boolean).join(' ');
+    delete fx['box-shadow'];
+    Object.assign(el.css, fx);
     return el;
   }
 

@@ -314,6 +314,7 @@ Primary / Secondary and *Size* = Small / Large).
   - X, Y, W, H, rotation, corner radius, clip content;
   - opacity;
   - fills and strokes (add, remove, hide, colour, opacity, stroke width);
+  - effects: drop and inner shadows (offset, blur, spread, colour, opacity), layer blur and background blur;
   - text settings (family — free text with suggestions, size, weight, line height, horizontal and
     vertical alignment, sizing mode: auto width / auto height / fixed size);
   - export (PNG at 1×/2×/3× or SVG) for the selection, or for the whole page
@@ -398,10 +399,8 @@ Planar server (see [SELF_HOSTING.md](SELF_HOSTING.md); wire protocol in
 
 ## 13. Out of scope (roadmap)
 
-Comments, accounts and permissions,
-variable collections and aliases, wrapping auto layout,
-constraints, boolean operations, Bézier curve editing, gradients, effects
-(shadows, blur), styles, prototyping, plugins, version history.
+Variable collections and aliases, wrapping auto layout,
+constraints, boolean operations, Bézier curve editing, gradients, styles, plugins.
 
 ## Prototypes and presentation
 

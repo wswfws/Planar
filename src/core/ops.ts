@@ -14,8 +14,12 @@ export type Op = { o: 'node'; id: string; node: SceneNode | null } | { o: 'meta'
 export function applyOps(doc: PlanarDocument, ops: Op[]): void {
   for (const op of ops) {
     if (op.o === 'node') {
-      if (op.node) doc.nodes[op.id] = structuredClone({ ...op.node, id: op.id });
-      else delete doc.nodes[op.id];
+      if (op.node) {
+        const node = structuredClone({ ...op.node, id: op.id });
+        // Layers from older clients predate effects.
+        if (!Array.isArray(node.effects)) node.effects = [];
+        doc.nodes[op.id] = node;
+      } else delete doc.nodes[op.id];
     } else if ((META_KEYS as readonly string[]).includes(op.key)) {
       (doc as unknown as Record<string, unknown>)[op.key] = structuredClone(op.value);
     }

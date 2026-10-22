@@ -1,6 +1,7 @@
-import { localMatrix, parentWorldMatrix, selectionBounds, vectorPoints } from './geometry';
+import { effectOutset } from './effects';
+import { localMatrix, parentWorldMatrix, vectorPoints, worldBounds } from './geometry';
 import { fontImports } from './fonts';
-import { clean, type Mat, type Rect } from './math';
+import { clean, rectUnion, type Mat, type Rect } from './math';
 import { nodePaths } from './paths';
 import { drawNode } from './render';
 import { pdfFromJpegs } from './pdf';
@@ -45,12 +46,65 @@ function shapeElement(node: SceneNode, paintAttrs: string): string {
 
 let clipCounter = 0;
 
+/**
+ * An SVG filter for the layer's shadows and layer blur (background blur has no
+ * SVG equivalent and is left out). The layer and its contents cast the shadows.
+ */
+function svgFilter(node: SceneNode, id: string): string | null {
+  const effects = (node.effects ?? []).filter((e) => e.visible && e.type !== 'background-blur');
+  if (!effects.length) return null;
+  const o = effectOutset(node);
+  const pad = 2;
+  const prims: string[] = [];
+  const under: string[] = [];
+  const over: string[] = [];
+  effects.forEach((e, i) => {
+    const sd = clean(e.radius / 2, 3);
+    const flood = `<feFlood flood-color="${e.color}"${e.opacity < 1 ? ` flood-opacity="${clean(e.opacity, 3)}"` : ''}/>`;
+    if (e.type === 'drop-shadow') {
+      const src = e.spread > 0 ? `<feMorphology in="SourceAlpha" operator="dilate" radius="${clean(e.spread)}" result="m${i}"/>` : e.spread < 0 ? `<feMorphology in="SourceAlpha" operator="erode" radius="${clean(-e.spread)}" result="m${i}"/>` : '';
+      prims.push(
+        src,
+        `<feOffset in="${src ? `m${i}` : 'SourceAlpha'}" dx="${clean(e.x)}" dy="${clean(e.y)}"/>`,
+        `<feGaussianBlur stdDeviation="${sd}" result="b${i}"/>`,
+        flood,
+        `<feComposite in2="b${i}" operator="in" result="s${i}"/>`,
+      );
+      under.push(`s${i}`);
+    } else if (e.type === 'inner-shadow') {
+      prims.push(
+        `<feComponentTransfer in="SourceAlpha" result="v${i}"><feFuncA type="table" tableValues="1 0"/></feComponentTransfer>`,
+        `<feOffset in="v${i}" dx="${clean(e.x)}" dy="${clean(e.y)}"/>`,
+        `<feGaussianBlur stdDeviation="${sd}"/>`,
+        `<feComposite in2="SourceAlpha" operator="in" result="b${i}"/>`,
+        flood,
+        `<feComposite in2="b${i}" operator="in" result="s${i}"/>`,
+      );
+      over.push(`s${i}`);
+    }
+  });
+  const nodes = [...under, 'SourceGraphic', ...over].map((r) => `<feMergeNode in="${r}"/>`).join('');
+  prims.push(`<feMerge result="all">${nodes}</feMerge>`);
+  const blur = effects.find((e) => e.type === 'layer-blur');
+  if (blur) prims.push(`<feGaussianBlur in="all" stdDeviation="${clean(blur.radius / 2, 3)}"/>`);
+  const x = -o.left - pad;
+  const y = -o.top - pad;
+  return (
+    `<filter id="${id}" filterUnits="userSpaceOnUse" x="${clean(x)}" y="${clean(y)}" width="${clean(node.width + o.left + o.right + 2 * pad)}" height="${clean(node.height + o.top + o.bottom + 2 * pad)}" color-interpolation-filters="sRGB">` +
+    prims.join('') +
+    `</filter>`
+  );
+}
+
 function nodeToSvg(doc: PlanarDocument, id: string): string {
   const node = doc.nodes[id];
   if (!node || !node.visible) return '';
   const parts: string[] = [];
   const opacity = node.opacity < 1 ? ` opacity="${clean(node.opacity, 3)}"` : '';
-  parts.push(`<g${matrixAttr(localMatrix(node))}${opacity}>`);
+  const fid = `planar-fx-${++clipCounter}`;
+  const filter = svgFilter(node, fid);
+  if (filter) parts.push(filter);
+  parts.push(`<g${matrixAttr(localMatrix(node))}${opacity}${filter ? ` filter="url(#${fid})"` : ''}>`);
 
   if (node.type === 'text') {
     const lh = lineHeightPx(node);
@@ -107,8 +161,16 @@ function nodeToSvg(doc: PlanarDocument, id: string): string {
   return parts.join('');
 }
 
+/** The area an export covers: the layers plus whatever their shadows and blurs reach. */
 export function exportBounds(doc: PlanarDocument, ids: string[]): Rect | null {
-  const b = selectionBounds(doc, ids);
+  const rects = ids
+    .filter((id) => doc.nodes[id])
+    .map((id) => {
+      const r = worldBounds(doc, id);
+      const o = effectOutset(doc.nodes[id]);
+      return { x: r.x - o.left, y: r.y - o.top, width: r.width + o.left + o.right, height: r.height + o.top + o.bottom };
+    });
+  const b = rectUnion(rects);
   if (!b) return null;
   const x = Math.floor(b.x);
   const y = Math.floor(b.y);

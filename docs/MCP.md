@@ -129,6 +129,8 @@ optional.
 | `fill`, `stroke` | `"#RRGGBB"`, `"#RRGGBB 50%"`, `"$variable"`, `"image:<path or URL>"`, `null`, or a list of these |
 | `strokeWidth`, `radius` | number or `"$variable"` |
 | `clip` | boolean — clip content (frames) |
+| `shadow` | `"x y blur [spread] #RRGGBB [opacity%]"`, `"inset …"` for an inner shadow, several separated by commas; `null` removes all shadows |
+| `blur`, `backgroundBlur` | blur radius in px; `0` or `null` removes it |
 | `layout` | `"row"`, `"column"` or `"none"` — auto layout |
 | `gap` | number or `"$variable"` |
 | `padding` | `16`, `[12, 24]` (vertical, horizontal) or `[t, r, b, l]` |
@@ -171,6 +173,7 @@ Example — a card in one call:
   `align-items`); *fill* → `flex: 1` / `align-self: stretch`; *hug* → no
   fixed size; layers in frames without auto layout → absolute positioning;
 - fills, strokes, radius, opacity, rotation, clipping, text styles;
+- shadows → `box-shadow` (`text-shadow` for text, `filter: drop-shadow()` for vectors), blurs → `filter` / `backdrop-filter`;
 - colours and numbers bound to variables → `var(--token-name)`, matching
   `tokens`;
 - `react`: a component per main component or component set, with a typed

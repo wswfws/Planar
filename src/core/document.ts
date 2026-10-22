@@ -1,3 +1,4 @@
+import { sanitizeEffects } from './effects';
 import type { NodeType, Paint, PlanarDocument, SceneNode, SolidPaint } from './types';
 
 let counter = 0;
@@ -55,6 +56,7 @@ export function createNode(type: NodeType, props: Partial<SceneNode> = {}): Scen
     fills: DEFAULT_FILLS[type](),
     strokes: type === 'vector' ? [solid('#000000')] : [],
     strokeWidth: type === 'vector' ? 2 : 1,
+    effects: [],
     cornerRadius: 0,
     clipContent: type === 'frame' || type === 'component' || type === 'instance',
     characters: '',
@@ -239,6 +241,7 @@ export function parseDocument(data: unknown): PlanarDocument {
       throw new Error(`Invalid node ${id}`);
     }
     nodes[id] = { ...createNode(raw.type), ...raw, id };
+    nodes[id].effects = sanitizeEffects(raw.effects);
   }
   for (const node of Object.values(nodes)) {
     node.children = (Array.isArray(node.children) ? node.children : []).filter((c) => nodes[c]?.parentId === node.id);

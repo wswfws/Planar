@@ -43,6 +43,7 @@ their default value.
 | `visible`, `locked` | boolean | |
 | `fills`, `strokes` | Paint[] | Painted bottom to top |
 | `strokeWidth` | number | Centred on the outline |
+| `effects` | Effect[] | Shadows and blurs (below) |
 | `cornerRadius` | number | Rectangles and frames |
 | `clipContent` | boolean | Frames |
 | `characters` | string | Text content |
@@ -127,3 +128,17 @@ translate(x + width/2, y + height/2) · rotate(rotation) · translate(-width/2, 
 
 and its world transform is the product of its ancestors' local transforms
 followed by its own.
+
+## Effects
+
+`effects` is a list of shadows and blurs, each
+`{type, visible, color, opacity, x, y, radius, spread}`:
+
+| `type` | Uses | Painted |
+|---|---|---|
+| `drop-shadow` | `color` (`#RRGGBB`), `opacity`, `x`, `y`, `radius` (blur, like CSS `box-shadow`), `spread` | Under the layer, cast by its fills, strokes and text (a layer without fills: by its children) |
+| `inner-shadow` | same | Inside the layer's shape, above its fills |
+| `layer-blur` | `radius` | Blurs the layer and its contents (CSS `filter: blur(radius / 2)`) |
+| `background-blur` | `radius` | Blurs what is behind the layer's shape (CSS `backdrop-filter: blur(radius / 2)`) |
+
+Unknown types and invalid values are dropped or replaced by defaults when a file is opened.

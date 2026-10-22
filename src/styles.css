@@ -2223,3 +2223,14 @@ select:focus {
   align-items: center;
   gap: 6px;
 }
+
+.effect + .effect {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 6px;
+}
+
+.effect select {
+  flex: 1;
+  min-width: 0;
+}

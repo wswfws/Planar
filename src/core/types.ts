@@ -21,6 +21,20 @@ export interface ImagePaint {
 
 export type Paint = SolidPaint | ImagePaint;
 
+export type EffectType = 'drop-shadow' | 'inner-shadow' | 'layer-blur' | 'background-blur';
+
+/** A shadow or blur. Blurs use only radius; x, y, spread and colour apply to shadows. */
+export interface Effect {
+  type: EffectType;
+  visible: boolean;
+  color: string;
+  opacity: number;
+  x: number;
+  y: number;
+  radius: number;
+  spread: number;
+}
+
 export type TextAlign = 'left' | 'center' | 'right';
 export type TextAlignVertical = 'top' | 'middle' | 'bottom';
 
@@ -52,6 +66,8 @@ export interface SceneNode {
   fills: Paint[];
   strokes: Paint[];
   strokeWidth: number;
+  /** Shadows and blurs, painted in list order. */
+  effects: Effect[];
 
   cornerRadius: number;
   clipContent: boolean;

@@ -1,9 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createDocument, parseDocument } from '../src/core/document';
 import { canRender, renderPng } from '../src/agent/raster';
-import { exportSvg } from '../src/core/export';
+import { exportBounds, exportSvg } from '../src/core/export';
 import { pdfFromJpegs } from '../src/core/pdf';
-import { selectionBounds } from '../src/core/geometry';
 import { uniqueNames, zipFiles } from '../src/core/zip';
 import type { PlanarDocument } from '../src/core/types';
 import { can, type LinkAccess, type MemberRole, type Role } from './access';
@@ -745,7 +744,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
         if (format === 'pdf') {
           const pages = [];
           for (const id of ids) {
-            const b = selectionBounds(doc, [id]);
+            const b = exportBounds(doc, [id]);
             if (!b) continue;
             const jpeg = await renderPng(doc, [id], { scale, maxSize: 8000, background: '#ffffff', jpeg: true });
             pages.push({ width: b.width, height: b.height, jpeg, pixelWidth: Math.round(b.width * scale), pixelHeight: Math.round(b.height * scale) });

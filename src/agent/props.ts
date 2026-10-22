@@ -11,11 +11,12 @@ import {
   wouldCycle,
 } from '../core/components';
 import { createNode, getPageOf, insertNode } from '../core/document';
+import { defaultEffect, isShadow, parseShadows, shadowToString } from '../core/effects';
 import { scaleContents } from '../core/geometry';
 import { nodePaths, pathGeometry } from '../core/paths';
 import { insertSvg, parseSvg } from '../core/svg';
 import type { Editor } from '../core/editor';
-import type { NodeType, Paint, PlanarDocument, SceneNode } from '../core/types';
+import type { Effect, NodeType, Paint, PlanarDocument, SceneNode } from '../core/types';
 import { isFrameLike } from '../core/types';
 
 export type Friendly = Record<string, unknown>;
@@ -117,6 +118,15 @@ export function describe(doc: PlanarDocument, n: SceneNode): Friendly {
     }
   }
   if ((n.type === 'rectangle' || isFrameLike(n)) && (n.cornerRadius || vars.cornerRadius)) out.radius = num('cornerRadius', n.cornerRadius);
+  const shadows = n.effects.filter(isShadow);
+  if (shadows.length) out.shadow = shadows.map(shadowToString).join(', ');
+  for (const [key, type] of [
+    ['blur', 'layer-blur'],
+    ['backgroundBlur', 'background-blur'],
+  ] as const) {
+    const e = n.effects.find((x) => x.type === type);
+    if (e) out[key] = e.visible ? round(e.radius) : `${round(e.radius)} hidden`;
+  }
   if (isFrameLike(n)) {
     if (n.type === 'frame' && !n.clipContent) out.clip = false;
     if (n.type !== 'frame' && n.clipContent) out.clip = true;
@@ -258,7 +268,8 @@ const KNOWN = new Set([
   'id', 'type', 'name', 'x', 'y', 'width', 'height', 'w', 'h', 'rotation', 'opacity', 'visible', 'locked', 'fill', 'fills', 'stroke',
   'strokes', 'strokeWidth', 'radius', 'clip', 'layout', 'gap', 'padding', 'align', 'crossAlign', 'absolute', 'text', 'font', 'size',
   'fontSize', 'weight', 'fontWeight', 'lineHeight', 'textAlign', 'textAlignVertical', 'component', 'props', 'variant', 'mode',
-  'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg', 'link', 'transition',
+  'parent', 'index', 'children', 'points', 'closed', 'path', 'viewBox', 'fillRule', 'svg', 'link', 'transition', 'shadow', 'blur',
+  'backgroundBlur',
 ]);
 
 /**
@@ -331,6 +342,27 @@ export function applyProps(editor: Editor, id: string, props: Friendly, loadImag
     if (props.strokeWidth !== undefined) numOrVar('strokeWidth', 'strokeWidth', props.strokeWidth, n);
     if (props.radius !== undefined) numOrVar('radius', 'cornerRadius', props.radius, n);
     if (props.clip !== undefined) set('clipContent', props.clip === true);
+    if (props.shadow !== undefined) {
+      const list = props.shadow === null || props.shadow === 'none' ? [] : Array.isArray(props.shadow) ? props.shadow.map(String) : [String(props.shadow)];
+      let shadows: Effect[];
+      try {
+        shadows = list.flatMap(parseShadows);
+      } catch (e) {
+        throw new PropError((e as Error).message);
+      }
+      n.effects = [...shadows, ...n.effects.filter((e) => !isShadow(e))];
+    }
+    for (const [key, type] of [
+      ['blur', 'layer-blur'],
+      ['backgroundBlur', 'background-blur'],
+    ] as const) {
+      const value = props[key];
+      if (value === undefined) continue;
+      const rest = n.effects.filter((e) => e.type !== type);
+      const radius = value === null ? 0 : Number(value);
+      if (!Number.isFinite(radius) || radius < 0) throw new PropError(`${key} must be a blur radius in pixels (0 or null removes it)`);
+      n.effects = radius > 0 ? [...rest, { ...defaultEffect(type), radius }] : rest;
+    }
 
     if (props.layout !== undefined) {
       const l = String(props.layout);

@@ -1,7 +1,8 @@
 // Server-side rendering for agent screenshots, using @napi-rs/canvas when it
 // is installed (it is an optional dependency).
 
-import { parentWorldMatrix, selectionBounds } from '../core/geometry';
+import { exportBounds } from '../core/export';
+import { parentWorldMatrix } from '../core/geometry';
 import { drawNode, setImageProvider } from '../core/render';
 import { setMeasureContext } from '../core/text';
 import type { PlanarDocument } from '../core/types';
@@ -51,7 +52,8 @@ export function canRender(): boolean {
 export async function renderPng(doc: PlanarDocument, ids: string[], opts: { scale?: number; maxSize?: number; background?: string; jpeg?: boolean } = {}): Promise<Buffer> {
   const mod = await initCanvas();
   if (!mod) throw new Error('Screenshots need the optional @napi-rs/canvas package (npm install @napi-rs/canvas).');
-  const b = selectionBounds(doc, ids);
+  // Includes the reach of shadows and blurs.
+  const b = exportBounds(doc, ids);
   if (!b || b.width <= 0 || b.height <= 0) throw new Error('Nothing visible to render');
   const pad = 0;
   const maxSize = opts.maxSize ?? 1600;

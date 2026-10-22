@@ -10,6 +10,7 @@ import { BINDABLE } from '../core/variables';
 import { CodeSection } from './CodeSection';
 import { PrototypeSection } from './PrototypeSection';
 import { InspectSection } from './InspectSection';
+import { EffectsSection } from './EffectsSection';
 import { ComponentPropsSection, InstancePropsSection, LayerPropBindings, VariantSetSection, VariantValuesSection } from './ComponentProps';
 import { ColorField, IconButton, NumberField, Section, type BindProps } from './controls';
 import { useEditorState } from './EditorContext';
@@ -703,6 +704,7 @@ export function PropertiesPanel() {
           <PaintList title="Stroke" nodes={paintable} field="strokes" editor={editor} />
         </>
       )}
+      {nodes.length > 0 && nodes.every((n) => n.type !== 'page') && <EffectsSection editor={editor} nodes={nodes} />}
 
       {single && single.type !== 'page' && <PrototypeSection editor={editor} node={single} />}
       {single && <InspectSection editor={editor} node={single} />}

@@ -1,7 +1,7 @@
 import { localMatrix, vectorPoints } from './geometry';
 import { nodePaths } from './paths';
 import { baselineInLine, fontString, lineHeightPx, nodeLines, verticalOffset } from './text';
-import { isFrameLike, type ImagePaint, type Paint, type PlanarDocument, type SceneNode } from './types';
+import { isFrameLike, type Effect, type ImagePaint, type Paint, type PlanarDocument, type SceneNode } from './types';
 
 const images = new Map<string, HTMLImageElement>();
 let onImageLoad: (() => void) | null = null;
@@ -37,12 +37,13 @@ export function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
-function shapePath(ctx: CanvasRenderingContext2D, node: SceneNode): void {
+/** The layer outline; spread grows (or, negative, shrinks) rectangles and ellipses. */
+function shapePath(ctx: CanvasRenderingContext2D, node: SceneNode, spread = 0, begin = true): void {
   const { width: w, height: h } = node;
-  ctx.beginPath();
+  if (begin) ctx.beginPath();
   switch (node.type) {
     case 'ellipse':
-      ctx.ellipse(w / 2, h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2);
+      ctx.ellipse(w / 2, h / 2, Math.max(0, Math.abs(w / 2) + spread), Math.max(0, Math.abs(h / 2) + spread), 0, 0, Math.PI * 2);
       break;
     case 'vector': {
       const pts = vectorPoints(node);
@@ -52,10 +53,133 @@ function shapePath(ctx: CanvasRenderingContext2D, node: SceneNode): void {
     }
     default: {
       const r = Math.max(0, Math.min(node.cornerRadius, Math.abs(w) / 2, Math.abs(h) / 2));
-      if (r > 0) ctx.roundRect(0, 0, w, h, r);
-      else ctx.rect(0, 0, w, h);
+      const s = Math.max(spread, -Math.min(Math.abs(w), Math.abs(h)) / 2);
+      if (r > 0) ctx.roundRect(-s, -s, w + 2 * s, h + 2 * s, Math.max(0, r + s));
+      else ctx.rect(-s, -s, w + 2 * s, h + 2 * s);
     }
   }
+}
+
+const canFilter = (ctx: CanvasRenderingContext2D) => 'filter' in ctx;
+
+/** How many device pixels one layer unit covers under the current transform. */
+function deviceScale(m: DOMMatrix): number {
+  return Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
+}
+
+/**
+ * Paints what casts a shadow in solid black: the filled shape, the text, the
+ * vector paths and the strokes; a container without a fill uses its children.
+ */
+function fillSilhouette(ctx: CanvasRenderingContext2D, doc: PlanarDocument, node: SceneNode, spread: number): void {
+  if (!node.visible) return;
+  ctx.fillStyle = '#000000';
+  ctx.strokeStyle = '#000000';
+  if (node.type === 'text') {
+    drawText(ctx, node, { type: 'solid', color: '#000000', opacity: 1, visible: true });
+    return;
+  }
+  const stroked = node.strokeWidth > 0 && node.strokes.some((s) => s.visible);
+  if (node.type === 'vector' && node.paths.length) {
+    if (typeof Path2D === 'undefined') return;
+    for (const p of nodePaths(node)) {
+      const path = new Path2D(p.d);
+      if (node.fills.some((f) => f.visible)) ctx.fill(path, p.fillRule);
+      if (stroked) {
+        ctx.lineWidth = node.strokeWidth;
+        ctx.stroke(path);
+      }
+    }
+    return;
+  }
+  const filled = node.fills.some((f) => f.visible) && (node.type !== 'vector' || node.closed) && node.type !== 'group';
+  if (filled) {
+    shapePath(ctx, node, spread);
+    ctx.fill();
+  } else {
+    for (const c of node.children) {
+      const child = doc.nodes[c];
+      if (!child) continue;
+      ctx.save();
+      ctx.transform(...localMatrix(child));
+      fillSilhouette(ctx, doc, child, 0);
+      ctx.restore();
+    }
+  }
+  if (stroked && node.type !== 'group') {
+    shapePath(ctx, node);
+    ctx.lineWidth = node.strokeWidth;
+    ctx.stroke();
+  }
+}
+
+// Shapes are drawn this far to the left and only their shadow is shifted back into view.
+const FAR = 100000;
+
+function setShadow(ctx: CanvasRenderingContext2D, m: DOMMatrix, e: Effect): void {
+  ctx.shadowColor = hexToRgba(e.color, e.opacity);
+  ctx.shadowBlur = e.radius * deviceScale(m);
+  ctx.shadowOffsetX = FAR + m.a * e.x + m.c * e.y;
+  ctx.shadowOffsetY = m.b * e.x + m.d * e.y;
+}
+
+function dropShadow(ctx: CanvasRenderingContext2D, doc: PlanarDocument, node: SceneNode, e: Effect): void {
+  const m = ctx.getTransform();
+  ctx.save();
+  ctx.setTransform(m.a, m.b, m.c, m.d, m.e - FAR, m.f);
+  setShadow(ctx, m, e);
+  fillSilhouette(ctx, doc, node, e.spread);
+  ctx.restore();
+}
+
+function innerShadow(ctx: CanvasRenderingContext2D, node: SceneNode, e: Effect): void {
+  if (node.type === 'text' || node.type === 'group' || (node.type === 'vector' && !node.closed && !node.paths.length)) return;
+  const pad = e.radius * 3 + Math.abs(e.x) + Math.abs(e.y) + Math.abs(e.spread) + 10;
+  const m = ctx.getTransform();
+  ctx.save();
+  let hole: Path2D | null = null;
+  if (node.type === 'vector' && node.paths.length) {
+    if (typeof Path2D === 'undefined') return ctx.restore();
+    hole = new Path2D();
+    for (const p of nodePaths(node)) hole.addPath(new Path2D(p.d));
+    ctx.clip(hole);
+  } else {
+    shapePath(ctx, node);
+    ctx.clip();
+  }
+  ctx.setTransform(m.a, m.b, m.c, m.d, m.e - FAR, m.f);
+  setShadow(ctx, m, e);
+  ctx.fillStyle = '#000000';
+  if (hole) {
+    const ring = new Path2D();
+    ring.rect(-pad, -pad, node.width + 2 * pad, node.height + 2 * pad);
+    ring.addPath(hole);
+    ctx.fill(ring, 'evenodd');
+  } else {
+    ctx.beginPath();
+    ctx.rect(-pad, -pad, node.width + 2 * pad, node.height + 2 * pad);
+    shapePath(ctx, node, -e.spread, false);
+    ctx.fill('evenodd');
+  }
+  ctx.restore();
+}
+
+/** Blurs what is already painted under the layer's shape. */
+function backgroundBlur(ctx: CanvasRenderingContext2D, node: SceneNode, e: Effect): void {
+  const canvas = ctx.canvas as unknown as CanvasImageSource | undefined;
+  if (!canvas || !canFilter(ctx) || e.radius <= 0) return;
+  const m = ctx.getTransform();
+  ctx.save();
+  shapePath(ctx, node);
+  ctx.clip();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.filter = `blur(${(e.radius / 2) * deviceScale(m)}px)`;
+  try {
+    ctx.drawImage(canvas, 0, 0);
+  } catch {
+    // Some hosts cannot draw a canvas onto itself; the layer then paints without the blur.
+  }
+  ctx.restore();
 }
 
 function drawImagePaint(ctx: CanvasRenderingContext2D, node: SceneNode, paint: ImagePaint): void {
@@ -167,7 +291,17 @@ export function drawNode(ctx: CanvasRenderingContext2D, doc: PlanarDocument, id:
   ctx.save();
   ctx.transform(...localMatrix(node));
   ctx.globalAlpha *= node.opacity;
+  const effects = opts.hidden?.has(id) ? [] : (node.effects ?? []).filter((e) => e.visible);
+  if (effects.length) {
+    const blur = effects.find((e) => e.type === 'layer-blur');
+    if (blur && blur.radius > 0 && canFilter(ctx)) ctx.filter = `blur(${(blur.radius / 2) * deviceScale(ctx.getTransform())}px)`;
+    for (const e of effects) {
+      if (e.type === 'drop-shadow') dropShadow(ctx, doc, node, e);
+      else if (e.type === 'background-blur') backgroundBlur(ctx, node, e);
+    }
+  }
   if (!opts.hidden?.has(id)) paintNode(ctx, node);
+  for (const e of effects) if (e.type === 'inner-shadow') innerShadow(ctx, node, e);
   if (node.children.length) {
     ctx.save();
     if (isFrameLike(node) && node.clipContent) {
