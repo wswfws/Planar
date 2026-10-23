@@ -51,24 +51,36 @@ function apiKey(req: IncomingMessage): string {
 
 export function createMcpHandler(opts: { db: Db; localServer: () => string; publicUrl?: string }) {
   const sessions = new Map<string, Entry>();
-  // Some clients (ChatGPT) start a fresh MCP session per tool call, so the open file lives per API key.
-  const shared = new Map<string, { session: AgentSession; refs: number }>();
+  // Some clients (ChatGPT) start a fresh MCP session per tool call, and may end it right after,
+  // so the open file lives per agent (API key, or OAuth user + app) and outlasts its MCP sessions for a while.
+  const shared = new Map<string, { session: AgentSession; refs: number; idle?: ReturnType<typeof setTimeout> }>();
 
-  const acquire = (key: string, req: IncomingMessage): AgentSession => {
-    let s = shared.get(key);
+  /** Stable across OAuth token refreshes, which hand out a new access token every hour. */
+  const agentId = (key: string): string => {
+    const t = key.startsWith('pla_') ? opts.db.oauthToken(key, 'access') : null;
+    return t ? `oauth:${t.userId}:${t.clientId}` : key;
+  };
+
+  const acquire = (id: string, key: string, req: IncomingMessage): AgentSession => {
+    let s = shared.get(id);
     if (!s) {
       s = { session: new AgentSession({ allowFiles: false, localServer: opts.localServer(), key, name: 'Agent', publicUrl: publicBase(req, opts.publicUrl) }), refs: 0 };
-      shared.set(key, s);
+      shared.set(id, s);
     }
+    clearTimeout(s.idle);
+    s.session.opts.key = key;
     s.refs++;
     return s.session;
   };
 
-  const release = (key: string): void => {
-    const s = shared.get(key);
+  const release = (id: string): void => {
+    const s = shared.get(id);
     if (!s || --s.refs > 0) return;
-    s.session.close();
-    shared.delete(key);
+    s.idle = setTimeout(() => {
+      s.session.close();
+      shared.delete(id);
+    }, IDLE_MS);
+    s.idle.unref();
   };
 
   const sweep = setInterval(() => {
@@ -108,7 +120,8 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string; publ
         res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: sessionId ? 'Unknown session' : 'Start with an initialize request' }, id: null }));
         return;
       }
-      const session = acquire(key, req);
+      const id = agentId(key);
+      const session = acquire(id, key, req);
       let released = false;
       const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
@@ -120,7 +133,7 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string; publ
         if (transport.sessionId) sessions.delete(transport.sessionId);
         if (!released) {
           released = true;
-          release(key);
+          release(id);
         }
       };
       const server = new McpServer({ name: 'planar', version: '0.2.0' }, { instructions: INSTRUCTIONS });
@@ -140,7 +153,10 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string; publ
       clearInterval(sweep);
       for (const e of sessions.values()) void e.transport.close();
       sessions.clear();
-      for (const s of shared.values()) s.session.close();
+      for (const s of shared.values()) {
+        clearTimeout(s.idle);
+        s.session.close();
+      }
       shared.clear();
     },
   };

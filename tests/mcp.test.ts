@@ -240,6 +240,25 @@ describe('remote MCP endpoint (live file)', () => {
     expect((await ann.call('GET', `/api/files/${newId}`)).body.file.name).toBe('From agent');
   });
 
+  it('keeps the open file across MCP sessions of one client, as ChatGPT opens one per call', async () => {
+    const call = async (name: string, args: Record<string, unknown>, terminate: boolean) => {
+      const transport = new StreamableHTTPClientTransport(new URL(`${url}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${ben.key}` } } });
+      const client = new Client({ name: 'per-call', version: '1' });
+      await client.connect(transport);
+      const text = textOf((await client.callTool({ name, arguments: args })) as ToolResult);
+      if (terminate) await transport.terminateSession();
+      await client.close();
+      return text;
+    };
+    // Ben has no other MCP session, so nothing else keeps his agent alive between calls.
+    await ann.call('PUT', `/api/files/${fileId}/members`, { username: ben.username, role: 'editor' });
+    for (const terminate of [true, false]) {
+      expect(await call('open', { fileId }, terminate)).not.toMatch(/Could not open/);
+      expect(await call('overview', {}, terminate)).not.toMatch(/No document is open/);
+    }
+    await ann.call('PUT', `/api/files/${fileId}/members`, { username: ben.username, role: null });
+  });
+
   it('is read-only on a file that was only shared for viewing, and can duplicate it', async () => {
     const benRemote = new Client({ name: 'ben-agent', version: '1' });
     await benRemote.connect(new StreamableHTTPClientTransport(new URL(`${url}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${ben.key}` } } }));
