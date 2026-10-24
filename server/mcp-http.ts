@@ -49,7 +49,7 @@ function apiKey(req: IncomingMessage): string {
   return new URL(req.url ?? '/', 'http://localhost').searchParams.get('key') ?? '';
 }
 
-export function createMcpHandler(opts: { db: Db; localServer: () => string; publicUrl?: string }) {
+export function createMcpHandler(opts: { db: Db; localServer: () => string; publicUrl?: string; proxyPrivateHosts?: boolean }) {
   const sessions = new Map<string, Entry>();
   // Some clients (ChatGPT) start a fresh MCP session per tool call, and may end it right after,
   // so the open file lives per agent (API key, or OAuth user + app) and outlasts its MCP sessions for a while.
@@ -64,7 +64,7 @@ export function createMcpHandler(opts: { db: Db; localServer: () => string; publ
   const acquire = (id: string, key: string, req: IncomingMessage): AgentSession => {
     let s = shared.get(id);
     if (!s) {
-      s = { session: new AgentSession({ allowFiles: false, localServer: opts.localServer(), key, name: 'Agent', publicUrl: publicBase(req, opts.publicUrl) }), refs: 0 };
+      s = { session: new AgentSession({ allowFiles: false, localServer: opts.localServer(), key, name: 'Agent', publicUrl: publicBase(req, opts.publicUrl), allowPrivateHosts: opts.proxyPrivateHosts }), refs: 0 };
       shared.set(id, s);
     }
     clearTimeout(s.idle);

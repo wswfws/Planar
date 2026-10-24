@@ -49,7 +49,7 @@ describe('MCP tools (file mode)', () => {
   it('lists tools and opens a new file', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['code', 'components', 'create', 'delete', 'export', 'files', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables', 'versions'].concat(['comments', 'styles', 'libraries', 'context', 'notes']).sort(),
+      ['code', 'components', 'create', 'delete', 'export', 'files', 'find', 'inspect', 'open', 'overview', 'pages', 'screenshot', 'select', 'tokens', 'tree', 'undo', 'update', 'variables', 'versions'].concat(['comments', 'styles', 'libraries', 'context', 'notes', 'requests']).sort(),
     );
     // Directories check that every tool says whether it reads or changes data.
     for (const t of tools) expect(t.annotations?.readOnlyHint !== undefined || t.annotations?.destructiveHint !== undefined, t.name).toBe(true);

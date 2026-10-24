@@ -19,6 +19,10 @@ import { visiblePageIds } from '../core/library';
 import { applyProps, applyStyleSpec, createLayers, describe, PropError, type Friendly } from './props';
 import { renderPng } from './raster';
 import { parseLink, type AgentSession } from './session';
+import { agentRequest, formatEntry, formatHistory, formatResponse } from './requests';
+import { proxyRequest } from './http';
+import { prepareRequest, savedRequest } from '../core/requests';
+import { HTTP_METHODS, type ResponseRecord } from '../core/types';
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
 type Result = { content: Content[]; isError?: boolean };
@@ -40,6 +44,7 @@ Workflow:
 7. Notes: notes inbox lists chat messages and notes that mention @ai — requests people left for you on the canvas; answer in the chat with notes post. Leave findings and to-dos as notes (sticky, doc, checklist, or a callout pointing at a layer).
    Context: write decisions, intent and open questions with context set (the file brief, or notes on a layer) so people and later agents know them.
 8. Developers: code gives React (components with typed props/variants) or HTML/CSS; tokens exports variables.
+9. API requests: requests send calls an HTTP API (method, url, params, headers, body) and keeps the request with its response in the file's history, which people see in "API requests…"; requests list / get read it.
 Colours: "#RRGGBB", "#RRGGBB 50%", or "$variableName". Sizes: number, "hug" or "fill". Every change is undoable with undo.`;
 
 function guard<A>(fn: (args: A) => Promise<Result> | Result): (args: A) => Promise<Result> {
@@ -461,6 +466,93 @@ export function registerTools(server: McpServer, session: AgentSession): void {
       await session.committed([n.id]);
       const ed = await session.ready();
       return text(`Updated ${summary(ed.doc, ed.doc.nodes[n.id])}`);
+    }),
+  );
+
+  const stringMap = z.record(z.string(), z.string());
+
+  server.registerTool(
+    'requests',
+    {
+      title: 'API requests',
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      description:
+        'The file\'s API requests tool (a small HTTP client; people use it from the main menu, "API requests…"). Sent requests are kept with their responses in the file, newest first, and everyone in the file sees them. ' +
+        'list: the history (id, method, URL, status). get: one entry in full (id): request, response headers and body. ' +
+        'send: call an API and save the request with its response — method (default GET), url, params and headers as {name: value}, body (an object or array is sent as JSON; a string is JSON if it parses, else text), or form fields as {name: value}; ' +
+        'with id, re-sends that saved request, with any given fields changed. save: false sends without keeping it. name: a name for the entry. ' +
+        'rename (id, name; empty name removes it), delete (id), clear (the whole history). ' +
+        'Requests come from where this MCP server runs; on a Planar server, addresses inside its network are refused.',
+      inputSchema: {
+        action: z.enum(['list', 'get', 'send', 'rename', 'delete', 'clear']),
+        id: z.string().optional().describe('get / rename / delete: the entry; send: a saved request to re-send'),
+        method: z.enum(HTTP_METHODS).optional(),
+        url: z.string().optional().describe('send: https://… (http:// is added when no scheme is given)'),
+        params: stringMap.optional().describe('send: query parameters, added to the URL'),
+        headers: stringMap.optional().describe('send: request headers (Content-Type follows the body unless set)'),
+        body: z.unknown().optional().describe('send: request body; ignored for GET and HEAD'),
+        bodyKind: z.enum(['none', 'json', 'text', 'form']).optional().describe('send: how to send body (normally inferred)'),
+        form: stringMap.optional().describe('send: form fields (application/x-www-form-urlencoded)'),
+        name: z.string().optional().describe('send / rename: a name for the entry'),
+        save: z.boolean().optional().describe('send: false to leave the history alone (default true)'),
+      },
+    },
+    guard(async (a) => {
+      const editor = await session.ready();
+      const history = editor.doc.requests ?? [];
+      const entryOf = (id: string | undefined) => {
+        if (!id) throw new PropError(`${a.action} needs id (see requests list)`);
+        const e = history.find((x) => x.id === id);
+        if (!e) throw new PropError(`No request with id ${id} in this file (see requests list)`);
+        return e;
+      };
+      const writable = () => {
+        if (editor.readOnly) throw new PropError('This file is view-only for you, so its request history cannot be changed.');
+      };
+      if (a.action === 'list') return text(formatHistory(history));
+      if (a.action === 'get') return text(formatEntry(entryOf(a.id)));
+      if (a.action === 'rename') {
+        const e = entryOf(a.id);
+        writable();
+        editor.renameSavedRequest(e.id, a.name ?? '');
+        await session.committed([]);
+        return text(a.name?.trim() ? `Renamed to ${JSON.stringify(a.name.trim())}.` : 'Name removed.');
+      }
+      if (a.action === 'delete') {
+        const e = entryOf(a.id);
+        writable();
+        editor.deleteSavedRequest(e.id);
+        await session.committed([]);
+        return text(`Deleted ${e.request.method} ${e.request.url} from the history.`);
+      }
+      if (a.action === 'clear') {
+        writable();
+        editor.clearSavedRequests();
+        await session.committed([]);
+        return text(`Cleared ${history.length} request${history.length === 1 ? '' : 's'}.`);
+      }
+      // send
+      const base = a.id ? entryOf(a.id).request : undefined;
+      if (!base && !a.url) throw new PropError('send needs url (or id of a saved request)');
+      const spec = agentRequest(a, base);
+      const prepared = prepareRequest(spec);
+      let response: ResponseRecord | null = null;
+      let error: string | undefined;
+      try {
+        response = await proxyRequest(prepared, { allowPrivate: session.opts.allowFiles || session.opts.allowPrivateHosts });
+      } catch (e) {
+        error = (e as Error).message;
+      }
+      let note = '';
+      if (a.save !== false) {
+        const entry = savedRequest({ request: spec, response, error, via: 'agent', author: session.agentName, ...(a.name?.trim() ? { name: a.name.trim() } : {}) });
+        if (editor.addSavedRequest(entry)) {
+          await session.committed([]);
+          note = `\n\nSaved to the history as ${entry.id}.`;
+        } else note = '\n\nNot saved: this file is view-only for you.';
+      }
+      if (!response) return { content: [{ type: 'text', text: `Error: ${error}${note}` }], isError: true };
+      return text(`${prepared.method} ${prepared.url}\n${formatResponse(response)}${note}`);
     }),
   );
 

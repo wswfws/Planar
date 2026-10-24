@@ -22,6 +22,8 @@ export interface SessionOptions {
   /** Personal API key (`plk_…`): the agent acts with this person's rights. */
   key?: string;
   name?: string;
+  /** The requests tool may call loopback and private addresses (always on for a local MCP server). */
+  allowPrivateHosts?: boolean;
 }
 
 export interface RoomTarget {

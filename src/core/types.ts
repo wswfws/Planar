@@ -314,7 +314,8 @@ export interface SavedRequest {
   response: ResponseRecord | null;
   /** Why there is no response (network error, CORS, refused by the proxy…). */
   error?: string;
-  via: 'direct' | 'proxy';
+  /** direct: from the browser; proxy: through the Planar server; agent: by an AI agent (MCP). */
+  via: 'direct' | 'proxy' | 'agent';
 }
 
 export interface PlanarDocument {
