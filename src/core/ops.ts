@@ -2,7 +2,7 @@ import { mergeNoteInto } from './notes';
 import type { PlanarDocument, SceneNode } from './types';
 
 /** Document-level fields exchanged as a whole. */
-export const META_KEYS = ['name', 'pageIds', 'variables', 'modes', 'styles', 'libraries', 'context'] as const;
+export const META_KEYS = ['name', 'pageIds', 'variables', 'modes', 'styles', 'libraries', 'context', 'requests'] as const;
 export type MetaKey = (typeof META_KEYS)[number];
 
 /**

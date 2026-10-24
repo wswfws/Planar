@@ -12,6 +12,7 @@ import { VariablesDialog } from './VariablesDialog';
 import { ShareDialog } from './ShareDialog';
 import { LibrariesDialog } from './LibrariesDialog';
 import { VersionsDialog } from './VersionsDialog';
+import { RequestsDialog } from './RequestsDialog';
 import { CommentsLayer, CommentsProvider } from './Comments';
 import { Present } from './Present';
 import { watchFonts } from './fontLoader';
@@ -257,6 +258,7 @@ export function App({ fileId, present }: { fileId?: string; present?: boolean })
   const [historyOpen, setHistoryOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [librariesOpen, setLibrariesOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
   useEffect(() => {
     const open = () => setLibrariesOpen(true);
     window.addEventListener('planar:libraries', open);
@@ -287,7 +289,7 @@ export function App({ fileId, present }: { fileId?: string; present?: boolean })
       <MaybeComments fileId={fileId}>
       <ContextMenuProvider>
       <div className={`app${editor.readOnly ? ' read-only' : ''}`}>
-        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} onHistory={() => setHistoryOpen(true)} onAccount={() => setAccountOpen(true)} />
+        <Toolbar onOpen={openFile} onVariables={() => setVariablesOpen(true)} onShare={() => setShareOpen(true)} onHistory={() => setHistoryOpen(true)} onAccount={() => setAccountOpen(true)} onRequests={() => setRequestsOpen(true)} />
         <div className="workspace">
           <Dock side="left">
             <LayersPanel />
@@ -305,6 +307,7 @@ export function App({ fileId, present }: { fileId?: string; present?: boolean })
         {fileId && <ConnectionOverlay />}
         {accountOpen && <AccountDialog onClose={() => setAccountOpen(false)} />}
         {variablesOpen && <VariablesDialog onClose={() => setVariablesOpen(false)} />}
+        {requestsOpen && <RequestsDialog onClose={() => setRequestsOpen(false)} />}
         {shareOpen && fileId && <ShareDialog onClose={() => setShareOpen(false)} />}
         {historyOpen && fileId && <VersionsDialog onClose={() => setHistoryOpen(false)} />}
         {librariesOpen && fileId && <LibrariesDialog onClose={() => setLibrariesOpen(false)} />}

@@ -1,6 +1,7 @@
 import { sanitizeContext } from './context';
 import { sanitizeEffects } from './effects';
 import { sanitizeNote } from './notes';
+import { sanitizeRequests } from './requests';
 import { sanitizeStyles } from './styles';
 import type { NodeType, Paint, PlanarDocument, SceneNode, SolidPaint } from './types';
 
@@ -126,6 +127,7 @@ export function createDocument(name = 'Untitled'): PlanarDocument {
     styles: [],
     libraries: [],
     context: '',
+    requests: [],
   };
 }
 
@@ -307,5 +309,6 @@ export function parseDocument(data: unknown): PlanarDocument {
           .map((l) => ({ fileId: l.fileId, name: String(l.name ?? 'Library'), version: Number(l.version) || 0, pageId: l.pageId }))
       : [],
     context: sanitizeContext(d.context),
+    requests: sanitizeRequests(d.requests),
   };
 }

@@ -39,6 +39,9 @@ shapes, text, layers, properties, undo and export — and was built with a
 - Undo / redo, autosave to browser storage
 - Save / open `.planar.json` files ([format](docs/FILE_FORMAT.md))
 - Export PNG (1×–3×) and SVG for the selection or the whole page
+- API requests: a small HTTP client (method, URL, params, headers, body) whose
+  requests and responses are saved in the file; on a server it sends through
+  the server, so CORS does not get in the way
 
 See the full [functional specification](docs/SPEC.md) for behaviour and
 keyboard shortcuts.

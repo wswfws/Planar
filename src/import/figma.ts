@@ -377,7 +377,7 @@ export function figmaToPlanar(file: FNode, images: Record<string, string> = {}):
 
   const report = [...counts.entries()].map(([what, n]) => `${n} × ${what}`);
   return {
-    doc: { format: 'planar', version: 1, name: String(file.name ?? 'Imported from Figma'), pageIds, nodes, variables: [], modes: [{ id: newId(), name: 'Mode 1' }], styles, libraries: [], context: '' },
+    doc: { format: 'planar', version: 1, name: String(file.name ?? 'Imported from Figma'), pageIds, nodes, variables: [], modes: [{ id: newId(), name: 'Mode 1' }], styles, libraries: [], context: '', requests: [] },
     report,
     imageRefs: [...imageRefs],
   };

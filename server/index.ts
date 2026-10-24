@@ -12,6 +12,7 @@ import { startServer } from './server';
 //   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID   alerts and a daily summary in Telegram
 //   METRICS_TOKEN bearer token that enables /api/metrics (Prometheus format)
 //   PUBLIC_URL    public address for OAuth (default: taken from each request)
+//   PROXY_PRIVATE_HOSTS=1  let the API requests tool reach private/loopback addresses through the server
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +26,7 @@ const server = await startServer({
   telegram: { token: process.env.TELEGRAM_BOT_TOKEN || undefined, chatId: process.env.TELEGRAM_CHAT_ID || undefined },
   metricsToken: process.env.METRICS_TOKEN || undefined,
   publicUrl: process.env.PUBLIC_URL || undefined,
+  proxyPrivateHosts: process.env.PROXY_PRIVATE_HOSTS === '1',
 });
 
 console.log(`[planar] collaboration server listening on port ${server.port}`);

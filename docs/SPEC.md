@@ -448,3 +448,11 @@ The Layers and Properties panels are resized by dragging their inner edge (180�
 ## Toolbar
 
 As in Figma, the top bar holds only the main menu, the file name, the people in the file, Present, Share and zoom; version history, variables, undo/redo and panel visibility are in the main menu. The tools float at the bottom of the canvas: Move/Hand, Frame, shapes (Rectangle, Ellipse, Line), Pen, Text, Comment and the notes menu. A group shows its active or last used tool; its arrow lists the others.
+
+## API requests
+
+"API requests…" in the main menu opens a small HTTP client for checking the APIs a design talks to. The left column is the history; the right side builds a request: a method (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS), a URL (a pasted query string moves into Params when the field loses focus), and tabs for Params, Headers and Body (None, JSON, Text or Form fields). Rows of params, headers and form fields can be switched off without deleting them. Send (Enter in the URL, Ctrl/⌘+Enter in the body) shows the status, time, size and content type, and the body (JSON indented) or the response headers. A JSON body that does not parse is refused before sending; GET and HEAD never send a body.
+
+Every sent request is saved with its response (or the error) in the file's `requests` (see FILE_FORMAT), newest first, with who sent it and when: up to 50 entries, response bodies cut to 100 KB. The history is synced live and versioned with the file, so everyone who can open it sees it, headers and tokens included; changes to it are not undo steps. Click an entry to open its request and response, double-click to rename it, use the bin to delete it, or "Clear history". In a view-only file requests can still be sent but are not saved.
+
+On a Planar server, signed-in people can send through the server (on by default), so APIs that do not allow browsers (CORS) work: `POST /api/http-proxy` with `{method, url, headers: [[name, value]], body?}` returns `{response: {status, statusText, headers, body, truncated, size, time}}`. It needs a session (not an API key), does not follow redirects, gives up after 30 s, cuts bodies at 1 MB, and refuses loopback, private and link-local addresses unless the server runs with `PROXY_PRIVATE_HOSTS=1`. Without a server, or signed out, requests go straight from the browser.

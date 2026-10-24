@@ -121,7 +121,7 @@ function Collaborators({ onShare }: { onShare: () => void }) {
   );
 }
 
-export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: { onOpen: () => void; onVariables: () => void; onShare: () => void; onHistory: () => void; onAccount: () => void }) {
+export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount, onRequests }: { onOpen: () => void; onVariables: () => void; onShare: () => void; onHistory: () => void; onAccount: () => void; onRequests: () => void }) {
   const editor = useEditorState();
   const server = useServer();
   const panels = usePanels();
@@ -170,6 +170,7 @@ export function Toolbar({ onOpen, onVariables, onShare, onHistory, onAccount }: 
             { label: 'Export SVG', action: () => editor.exportAs('svg') },
             '-',
             { label: 'Variables…', action: onVariables },
+            { label: 'API requests…', action: onRequests },
             { label: editor.showAnnotations ? 'Hide annotations' : 'Show annotations', action: () => editor.setShowAnnotations(!editor.showAnnotations) },
             ...(server ? [{ label: 'Share…', action: onShare }] : []),
             ...(server && fileId ? [{ label: 'Present', action: present }] : []),

@@ -8,6 +8,7 @@ A Planar document is a single UTF-8 JSON object.
   "version": 1,
   "name": "Untitled",
   "context": "Brief: what the file is for (markdown)",
+  "requests": [],
   "pageIds": ["page-id-1"],
   "modes": [{ "id": "m1", "name": "Light" }, { "id": "m2", "name": "Dark" }],
   "variables": [
@@ -102,6 +103,37 @@ markdown and do not affect rendering. Tools read them from the broadest to
 the most specific: file, page, enclosing layers, the main component (for an
 instance, or the component layer an instance layer mirrors), then the layer.
 Missing or non-string values become `""`.
+
+## API request history
+
+`requests` is the history of the API requests tool, newest first (at most 50):
+
+```jsonc
+{
+  "id": "lq3k9x2a7b",
+  "name": "Create item",            // optional
+  "at": 1761300000000,              // when it was sent (ms)
+  "author": "Ann",                  // optional
+  "via": "proxy",                   // "direct" (from the browser) or "proxy" (through the server)
+  "request": {
+    "method": "POST", "url": "https://api.example.com/items",
+    "params": [{ "key": "page", "value": "2", "enabled": true }],
+    "headers": [{ "key": "Authorization", "value": "Bearer …", "enabled": true }],
+    "bodyKind": "json",             // "none" | "json" | "text" | "form"
+    "body": "{\"name\":\"Box\"}",
+    "form": []
+  },
+  "response": {                     // null when the request failed
+    "status": 201, "statusText": "Created", "headers": [["content-type", "application/json"]],
+    "body": "…", "truncated": false, "size": 42, "time": 180
+  },
+  "error": "…"                      // optional: why there is no response
+}
+```
+
+Response bodies are kept up to 100 KB (`truncated` tells when one was cut).
+Missing or malformed entries are dropped; a file without `requests` has an
+empty history.
 
 ## Annotations
 

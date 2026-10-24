@@ -57,12 +57,13 @@ import { apply, applyLinear, invert, rectCenter, rectFromPoints, rectsIntersect,
 import { measureTextNode } from './text';
 import { applyStyles, TEXT_STYLE_FIELDS, textStyleValues } from './styles';
 import { importLibrary, libraryOf, removeLibrary, visiblePageIds, type LibrarySnapshot } from './library';
-import type { ComponentProp, ComponentPropType, EffectStyle, PlanarDocument, SceneNode, TextStyle, VariableType } from './types';
+import type { ComponentProp, ComponentPropType, EffectStyle, PlanarDocument, SavedRequest, SceneNode, TextStyle, VariableType } from './types';
 import { coerce, defaultValue, resolveVariables, unbindVariable } from './variables';
 import { applyOps, DocSnapshot, repairTree, type Op } from './ops';
 import { insertSvg, parseSvg } from './svg';
 import { createWelcomeDocument } from './welcome';
 import { createNote, MAX_MESSAGES, newMessage, noteIds } from './notes';
+import { MAX_HISTORY } from './requests';
 import type { NoteData, NoteKind } from './types';
 
 function readAnnotationsPref(): boolean {
@@ -1630,6 +1631,57 @@ export class Editor {
     const node = this.doc.nodes[id];
     if (node?.note?.kind !== 'chat') return;
     this.updateNote(id, { messages: (node.note.messages ?? []).map((m) => (m.id === messageId ? { ...m, text: '', deleted: true } : m)) });
+  }
+
+  /**
+   * Changes the document without an undo step (e.g. the request history:
+   * undo should not take back a request that was sent). Still synced and saved.
+   */
+  private changeOutsideUndo(fn: (doc: PlanarDocument) => void): boolean {
+    if (this.readOnly) return false;
+    if (this.txBase) {
+      fn(this.doc);
+      this.normalize();
+      this.emit();
+      return true;
+    }
+    if (!this.snapshot || this.snapshotStale) this.snapshot = new DocSnapshot(this.doc);
+    this.snapshotStale = false;
+    fn(this.doc);
+    this.normalize();
+    this.snapshot.adopt(this.snapshot.diff(this.doc));
+    this.scheduleSave();
+    this.emit();
+    return true;
+  }
+
+  /** Adds a sent request to the file's history (newest first). False when the file is view-only. */
+  addSavedRequest(entry: SavedRequest): boolean {
+    return this.changeOutsideUndo((doc) => {
+      doc.requests = [entry, ...(doc.requests ?? []).filter((e) => e.id !== entry.id)].slice(0, MAX_HISTORY);
+    });
+  }
+
+  renameSavedRequest(id: string, name: string): void {
+    this.changeOutsideUndo((doc) => {
+      doc.requests = (doc.requests ?? []).map((e) => {
+        if (e.id !== id) return e;
+        const { name: _old, ...rest } = e;
+        return name.trim() ? { ...rest, name: name.trim().slice(0, 200) } : rest;
+      });
+    });
+  }
+
+  deleteSavedRequest(id: string): void {
+    this.changeOutsideUndo((doc) => {
+      doc.requests = (doc.requests ?? []).filter((e) => e.id !== id);
+    });
+  }
+
+  clearSavedRequests(): void {
+    this.changeOutsideUndo((doc) => {
+      doc.requests = [];
+    });
   }
 
   /** Sets the brief for the whole file. */
