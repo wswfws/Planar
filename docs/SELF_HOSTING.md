@@ -189,6 +189,7 @@ connect to a plain-HTTP server.
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | empty | Telegram alerts and daily summary |
 | `METRICS_TOKEN` | empty | Enables `/api/metrics` (Prometheus) with this bearer token |
 | `PUBLIC_URL` | from the request | Public address used in OAuth metadata (e.g. `https://planar.example.com`) |
+| `PROXY_PRIVATE_HOSTS` | off | `1` lets the API requests tool reach loopback and private addresses through the server (only on trusted networks) |
 
 Health check: `GET /healthz`. Server info: `GET /api/info`.
 

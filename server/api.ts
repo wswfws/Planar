@@ -15,6 +15,7 @@ import type { VersionMeta, VersionStore } from './versions';
 import type { Comment, CommentStore } from './comments';
 import type { LibraryStore } from './libraries';
 import { buildLibrarySnapshot, snapshotSummary } from '../src/core/library';
+import { parseProxyInput, ProxyError, proxyRequest } from './httpProxy';
 
 const COOKIE = 'planar_session';
 const MAX_BODY = 60 * 1024 * 1024;
@@ -49,6 +50,8 @@ export interface ApiContext {
   reset: (room: Room) => void;
   /** Bearer token for /api/metrics (Prometheus); the endpoint is off without it. */
   metricsToken?: string;
+  /** Lets the request proxy reach private and loopback addresses (off by default). */
+  proxyPrivateHosts?: boolean;
 }
 
 export class HttpError extends Error {
@@ -184,6 +187,20 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, ctx: 
       return user;
     };
     const parts = url.pathname.split('/').slice(2).map(decodeURIComponent); // after /api
+
+    // ---- API requests tool: send a request from the server (no CORS) ---
+    if (parts[0] === 'http-proxy' && !parts[1]) {
+      if (method !== 'POST') throw new HttpError(405, 'Method not allowed');
+      if (viaKey) throw new HttpError(403, 'The request proxy is for the editor, not for API keys');
+      need();
+      try {
+        const input = parseProxyInput(await readJson(req));
+        return json(200, { response: await proxyRequest(input, { allowPrivate: ctx.proxyPrivateHosts }) });
+      } catch (e) {
+        if (e instanceof ProxyError) throw new HttpError(e.status, e.message);
+        throw e;
+      }
+    }
 
     if (parts[0] === 'admin') return await handleAdmin(req, res, parts, url, ctx, viaKey ? null : user);
 

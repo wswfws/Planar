@@ -263,6 +263,60 @@ export interface EffectStyle {
 
 export type Style = TextStyle | EffectStyle;
 
+/** HTTP methods the API requests tool can send. */
+export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
+export type HttpMethod = (typeof HTTP_METHODS)[number];
+
+export type RequestBodyKind = 'none' | 'json' | 'text' | 'form';
+
+/** A row of params, headers or form fields; unchecked rows are kept but not sent. */
+export interface KeyValue {
+  key: string;
+  value: string;
+  enabled: boolean;
+}
+
+/** An HTTP request as built in the API requests tool. */
+export interface RequestSpec {
+  method: HttpMethod;
+  url: string;
+  params: KeyValue[];
+  headers: KeyValue[];
+  bodyKind: RequestBodyKind;
+  /** Raw body for json and text. */
+  body: string;
+  /** Fields of a form body (application/x-www-form-urlencoded). */
+  form: KeyValue[];
+}
+
+export interface ResponseRecord {
+  status: number;
+  statusText: string;
+  headers: [string, string][];
+  body: string;
+  /** The body was longer than the limit and was cut. */
+  truncated: boolean;
+  /** Body size in bytes, before any cut. */
+  size: number;
+  /** Milliseconds from sending to the end of the body. */
+  time: number;
+}
+
+/** A sent request and what came back, kept in the document. */
+export interface SavedRequest {
+  id: string;
+  /** Optional name; the method and URL are shown otherwise. */
+  name?: string;
+  at: number;
+  /** Who sent it. */
+  author?: string;
+  request: RequestSpec;
+  response: ResponseRecord | null;
+  /** Why there is no response (network error, CORS, refused by the proxy…). */
+  error?: string;
+  via: 'direct' | 'proxy';
+}
+
 export interface PlanarDocument {
   format: 'planar';
   version: 1;
@@ -276,6 +330,8 @@ export interface PlanarDocument {
   libraries: LibraryLink[];
   /** Brief for the whole file: goal, audience, rules (markdown). */
   context: string;
+  /** History of the API requests tool: sent requests with their responses, newest first. */
+  requests: SavedRequest[];
 }
 
 export const CONTAINER_TYPES: ReadonlySet<NodeType> = new Set(['page', 'frame', 'component', 'componentSet', 'instance', 'group']);

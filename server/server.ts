@@ -42,6 +42,8 @@ export interface ServerOptions {
   publicUrl?: string;
   /** Fetches OAuth client metadata documents (tests replace the network). */
   fetchClientMetadata?: (url: string) => Promise<unknown>;
+  /** Lets the API requests proxy reach private and loopback addresses (default off). */
+  proxyPrivateHosts?: boolean;
 }
 
 interface Presence {
@@ -257,6 +259,7 @@ export async function startServer(
       db.fileEdited(room.id, room.doc.name);
     },
     metricsToken: opts.metricsToken || undefined,
+    proxyPrivateHosts: opts.proxyPrivateHosts,
     kickUser: (userId: string, reason: string) => {
       for (const set of members.values()) {
         for (const c of [...set]) {
