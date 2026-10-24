@@ -3,12 +3,13 @@ import https from 'node:https';
 import dns from 'node:dns';
 import net from 'node:net';
 import type { LookupFunction } from 'node:net';
-import { HTTP_METHODS, type ResponseRecord } from '../src/core/types';
-import { cutBody } from '../src/core/requests';
+import { HTTP_METHODS, type ResponseRecord } from '../core/types';
+import { cutBody } from '../core/requests';
 
-// Sends requests for the API requests tool on behalf of signed-in people, so
-// APIs that do not allow browsers (CORS) can be called. Addresses inside the
-// server's own network are refused unless the server is told otherwise.
+// Sends requests for the API requests tool from Node: on behalf of signed-in
+// people (the server's /api/http-proxy, so APIs that do not allow browsers work)
+// and for agents (the MCP requests tool). Addresses inside the server's own
+// network are refused unless the caller allows them.
 
 const TIMEOUT_MS = 30_000;
 /** Bodies over this are cut; what is read never exceeds it by more than one chunk. */

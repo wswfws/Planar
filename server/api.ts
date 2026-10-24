@@ -15,7 +15,7 @@ import type { VersionMeta, VersionStore } from './versions';
 import type { Comment, CommentStore } from './comments';
 import type { LibraryStore } from './libraries';
 import { buildLibrarySnapshot, snapshotSummary } from '../src/core/library';
-import { parseProxyInput, ProxyError, proxyRequest } from './httpProxy';
+import { parseProxyInput, ProxyError, proxyRequest } from '../src/agent/http';
 
 const COOKIE = 'planar_session';
 const MAX_BODY = 60 * 1024 * 1024;

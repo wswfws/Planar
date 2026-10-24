@@ -114,7 +114,7 @@ Missing or non-string values become `""`.
   "name": "Create item",            // optional
   "at": 1761300000000,              // when it was sent (ms)
   "author": "Ann",                  // optional
-  "via": "proxy",                   // "direct" (from the browser) or "proxy" (through the server)
+  "via": "proxy",                   // "direct" (browser), "proxy" (through the server) or "agent" (MCP)
   "request": {
     "method": "POST", "url": "https://api.example.com/items",
     "params": [{ "key": "page", "value": "2", "enabled": true }],

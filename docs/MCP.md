@@ -112,6 +112,7 @@ tool. `--key` (or `PLANAR_KEY`) is the API key and `--server` (or
 | `code` | dev | React or HTML/CSS for a layer or component |
 | `tokens` | dev | Variables as CSS custom properties, JSON or TypeScript |
 | `export` | dev | SVG markup or PNG image of layers (or files, locally) |
+| `requests` | dev | Send HTTP API requests and read or manage the file's request history (the "API requests…" tool) |
 
 ## Layer vocabulary
 
@@ -200,6 +201,9 @@ Example — a card in one call:
 - The remote endpoint never reads or writes files on the server.
 - Every change an agent makes is a normal edit: it can be undone with
   `undo`, and in a room it is visible to everyone immediately.
+- `requests send` calls APIs from where the MCP server runs. The remote
+  endpoint refuses loopback, private and link-local addresses (unless the
+  server runs with `PROXY_PRIVATE_HOSTS=1`); a local MCP server may call them.
 
 
 ### versions
@@ -237,6 +241,17 @@ Annotation layers (sticky notes, markdown descriptions, chats, checklists and ca
 - `set` changes `text`, `title`, `color`, a callout's `target`, replaces checklist `items`, or ticks items with `check: [{item, done}]` (item id, 1-based number or text).
 
 `inspect`, `tree`, `find` (`type: "note"`) and `screenshot` include annotations; `export` and `code` leave them out. `context get` lists the notes on and around a layer's screen and the callouts pointing into it.
+
+### API requests
+
+`requests` works with the file's API request history, the same one people see in "API requests…" (main menu):
+
+- `action: "list"` shows the history, newest first: id, name, method, URL, status and time, and who sent it.
+- `get` (`id`) returns one entry in full: the request with its headers and body, then the response status, headers and body (JSON indented, cut at 20 000 characters).
+- `send` calls an API: `method` (default `GET`), `url`, `params` and `headers` as `{name: value}`, and `body` (an object or array is sent as JSON; a string as JSON when it parses, else as text) or `form` fields. `bodyKind` overrides the guess. With `id` it re-sends that saved request, changing only the fields given. The request is saved with its response (or the error) and the agent's name; `name` names the entry and `save: false` leaves the history alone. A request that gets no response returns an error but is still saved.
+- `rename` (`id`, `name`; an empty name removes it), `delete` (`id`) and `clear`.
+
+History changes are not undo steps. Anyone who can open the file sees the saved requests, headers and tokens included.
 
 ### Team libraries
 

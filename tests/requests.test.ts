@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { isPrivateAddress } from '../server/httpProxy';
+import { isPrivateAddress } from '../src/agent/http';
 import { startServer } from '../server/server';
 import { CollabClient } from '../src/collab/client';
 import { createDocument, parseDocument } from '../src/core/document';

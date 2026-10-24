@@ -221,7 +221,7 @@ export function sanitizeRequests(v: unknown): SavedRequest[] {
       request: sanitizeRequestSpec(e.request),
       response: sanitizeResponse(e.response),
       ...(typeof e.error === 'string' && e.error ? { error: e.error.slice(0, 2000) } : {}),
-      via: e.via === 'proxy' ? ('proxy' as const) : ('direct' as const),
+      via: e.via === 'proxy' || e.via === 'agent' ? (e.via as 'proxy' | 'agent') : ('direct' as const),
     }));
 }
 

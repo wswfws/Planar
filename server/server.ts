@@ -188,7 +188,7 @@ export async function startServer(
 
   await initCanvas();
   let boundPort = opts.port;
-  const mcp = createMcpHandler({ db, localServer: () => `http://127.0.0.1:${boundPort}`, publicUrl: opts.publicUrl });
+  const mcp = createMcpHandler({ db, localServer: () => `http://127.0.0.1:${boundPort}`, publicUrl: opts.publicUrl, proxyPrivateHosts: opts.proxyPrivateHosts });
   const oauth = { db, metrics, publicUrl: opts.publicUrl, fetchClientMetadata: opts.fetchClientMetadata };
 
   const send = (c: Client, msg: unknown) => {
